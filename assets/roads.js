@@ -50,8 +50,8 @@ export function heightIndex(meshes, { cell = 4, upOnly = false } = {}) {
   for (let c = 0; c < cols * rows; c++) counts[c + 1] += counts[c];
   const fill = counts.slice(), ids = new Uint32Array(counts[cols * rows]);
   for (let t = 0; t < k; t++) span(t, (c) => { ids[fill[c]++] = t; });
-  // topmost surface height at (x, z), or NaN
-  return function heightAt(x, z) {
+  // topmost surface height at (x, z), or with ref the surface nearest to height ref; NaN if none
+  return function heightAt(x, z, ref) {
     const q = Math.floor((x - x0) / cell), r = Math.floor((z - z0) / cell);
     if (q < 0 || r < 0 || q >= cols || r >= rows) return NaN;
     const c = r * cols + q;
@@ -66,7 +66,7 @@ export function heightIndex(meshes, { cell = 4, upOnly = false } = {}) {
       const l3 = 1 - l1 - l2;
       if (l1 < -1e-4 || l2 < -1e-4 || l3 < -1e-4) continue;
       const y = l1 * T[o + 1] + l2 * T[o + 4] + l3 * T[o + 7];
-      if (!(y <= best)) best = y;
+      if (ref === undefined ? !(y <= best) : !(Math.abs(y - ref) >= Math.abs(best - ref))) best = y;
     }
     return best;
   };
@@ -208,8 +208,15 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
     return m;
   };
   const heightFor = (x, z, elev) => {
-    if (surface) { const sv = surface(x, z); if (Number.isFinite(sv)) return sv + 0.02; }
     const g = groundMax(x, z);
+    if (surface) {
+      // stacked roads (flyover over road): take the road surface nearest the level this road runs at
+      const d0 = deck(x, z), ref = elev && Number.isFinite(d0) ? d0 : g;
+      let sv = surface(x, z, ref);
+      if (!(Math.abs(sv - ref) < 4)) sv = surface(x, z, g);
+      // never fall back to a bridge deck: markings stay on a road surface or on the ground
+      return Number.isFinite(sv) && Math.abs(sv - g) < 15 ? sv + 0.02 : (Number.isFinite(g) ? g : 0) + lift;
+    }
     const d = deck(x, z);
     if (elev && Number.isFinite(d)) return d + 0.1;
     if (Number.isFinite(d) && d > g && d - g < 2.5) return d + 0.1; // ramp ends of a deck

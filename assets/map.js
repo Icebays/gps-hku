@@ -572,7 +572,9 @@ async function makeRoads(s) {
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     makeTrees(s);
     const NET = await fetch('data/roadnet.json').then((r) => r.json()).catch(() => null);
-    const surface = s.roadMeshes ? heightIndex(s.roadMeshes, { upOnly: true }) : null;
+    // road surfaces only - bridge decks (footbridges) must never carry the markings of the road below
+    const roadOnly = (s.roadMeshes || []).filter((m) => m.material === ROAD_MAT);
+    const surface = roadOnly.length ? heightIndex(roadOnly, { upOnly: true }) : null;
     const feat = NET && surface ? { ...FEAT, roads: NET.roads, marks: { ...NET.marks, icons: FEAT.marks?.icons || [] } } : FEAT;
     s.roads = buildRoads({ FEAT: feat, ground, deck, building: bIdx, lampGeo, dark, surface: NET ? surface : null });
     s.scene.add(s.roads);
