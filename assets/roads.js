@@ -161,6 +161,30 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
   const roads = FEAT.roads.map((r) => ({ ...r }));
 
   // junction nodes and degree
+  // Markings are only painted where a road runs on its own: anywhere another road's surface comes
+  // close (junctions, merges, overlapping skeleton branches) stays plain tarmac.
+  const CELLSZ = 10, segIdx = new Map();
+  roads.forEach((r, ri) => {
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const [a, b] = [r.pts[i], r.pts[i + 1]];
+      for (let cx = Math.floor(Math.min(a[0], b[0]) / CELLSZ) - 1; cx <= Math.floor(Math.max(a[0], b[0]) / CELLSZ) + 1; cx++)
+        for (let cz = Math.floor(Math.min(a[1], b[1]) / CELLSZ) - 1; cz <= Math.floor(Math.max(a[1], b[1]) / CELLSZ) + 1; cz++) {
+          const k = cx + ',' + cz; if (!segIdx.has(k)) segIdx.set(k, []); segIdx.get(k).push([a, b, ri]);
+        }
+    }
+  });
+  const clear = (x, z, ri, margin = 2.5) => {
+    const list = segIdx.get(Math.floor(x / CELLSZ) + ',' + Math.floor(z / CELLSZ)) || [];
+    const hr = roads[ri]?.width / 2 || 0;
+    for (const [a, b, rj] of list) {
+      if (rj === ri) continue;
+      const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2));
+      const d = Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
+      if (d < roads[rj].width / 2 + hr + margin) return false;
+    }
+    return true;
+  };
   const key = (p) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
   const deg = new Map();
   for (const r of roads) for (const p of [r.pts[0], r.pts[r.pts.length - 1]]) deg.set(key(p), (deg.get(key(p)) || 0) + 1);
@@ -192,7 +216,7 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
     return (Number.isFinite(g) ? g : 0) + lift;
   };
 
-  for (const r of roads) {
+  for (const [ri, r] of roads.entries()) {
     const { pts: q, len } = resample(r.pts, 1);
     if (q.length < 2) continue;
     const n = normalsOf(q), w = r.width, h = w / 2;
@@ -232,38 +256,26 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
         const s = i * S * (len / Math.max((qq.length - 1) * S, 1e-6));
         if (s < trimA || s > len - trimB) continue;
         if (dash && (s % (dash + gap)) > dash) continue;
+        if (surface && !clear(qq[i][0], qq[i][1], ri)) continue;
         const idx = Math.min(Math.round(i * S), elev.length - 1);
         const P = (j, o) => { const x = qq[j][0] + nn[j][0] * o, z = qq[j][1] + nn[j][1] * o; return [x, heightFor(x, z, elev[idx]) + 0.07, z]; };
         layer.quad(P(i, off - width / 2), P(i + 1, off - width / 2), P(i, off + width / 2), P(i + 1, off + width / 2));
       }
     };
     if (surface) {
-      // lanes from the measured width; HK practice: double white centre line on two-way roads,
-      // dashed lane lines, double yellow no-stopping lines at the kerb on main roads
-      const lanes = r.lanes || Math.max(1, Math.round(w / 3.4));
-      const twoWay = !r.twin && lanes >= 2;
-      for (let k = 1; k < lanes; k++) {
-        const off = -h + (w * k) / lanes;
-        if (twoWay && (lanes % 2 === 0 ? k === lanes / 2 : false)) { line(L.white, off - 0.18, 0.12); line(L.white, off + 0.18, 0.12); }
-        else line(L.white, off, 0.12, 3, lanes >= 3 ? 6 : 3);
-      }
-      if (lanes === 1 && w >= 4.5) line(L.white, 0, 0.12, 1.5, 1.5);
-      for (const sg of [-1, 1]) {
-        if (r.class === 'major') { line(L.yellow, sg * (h - 0.4), 0.1); line(L.yellow, sg * (h - 0.6), 0.1); }
-        else line(L.white, sg * (h - 0.3), 0.1);
-      }
-      // parking bays along spare width on campus roads (2.5 m x 5 m, kerb side)
-      const spare = w - lanes * 3.4;
-      if (r.class !== 'major' && spare >= 2.3 && len > 30) {
-        const off = -h + 2.4;
-        line(L.white, off, 0.1, null, null);
-        for (let s0 = 8; s0 < len - 8; s0 += 5) {
-          const i = Math.min(Math.round(s0), q.length - 1);
-          const P = (o) => { const x = q[i][0] + n[i][0] * o, z = q[i][1] + n[i][1] * o; return [x, heightFor(x, z, elev[i]) + 0.07, z]; };
-          const t = [n[i][1], -n[i][0]];
-          const a0 = P(-h + 0.1), a1 = P(off);
-          L.white.quad([a0[0] - t[0] * 0.05, a0[1], a0[2] - t[1] * 0.05], [a0[0] + t[0] * 0.05, a0[1], a0[2] + t[1] * 0.05],
-                       [a1[0] - t[0] * 0.05, a1[1], a1[2] - t[1] * 0.05], [a1[0] + t[0] * 0.05, a1[1], a1[2] + t[1] * 0.05]);
+      // Kept deliberately simple: lines are placed from the centre line only (the measured width is a
+      // per-road median, so kerb-offset lines would drift off curving / narrowing roads).
+      // Main roads: dashed lane lines + HK double white centre line; campus roads: one dashed centre line.
+      if (len >= 20) {
+        if (r.class === 'major' && !r.twin) {
+          const lanes = Math.max(2, 2 * Math.round(w / 6.8));
+          line(L.white, -0.18, 0.12); line(L.white, 0.18, 0.12);
+          for (let k = 1; k < lanes / 2; k++) for (const sg of [-1, 1]) line(L.white, sg * (w * k) / lanes, 0.12, 3, 6);
+        } else if (r.class === 'major') {
+          const lanes = Math.max(2, Math.round(w / 3.4));
+          for (let k = 1; k < lanes; k++) line(L.white, -h + (w * k) / lanes, 0.12, 3, 6);
+        } else if (w >= 5) {
+          line(L.white, 0, 0.12, 3, 3);
         }
       }
     } else if (r.class === 'major') {
@@ -331,7 +343,20 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
   };
   const cellUV = (k) => { const u0 = k / 6, u1 = (k + 1) / 6; return [u0, 1, u1, 1, u0, 0, u1, 0]; };
   const uvFor = (k, turn) => { const uv = cellUV(k); return turn ? [uv[6], uv[7], uv[4], uv[5], uv[2], uv[3], uv[0], uv[1]] : uv; }; // turn = rotate 180°
+  const clearAt = (p) => !surface || roads.every((_, ri) => {
+    // clear of junctions: the point must be clear relative to the road it sits on
+    const r = roads[ri]; let best = Infinity;
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const [a, b] = [r.pts[i], r.pts[i + 1]], dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / L2));
+      best = Math.min(best, Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t));
+    }
+    return best > r.width / 2 + 0.5 || clear(p[0], p[1], ri, 1);
+  });
+  const kept = [];
   for (const c of M.crossings || []) {
+    if (!clearAt(c.p) || kept.some((k) => Math.hypot(k[0] - c.p[0], k[1] - c.p[1]) < 20)) continue;
+    kept.push(c.p);
     for (let t = -c.width / 2 + 0.6; t <= c.width / 2 - 0.5; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
     // 望右 LOOK RIGHT just off each kerb end, readable by the pedestrian about to cross
     // (beside the zebra at each kerb, text top towards the road centre)
@@ -340,7 +365,8 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
       flat(L.decal, c.p[0], c.p[1], c.dir[0], c.dir[1], 2.0, 3.8, o - 0.9, o + 0.9, 0.09, uvFor(CELL.look, sg < 0));
     }
   }
-  for (const s of furnitureOnly ? [] : M.slow || []) {
+  for (const s of M.slow || []) {
+    if (!clearAt(s.p) || !kept.some((k) => Math.hypot(k[0] - s.p[0], k[1] - s.p[1]) < 12)) continue;
     const half = Math.min(1.1, s.width * 0.18);
     // glyph tops point along the direction of travel, so the approaching driver reads 慢 then 駛
     flat(L.decal, s.p[0], s.p[1], -s.up[1], s.up[0], -half, half, -2.6, 2.6, 0.09, uvFor(CELL.slow));
@@ -348,9 +374,10 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
   for (const b of M.busStops || []) {
     const nx = -b.dir[1] * b.side, nz = b.dir[0] * b.side, off = b.width / 2 - 1.5;
     const cx = b.p[0] + nx * off, cz = b.p[1] + nz * off;
-    if (!furnitureOnly) for (const [a0, a1, b0, b1] of [[-7.5, 7.5, -1.4, -1.25], [-7.5, 7.5, 1.25, 1.4], [-7.5, -7.35, -1.4, 1.4], [7.35, 7.5, -1.4, 1.4]]) flat(L.yellow, cx, cz, b.dir[0], b.dir[1], a0, a1, b0, b1, 0.08);
+    const okBay = clearAt([cx, cz]);
+    if (okBay) for (const [a0, a1, b0, b1] of [[-7.5, 7.5, -1.4, -1.25], [-7.5, 7.5, 1.25, 1.4], [-7.5, -7.35, -1.4, 1.4], [7.35, 7.5, -1.4, 1.4]]) flat(L.yellow, cx, cz, b.dir[0], b.dir[1], a0, a1, b0, b1, 0.08);
     // 巴士站 reads for traffic in the kerb lane (HK drives on the left)
-    if (!furnitureOnly) flat(L.decal, cx, cz, b.dir[1] * b.side, -b.dir[0] * b.side, -0.9, 0.9, -3.4, 3.4, 0.09, uvFor(CELL.bus_text)); // tops toward -side*dir
+    if (okBay) flat(L.decal, cx, cz, b.dir[1] * b.side, -b.dir[0] * b.side, -0.9, 0.9, -3.4, 3.4, 0.09, uvFor(CELL.bus_text)); // tops toward -side*dir
     const ix = b.p[0] + nx * (b.width / 2 + 1.2), iz = b.p[1] + nz * (b.width / 2 + 1.2);
     flat(L.decal, ix, iz, 1, 0, -1.3, 1.3, -1.3, 1.3, 0.12, uvFor(CELL.bus));
   }

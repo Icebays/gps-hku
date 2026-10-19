@@ -323,6 +323,7 @@ function setSky(s) {
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
+  setTreeTheme(s, dark);
   INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
@@ -525,6 +526,13 @@ async function loadSurfaces(s) {
   s.scene.updateMatrixWorld(true);
 }
 
+// per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler)
+function setTreeTheme(s, dark) {
+  if (!s.trees) return;
+  const [crown, trunk] = s.trees.children;
+  crown.material.color.set(dark ? 0x5d7c6a : 0xffffff);
+  trunk.material.color.set(dark ? 0x4a4038 : 0x8a7462);
+}
 /* Trees from the surveyed canopy (data/landcover.json): one instanced trunk + crown per tree. */
 function makeTrees(s) {
   if (!LAND?.trees?.length) return;
@@ -543,6 +551,7 @@ function makeTrees(s) {
   });
   crown.name = 'trees'; trunk.name = 'trunks';
   s.trees = new THREE.Group(); s.trees.add(crown, trunk); s.scene.add(s.trees);
+  setTreeTheme(s, isDark());
 }
 
 async function makeRoads(s) {
