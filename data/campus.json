@@ -1,16 +1,29 @@
 {
-  "_readme": "HKU campus boundary in model coordinates [x, z] (x = Easting - 832250, z = -(Northing - 815900)). Buildings whose centre falls inside are drawn solid and clickable; everything else is see-through decoration. Buildings listed in places.json always count as HKU. 'include' / 'exclude' force individual building IDs either way.",
-  "boundary": [
-    [-460, -255], [-340, -255], [-300, -200], [-100, -185], [-70, -200], [-60, -275],
-    [60, -275], [60, -200], [100, -175], [150, -150], [285, -110], [285, 45],
-    [-70, 45], [-110, -80], [-460, -80]
+  "_readme": "Model coordinates [x, z] (x = Easting - 832250, z = -(Northing - 815900)). 'areas': HKU campuses - buildings whose centre falls inside are drawn solid and clickable, everything else is see-through decoration; each area gets a name label (at 'label') and an outline on the ground. Buildings listed in places.json always count as HKU; 'include' / 'exclude' force individual building IDs either way. 'hills': terrain inside is drawn as shaded relief with contour lines instead of the aerial photo.",
+  "areas": [
+    {
+      "id": "main-campus",
+      "name": { "en": "Main Campus", "zh": "主校園" },
+      "label": [40, -40],
+      "boundary": [
+        [-275, -195], [-100, -185], [-70, -200], [-60, -275], [60, -275], [60, -200],
+        [110, -205], [160, -200], [165, -170], [285, -110], [285, 45],
+        [-70, 45], [-110, -80], [-275, -85]
+      ]
+    },
+    {
+      "id": "centennial-campus",
+      "name": { "en": "Centennial Campus", "zh": "百周年校園" },
+      "label": [-370, -100],
+      "boundary": [
+        [-460, -255], [-340, -255], [-300, -200], [-275, -195], [-275, -85], [-460, -80]
+      ]
+    }
   ],
-  "include": [
-    "B323421617101063C0",
-    "B323461614201063C0",
-    "B323741608901063C0",
-    "B323911609701063C0",
-    "B324101608502063C0"
-  ],
-  "exclude": []
+  "include": [],
+  "exclude": [],
+  "hills": [
+    [-480, -215], [-440, -90], [-280, -80], [-115, -75], [-80, 55], [60, 55],
+    [75, 110], [60, 300], [-570, 300], [-570, 0], [-545, -120]
+  ]
 }

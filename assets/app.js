@@ -31,6 +31,7 @@ async function getText(url) {
   return cache.get(url);
 }
 export const loadPlaces = () => getJSON('data/places.json');
+export const isPinned = (p) => p.buildings.length > 0 || !!p.at;
 export const loadRoutes = () => getJSON('data/routes.json').catch(() => ({ routes: [] }));
 let NAV = [];
 const flatPages = () => NAV.flatMap((s) => s.pages.map((p) => ({ ...p, section: s.title })));
@@ -182,7 +183,7 @@ async function buildIndex() {
     return { type: 'page', id: p.id, title: L(p.title), text: md.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|\[\]()!-]/g, ' ').replace(/\s+/g, ' ') };
   }));
   const { places } = await loadPlaces();
-  places.forEach((pl) => docs.push({ type: 'place', id: pl.id, title: L(pl.name), text: `${pl.name.en} ${pl.name.zh} ${L(pl.desc)} ${pl.no || ''}`, pinned: pl.buildings.length > 0 }));
+  places.forEach((pl) => docs.push({ type: 'place', id: pl.id, title: L(pl.name), text: `${pl.name.en} ${pl.name.zh} ${L(pl.desc)} ${pl.no || ''}`, pinned: isPinned(pl) }));
   return docs;
 }
 const sInput = $('#searchInput'), sRes = $('#searchResults');
@@ -245,7 +246,7 @@ async function renderBuildings(meta, params) {
       Object.entries(cats).map(([k, c]) => `<button class="chip ${filter === k ? 'on' : ''}" data-cat="${k}"><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</button>`).join('') +
       `</div><div class="bldg-list">` + list.map((p) => {
         const other = lang === 'zh' ? p.name.en : p.name.zh;
-        const pinned = p.buildings.length > 0;
+        const pinned = isPinned(p);
         return `<div class="bldg" id="b-${p.id}">
           <span class="no" title="${t('mapNo')}">${esc(p.no || '–')}</span>
           <div><h3>${esc(L(p.name))}<small>${esc(other)}</small></h3><p>${esc(L(p.desc))}</p></div>

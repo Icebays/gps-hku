@@ -32,7 +32,7 @@ assets/model/         hku.glb（已優化 3D 校園）+ buildings.json
 content/en, zh        指南頁面（Markdown）
 content/nav.json      側欄章節
 data/places.json      地點、地圖標籤、平面圖列表
-data/campus.json      港大校園範圍（範圍內嘅大樓實心顯示，其餘半透明）
+data/campus.json      主校園／百周年校園範圍同名稱（範圍內大樓實心，其餘半透明）、山坡等高線範圍
 data/routes.json      步行路線
 floorplans/           平面圖圖片
 model/                由 3dmap.gov.hk 下載嘅原始檔案

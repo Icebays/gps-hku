@@ -32,7 +32,7 @@ assets/model/         hku.glb (optimised 3D campus) + buildings.json
 content/en, zh        guide pages (Markdown)
 content/nav.json      sidebar chapters
 data/places.json      places, map pins, floor plan lists
-data/campus.json      HKU campus boundary (buildings inside are solid, the rest see-through)
+data/campus.json      Main / Centennial Campus outlines and names (buildings inside are solid, the rest see-through), contour-line hill zone
 data/routes.json      walking routes
 floorplans/           floor plan images
 model/                original 3dmap.gov.hk downloads

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { loadPlaces, loadRoutes, L, href, esc, getLang, REPO } from './app.js';
+import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -14,14 +14,16 @@ const T = {
         editBar: 'Edit mode — click a building to tag it', exportPlaces: 'Export places.json', drawRoute: 'Draw route', finishRoute: 'Copy route JSON',
         undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
-        min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You' },
+        min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
+        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
         editBar: '編輯模式 — 點選大樓以標示', exportPlaces: '匯出 places.json', drawRoute: '繪畫路線', finishRoute: '複製路線 JSON',
         undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
-        min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你' },
+        min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
+        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
@@ -51,6 +53,7 @@ export async function mount(container, { params }) {
   S.renderer.setAnimationLoop(frame);
   await S.ready;
   splitBuildings();
+  makeAreas();
   makePins();
   applyParams();
 }
@@ -65,8 +68,8 @@ export function unmount() {
 async function init() {
   const wrap = document.createElement('div');
   wrap.className = 'map-wrap';
-  wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels"></div>`;
-  const s = { wrap, labels: wrap.querySelector('.labels'), pins: [], selected: null, edit: false, drawing: null, highlightCache: new Map() };
+  wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels area-labels"></div><div class="labels pin-labels"></div>`;
+  const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, edit: false, drawing: null, highlightCache: new Map() };
 
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
@@ -109,6 +112,7 @@ async function init() {
     fetch('data/campus.json').then((r) => r.json()).catch(() => null),
   ]).then(([gltf, bjson, campus]) => {
     s.campus = campus;
+    setHills(campus?.hills);
     s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top }));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
     const root = gltf.scene;
@@ -118,26 +122,26 @@ async function init() {
       const n = o.name || o.parent?.name || '';
       if (n.startsWith('terrain')) {
         const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
-        o.material = new THREE.MeshBasicMaterial({ map });
+        o.material = terrainMaterial(map);
         s.terrain = (s.terrain || []).concat(o);
       } else if (n.startsWith('buildings')) {
         o.material = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
         s.buildings = o;
         s.bIndexAll = o.geometry.index.array;
-        // non-HKU buildings: see-through decoration, not clickable (except in edit mode)
-        s.deco = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
-        s.deco.geometry.setAttribute('position', o.geometry.attributes.position);
-        if (o.geometry.attributes.normal) s.deco.geometry.setAttribute('normal', o.geometry.attributes.normal);
-        s.deco.geometry.setAttribute('_bid', o.geometry.attributes._bid);
-        s.deco.renderOrder = 1;
-        o.parent.add(s.deco);
-        s.pickables.push(s.deco);
       } else {
         o.material = new THREE.MeshLambertMaterial({ color: 0xc9c6bf, flatShading: true });
         s.infra = o;
       }
       s.pickables.push(o);
     });
+    // non-HKU buildings: see-through decoration, not clickable (except in edit mode).
+    // Child of the buildings mesh so it shares its (dequantizing) transform.
+    const bg = s.buildings.geometry;
+    s.deco = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
+    for (const k of ['position', 'normal', '_bid']) if (bg.attributes[k]) s.deco.geometry.setAttribute(k, bg.attributes[k]);
+    s.deco.renderOrder = 1;
+    s.buildings.add(s.deco);
+    s.pickables.push(s.deco);
     scene.add(root);
     root.updateMatrixWorld(true);
     const ld = wrap.querySelector('.map-loading');
@@ -156,6 +160,68 @@ async function init() {
   return s;
 }
 
+/* ---------------- terrain ----------------
+   Inside the 'hills' polygon (data/campus.json) the aerial photo is replaced by
+   shaded relief + 10 m / 50 m contour lines that fade into mist with height. */
+const MAX_HILL_PTS = 32;
+const TERRAIN_U = {
+  uHill: { value: Array.from({ length: MAX_HILL_PTS }, () => new THREE.Vector2()) },
+  uHillN: { value: 0 },
+  uBase: { value: new THREE.Color(0xe4e9dc) },
+  uLine: { value: new THREE.Color(0x5d7a63) },
+  uMist: { value: new THREE.Color(0xcfe0e8) },
+};
+function setHills(pts) {
+  pts = (pts || []).slice(0, MAX_HILL_PTS);
+  pts.forEach(([x, z], i) => TERRAIN_U.uHill.value[i].set(x, z));
+  TERRAIN_U.uHillN.value = pts.length;
+}
+function terrainMaterial(map) {
+  const m = new THREE.MeshBasicMaterial({ map });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, TERRAIN_U);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorld;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWorld;
+uniform vec2 uHill[${MAX_HILL_PTS}];
+uniform int uHillN;
+uniform vec3 uBase, uLine, uMist;
+// signed distance to the hill polygon: > 0 inside
+float hillDist(vec2 p) {
+  float d = 1e9; bool inside = false;
+  for (int i = 0; i < ${MAX_HILL_PTS}; i++) {
+    if (i >= uHillN) break;
+    vec2 a = uHill[i], b = uHill[i == 0 ? uHillN - 1 : i - 1];
+    vec2 e = b - a, w = p - a;
+    d = min(d, length(w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0)));
+    if ((a.y > p.y) != (b.y > p.y) && p.x < e.x * (p.y - a.y) / e.y + a.x) inside = !inside;
+  }
+  return inside ? d : -d;
+}
+float contour(float h, float step) {
+  float v = h / step;
+  return 1.0 - clamp(abs(fract(v - 0.5) - 0.5) / fwidth(v), 0.0, 1.0);
+}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+if (uHillN > 2) {
+  float k = smoothstep(0.0, 25.0, hillDist(vWorld.xz));
+  if (k > 0.0) {
+    vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+    if (n.y < 0.0) n = -n;
+    float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
+    vec3 col = uBase * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
+    col = mix(col, uLine, contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75);
+    col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55);
+    diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
+  }
+}`);
+  };
+  return m;
+}
+
 function setSky(s) {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -163,6 +229,9 @@ function setSky(s) {
   s.scene.background = c;
   s.scene.fog = new THREE.Fog(c, 1200, 3800);
   s.ground?.material.color.set(dark ? 0x26302a : 0x6d7a62);
+  TERRAIN_U.uBase.value.set(dark ? 0x2c3a31 : 0xe4e9dc);
+  TERRAIN_U.uLine.value.set(dark ? 0x8fb39a : 0x5d7a63);
+  TERRAIN_U.uMist.value.copy(c);
 }
 
 function resize() {
@@ -185,16 +254,16 @@ function buildUI() {
   const showList = () => {
     const q = input.value.trim().toLowerCase();
     const items = (S.places?.places || []).filter((p) => !q || `${p.name.en} ${p.name.zh} ${p.no || ''}`.toLowerCase().includes(q))
-      .sort((a, b) => (b.buildings.length > 0) - (a.buildings.length > 0));
+      .sort((a, b) => isPinned(b) - isPinned(a));
     list.hidden = false;
-    list.innerHTML = items.slice(0, 40).map((p) => `<button data-id="${p.id}" class="${p.buildings.length ? '' : 'unpinned'}"><i class="dot" style="background:${S.places.categories[p.cat]?.color}"></i>${esc(L(p.name))}<small>${p.buildings.length ? (p.no ? '#' + p.no : '') : tt('notPinned')}</small></button>`).join('');
+    list.innerHTML = items.slice(0, 40).map((p) => `<button data-id="${p.id}" class="${isPinned(p) ? '' : 'unpinned'}"><i class="dot" style="background:${S.places.categories[p.cat]?.color}"></i>${esc(L(p.name))}<small>${isPinned(p) ? (p.no ? '#' + p.no : '') : tt('notPinned')}</small></button>`).join('');
   };
   input.addEventListener('focus', showList); input.addEventListener('input', showList);
   list.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     list.hidden = true; input.value = ''; input.blur();
     const p = S.places.places.find((x) => x.id === b.dataset.id);
-    if (p.buildings.length) selectPlace(p, true);
+    if (isPinned(p)) selectPlace(p, true);
     else location.hash = href('buildings', { b: p.id });
   });
   S.wrap.addEventListener('pointerdown', (e) => { if (!e.target.closest('.map-search')) list.hidden = true; });
@@ -227,8 +296,45 @@ function buildUI() {
 
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
+/* ---------------- campus areas ---------------- */
+function makeAreas() {
+  const areas = S.campus?.areas || [];
+  if (!S.areaLines) {
+    S.areaLines = new THREE.Group();
+    for (const a of areas) {
+      const pts = [];
+      a.boundary.forEach((p, i) => {
+        const q = a.boundary[(i + 1) % a.boundary.length];
+        const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
+        for (let k = 0; k < n; k++) {
+          const x = p[0] + ((q[0] - p[0]) * k) / n, z = p[1] + ((q[1] - p[1]) * k) / n;
+          pts.push(new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + 1.5, z));
+        }
+      });
+      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineDashedMaterial({ color: 0x0f5132, dashSize: 6, gapSize: 4, transparent: true, opacity: 0.7, depthTest: false }));
+      line.computeLineDistances(); line.renderOrder = 2;
+      S.areaLines.add(line);
+    }
+    S.scene.add(S.areaLines);
+  }
+  S.areaLabels.innerHTML = '';
+  S.areas = areas.map((a) => {
+    const [x, z] = a.label;
+    const el = document.createElement('div');
+    el.className = 'area-label';
+    el.innerHTML = `${esc(L(a.name))}<small>${esc(getLang() === 'zh' ? a.name.en : a.name.zh)}</small>`;
+    S.areaLabels.appendChild(el);
+    return { el, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + 40, z) };
+  });
+}
+
 /* ---------------- pins ---------------- */
 function placeAnchor(p) {
+  if (p.at) {
+    const [x, z] = p.at;
+    return new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 80) + 6, z);
+  }
   const bs = p.buildings.map((c) => S.bmeta[S.bidByCode.get(c)]).filter(Boolean);
   if (!bs.length) return null;
   const v = new THREE.Vector3();
@@ -254,6 +360,12 @@ function makePins() {
 const _v = new THREE.Vector3();
 function updatePins() {
   const w = S.wrap.clientWidth, h = S.wrap.clientHeight;
+  for (const a of S.areas || []) {
+    _v.copy(a.pos).project(S.camera);
+    const vis = _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2;
+    a.el.style.display = vis ? '' : 'none';
+    if (vis) a.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * w}px, ${(-_v.y * 0.5 + 0.5) * h}px) translate(-50%, -50%)`;
+  }
   const camPos = S.camera.position;
   const sorted = S.pins.map((p) => ({ p, d: camPos.distanceTo(p.pos) })).sort((a, b) => a.d - b.d);
   const placed = [];
@@ -289,10 +401,10 @@ function insidePoly(x, z, poly) {
 function splitBuildings() {
   if (!S.buildings) return;
   const bidAttr = S.buildings.geometry.attributes._bid, idx = S.bIndexAll, hku = [], deco = [];
-  const c = S.campus || {}, poly = c.boundary || [], exclude = new Set(c.exclude || []);
+  const c = S.campus || {}, polys = (c.areas || []).map((a) => a.boundary), exclude = new Set(c.exclude || []);
   const codes = new Set([...(c.include || []), ...S.places.places.flatMap((p) => p.buildings)]);
   const set = new Set();
-  S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && insidePoly(b.x, b.z, poly))) set.add(i); });
+  S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && polys.some((poly) => insidePoly(b.x, b.z, poly)))) set.add(i); });
   for (let i = 0; i < idx.length; i += 3) (set.has(bidAttr.getX(idx[i])) ? hku : deco).push(idx[i], idx[i + 1], idx[i + 2]);
   S.buildings.geometry.setIndex(hku);
   S.deco.geometry.setIndex(deco);
@@ -336,7 +448,8 @@ function selectPlace(p, fly) {
 }
 function selectBuilding(bid) {
   const code = S.bmeta[bid].id;
-  const p = S.places.places.find((x) => x.buildings.includes(code));
+  // a building can belong to several places (e.g. a tower and its campus): pick the most specific
+  const p = S.places.places.filter((x) => x.buildings.includes(code)).sort((a, b) => a.buildings.length - b.buildings.length)[0];
   if (p && !S.edit) return selectPlace(p, false);
   S.selected = { bid, place: p || null, bids: [bid] };
   highlight([bid]);
@@ -362,7 +475,7 @@ function showInfo() {
   let html = `<button class="icon-btn close">${ICON.close}</button>`;
   if (p && (!S.edit || sel.bid == null)) {
     html += `<h3>${esc(L(p.name))}</h3><div class="sub"><i class="dot" style="background:${cat?.color}"></i>${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
-      ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}
+      ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}${p.guess ? `<p class="guess">⚠︎ ${tt('guess')}</p>` : ''}
       <div class="acts"><a class="btn primary" href="${href('buildings', { b: p.id })}">${tt('guide')}</a>${p.floors?.length ? `<a class="btn" href="${href('buildings', { b: p.id })}">🗺 ${tt('floorPlans')} (${p.floors.length})</a>` : ''}</div>`;
   } else {
     const b = S.bmeta[sel.bid];
@@ -464,10 +577,10 @@ function locate() {
     flyTo(tg.clone().add(new THREE.Vector3(0, 220, 200)), tg);
   }, () => toast(tt('noGps')), { enableHighAccuracy: true, timeout: 10000 });
 }
-function groundHeight(x, z) {
-  if (!S.pickables) return null;
+function groundHeight(x, z, targets = S.pickables) {
+  if (!targets) return null;
   S.ray.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
-  const hit = S.ray.intersectObjects(S.pickables, false)[0];
+  const hit = S.ray.intersectObjects(targets, false)[0];
   return hit ? hit.point.y : null;
 }
 
