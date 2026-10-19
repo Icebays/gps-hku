@@ -3,6 +3,7 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
+import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -124,13 +125,14 @@ async function init() {
       if (n.startsWith('terrain')) {
         const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
         o.material = terrainMaterial(map);
+        o.material.polygonOffset = true; o.material.polygonOffsetFactor = 1; o.material.polygonOffsetUnits = 4; // roads draped on top win near-ties
         s.terrain = (s.terrain || []).concat(o);
       } else if (n.startsWith('buildings')) {
         o.material = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
         s.buildings = o;
         s.bIndexAll = o.geometry.index.array;
       } else {
-        o.material = new THREE.MeshLambertMaterial({ color: 0xc9c6bf, flatShading: true });
+        o.material = infraMaterial();
         s.infra = o;
       }
       s.pickables.push(o);
@@ -146,6 +148,7 @@ async function init() {
     scene.add(root);
     root.updateMatrixWorld(true);
     makeExtraBuildings(s, campus?.extraBuildings || []);
+    setTimeout(() => makeRoads(s), 0);
     const ld = wrap.querySelector('.map-loading');
     ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
   }).catch((e) => { console.error(e); pct.textContent = 'Error: ' + e.message; });
@@ -190,44 +193,58 @@ async function loadOverlay() {
     const xs = [], zs = [];
     const add = (pts) => pts.forEach(([x, z]) => { xs.push(x); zs.push(z); });
     FEAT.roads.forEach((r) => add(r.pts)); FEAT.paths.forEach((p) => add(p.pts)); FEAT.areas.forEach((a) => add(a.outer));
+    (FEAT.marks?.busStops || []).forEach((b) => add([b.icon]));
     FEAT.ext = [Math.min(...xs) - 10, Math.max(...xs) + 10, Math.min(...zs) - 10, Math.max(...zs) + 10];
     const root = document.documentElement;
     drawMapFeatures(root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
   } catch (e) { console.warn('map features not loaded', e); }
 }
-/* Our own cartography: roads, footpaths, gardens and water redrawn from the vectors. */
+/* Ground cover drawn into the terrain: gardens, water, and the woodland mask for the green relief.
+   Roads, footpaths and markings are 3D geometry (roads.js). */
 const MAP_STYLE = {
-  light: { garden: '#b5e0a6', gardenEdge: '#7fbf72', water: '#a9cfe2', casing: '#d8d1c3', road: '#ffffff', majorCasing: '#dba65e', major: '#f8dca8', path: '#e2775c', indoor: '#8b90a0' },
-  dark: { garden: '#35593a', gardenEdge: '#4d7a52', water: '#29475a', casing: '#2a2e2c', road: '#5d6360', majorCasing: '#6b5532', major: '#8f7650', path: '#e38b72', indoor: '#9aa0b0' },
+  light: { garden: '#b5e0a6', gardenEdge: '#7fbf72', water: '#a9cfe2', pavement: '#ebe7df', kerb: '#c8c1b4', tarmac: '#aeb3ba', tarmacMajor: '#a3a9b1',
+           paint: '#ffffff', yellow: '#f2c230', walk: '#eadbc0', walkEdge: '#cfb48a', indoor: '#8b90a0', icon: '#1c7ed6' },
+  dark: { garden: '#35593a', gardenEdge: '#4d7a52', water: '#29475a', pavement: '#3d413f', kerb: '#2a2d2c', tarmac: '#50555c', tarmacMajor: '#4a4f57',
+          paint: '#d9dde2', yellow: '#c9a33a', walk: '#5a5144', walkEdge: '#6f634f', indoor: '#9aa0b0', icon: '#4dabf7' },
 };
+// shift a polyline sideways by d metres (positive = left of travel direction in map view)
+function offsetLine(pts, d) {
+  return pts.map((p, i) => {
+    const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, pts.length - 1)];
+    const dx = b[0] - a[0], dz = b[1] - a[1], n = Math.hypot(dx, dz) || 1;
+    return [p[0] - (dz / n) * d, p[1] + (dx / n) * d];
+  });
+}
 function drawMapFeatures(dark) {
   if (!FEAT) return;
-  const RES = 0.4, [x0, x1, z0, z1] = FEAT.ext;
-  const w = Math.ceil((x1 - x0) / RES), h = Math.ceil((z1 - z0) / RES);
-  const mk = () => Object.assign(document.createElement('canvas'), { width: w, height: h });
-  const A = FEAT.canvasA || (FEAT.canvasA = mk()), B = FEAT.canvasB || (FEAT.canvasB = mk());
+  const [x0, x1, z0, z1] = FEAT.ext;
+  const maxTex = S?.renderer?.capabilities.maxTextureSize || 4096;
+  const RES = Math.max(0.25, (x1 - x0) / (maxTex - 8), (z1 - z0) / (maxTex - 8)), RB = 1;
+  const mk = (r) => Object.assign(document.createElement('canvas'), { width: Math.ceil((x1 - x0) / r), height: Math.ceil((z1 - z0) / r) });
+  const A = FEAT.canvasA || (FEAT.canvasA = mk(RES)), B = FEAT.canvasB || (FEAT.canvasB = mk(RB));
   const a = A.getContext('2d'), b = B.getContext('2d'), st = MAP_STYLE[dark ? 'dark' : 'light'];
-  a.clearRect(0, 0, w, h); b.clearRect(0, 0, w, h);
-  const path = (ctx, pts) => pts.forEach(([x, z], i) => ctx[i ? 'lineTo' : 'moveTo']((x - x0) / RES, (z - z0) / RES));
+  a.setTransform(1, 0, 0, 1, 0, 0); b.setTransform(1, 0, 0, 1, 0, 0);
+  a.clearRect(0, 0, A.width, A.height); b.clearRect(0, 0, B.width, B.height);
+  // draw in metres: canvas units = model metres
+  a.setTransform(1 / RES, 0, 0, 1 / RES, -x0 / RES, -z0 / RES); b.setTransform(1 / RB, 0, 0, 1 / RB, -x0 / RB, -z0 / RB);
+  const path = (ctx, pts) => pts.forEach(([x, z], i) => ctx[i ? 'lineTo' : 'moveTo'](x, z));
   const poly = (ctx, ar) => { ctx.beginPath(); for (const ring of [ar.outer, ...ar.holes]) { path(ctx, ring); ctx.closePath(); } };
-  const stroke = (ctx, pts, color, width, dash) => {
+  const stroke = (ctx, pts, color, width, dash, cap = 'round') => {
     ctx.beginPath(); path(ctx, pts);
-    ctx.strokeStyle = color; ctx.lineWidth = width / RES; ctx.setLineDash(dash ? dash.map((d) => d / RES) : []); ctx.stroke();
+    ctx.lineCap = cap; ctx.lineJoin = 'round';
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.stroke();
   };
-  a.lineCap = b.lineCap = 'round'; a.lineJoin = b.lineJoin = 'round';
-  // woodland + gardens feed the green base (relief + contours); gardens also get their own fill
+  const at = (ctx, p, u, fn) => { ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(Math.atan2(u[1], u[0])); fn(); ctx.restore(); };
+  const FONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+
+  // woodland + gardens feed the green base (relief + contours)
   b.fillStyle = '#ff0000';
   for (const ar of FEAT.areas) if (ar.kind !== 'water') { poly(b, ar); b.fill('evenodd'); }
   for (const ar of FEAT.areas) {
     if (ar.kind === 'wood') continue;
     poly(a, ar); a.fillStyle = ar.kind === 'water' ? st.water : st.garden; a.fill('evenodd');
-    if (ar.kind === 'garden') { a.strokeStyle = st.gardenEdge; a.lineWidth = 0.6 / RES; a.setLineDash([]); a.stroke(); }
+    if (ar.kind === 'garden') { a.strokeStyle = st.gardenEdge; a.lineWidth = 0.6; a.setLineDash([]); a.stroke(); }
   }
-  const roads = [...FEAT.roads].sort((p, q) => (p.class === 'major') - (q.class === 'major'));
-  for (const r of roads) stroke(a, r.pts, r.class === 'major' ? st.majorCasing : st.casing, r.width + 1.4);
-  for (const r of roads) stroke(a, r.pts, r.class === 'major' ? st.major : st.road, r.width);
-  for (const p of FEAT.paths) if (p.indoor) stroke(a, p.pts, st.indoor, 0.9, [0.1, 2.0]);
-  for (const p of FEAT.paths) if (!p.indoor) stroke(a, p.pts, st.path, 1.3);
   for (const [k, c] of [['uOvA', A], ['uOvB', B]]) {
     const t = TERRAIN_U[k].value || (TERRAIN_U[k].value = new THREE.CanvasTexture(c));
     t.flipY = false; t.colorSpace = k === 'uOvA' ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.needsUpdate = true;
@@ -320,6 +337,8 @@ function setSky(s) {
   TERRAIN_U.uMist.value.copy(c);
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
   drawMapFeatures(dark);
+  s.roads?.userData.setTheme(dark);
+  INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
 function resize() {
@@ -476,6 +495,40 @@ function updatePins() {
     _v.copy(S.me.pos).project(S.camera);
     S.me.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * w}px, ${(-_v.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
   }
+}
+
+/* Flyovers, footbridges, lamp posts (3D infrastructure): road decks are drawn as tarmac with a
+   white edge line, sides and piers as concrete. */
+const INFRA_U = { uDeck: { value: new THREE.Color(0xa3a9b1) }, uSide: { value: new THREE.Color(0xd6d1c7) }, uEdge: { value: new THREE.Color(0xffffff) } };
+function infraMaterial() {
+  const m = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, INFRA_U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;\nuniform vec3 uDeck, uSide, uEdge;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  vec3 nW = normalize(cross(dFdx(vW), dFdy(vW)));
+  float up = abs(nW.y);
+  diffuseColor.rgb = mix(uSide, uDeck, smoothstep(0.85, 0.95, up));`);
+  };
+  return m;
+}
+
+/* ---------------- roads, footpaths, street lamps ---------------- */
+async function makeRoads(s) {
+  if (!FEAT) return;
+  try {
+    const t0 = performance.now();
+    const ground = heightIndex(s.terrain), deck = s.infra ? heightIndex([s.infra], { upOnly: true }) : () => NaN;
+    const bIdx = heightIndex([s.buildings]);
+    const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    s.roads = buildRoads({ FEAT, ground, deck, building: bIdx, lampGeo, dark });
+    s.scene.add(s.roads);
+    console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
+  } catch (e) { console.warn('roads not built', e); }
 }
 
 /* ---------------- extra buildings ----------------

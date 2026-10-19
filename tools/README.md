@@ -31,8 +31,16 @@ of the campus (standard OSM style):
 
 ```bash
 # needs: pip install numpy pillow opencv-python-headless scikit-image
-python3 tools/build_mapfeatures.py osm-screenshot.png "<s>,<theta>,<tx>,<tz>" footprints.png
+python3 tools/build_aerial.py work/7C work/7D out/aerial.jpg          # orthophoto mosaic from the original tiles
+python3 tools/osm_flow.py                                              # local OSM -> model corrections (flow.json)
+python3 tools/build_mapfeatures.py osm-screenshot.png "<s>,<theta>,<tx>,<tz>" footprints.png flow.json out/aerial.jpg
+python3 tools/extract_streetlamp.py work/7C/INFRASTRUCTURE/I320111610707063C0/I320111610707063C0.gltf
 ```
+
+Road centre lines are smoothed, snapped at junctions, then shifted onto the asphalt seen in the
+orthophoto, whose measured width becomes the road width. The site (`assets/roads.js`) drapes roads,
+pavements, kerbs, markings, zebra crossings, 慢駛 / 巴士站 words and footpaths on the terrain as 3D
+geometry, and places street lamps copied from the Hill Road flyover model along them.
 
 `<s>,<theta>,<tx>,<tz>` map a screenshot pixel (u, v) to the model: `x = s(cos t·u − sin t·v) + tx`, `z = s(sin t·u + cos t·v) + tz`.
 Find them by matching the screenshot's building outlines against the model footprints. `footprints.png` is a

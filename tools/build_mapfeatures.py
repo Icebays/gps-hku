@@ -2,12 +2,16 @@
 screenshot into model-frame geometry (data/mapfeatures.json). The site redraws
 these in its own style; nothing from the screenshot is shown directly.
 
-    python3 tools/build_mapfeatures.py osm.png "<s>,<theta>,<tx>,<tz>" footprints.png
+    python3 tools/build_mapfeatures.py osm.png "<s>,<theta>,<tx>,<tz>" footprints.png flow.json aerial.jpg
 
 <s>,<theta>,<tx>,<tz> map a screenshot pixel (u, v) to the model frame:
     x = s*(cos t*u - sin t*v) + tx,   z = s*(sin t*u + cos t*v) + tz
 footprints.png: top-down render of the model's buildings (white on black)
 covering x -770..760, z -310..290; used to tell indoor from outdoor footpaths.
+flow.json: local corrections [[x, z, dx, dz], ...] (tools/osm_flow.py) that snap
+the screenshot onto the model, which shares its survey with the aerial photo.
+aerial.jpg: orthophoto mosaic (tools/build_aerial.py); road widths are measured
+on it, and centre lines are nudged onto the real road surface.
 
 Needs: pip install numpy pillow opencv-python-headless scikit-image
 Map data © OpenStreetMap contributors (ODbL).
@@ -21,15 +25,25 @@ from skimage.morphology import skeletonize
 src = np.asarray(Image.open(sys.argv[1]).convert('RGB')).astype(int)
 S, TH, TX, TZ = map(float, sys.argv[2].split(','))
 foot = np.asarray(Image.open(sys.argv[3]).convert('L')) > 128
+FLOW = np.array(json.load(open(sys.argv[4])), float)
+AER = np.asarray(Image.open(sys.argv[5]).convert('RGB')).astype(np.float32)
+AMETA = json.load(open(sys.argv[5].rsplit('.', 1)[0] + '.json'))
 FX0, FX1, FZ0, FZ1 = -770, 760, -310, 290
 H, W = src.shape[:2]
 C, SI = np.cos(TH), np.sin(TH)
+
+def flow_at(xz):
+    """Smooth local correction (inverse-distance weighted, 60 m scale)."""
+    d2 = (FLOW[None, :, 0] - xz[:, None, 0]) ** 2 + (FLOW[None, :, 1] - xz[:, None, 1]) ** 2
+    w = 1.0 / (d2 + 30.0 ** 2) ** 1.5
+    return (w[..., None] * FLOW[None, :, 2:4]).sum(1) / w.sum(1)[:, None]
 
 def to_model(pts):
     pts = np.asarray(pts, float)
     x = S * (C * pts[:, 0] - SI * pts[:, 1]) + TX
     z = S * (SI * pts[:, 0] + C * pts[:, 1]) + TZ
-    return np.stack([x, z], 1)
+    xz = np.stack([x, z], 1)
+    return xz + flow_at(xz)
 
 def near(c, tol=9):
     return np.abs(src - np.array(c)).max(2) <= tol
@@ -211,15 +225,114 @@ def simplify(pts, eps=0.6):
     a = cv2.approxPolyDP(np.asarray(pts, np.float32).reshape(-1, 1, 2), eps, False)[:, 0, :]
     return [[round(float(x), 1), round(float(z), 1)] for x, z in a]
 
+# ---------- aerial: asphalt likelihood ----------
+AX0, AX1, AZ0, AZ1 = AMETA['extent']; ARES = AMETA['res']
+mx, mn = AER.max(2), AER.min(2)
+sat = (mx - mn) / np.maximum(mx, 1)
+asphalt = ((sat < 0.2) & (mx > 28) & (mx < 185) & ~((AER[..., 1] > AER[..., 0] + 6) & (AER[..., 1] > AER[..., 2] + 6))).astype(np.float32)
+asphalt = cv2.GaussianBlur(asphalt, (0, 0), 0.6 / ARES)
+
+def aer_sample(pts):
+    u = ((pts[:, 0] - AX0) / ARES).astype(int); v = ((pts[:, 1] - AZ0) / ARES).astype(int)
+    ok = (u >= 0) & (u < asphalt.shape[1]) & (v >= 0) & (v < asphalt.shape[0])
+    out = np.full(len(pts), np.nan); out[ok] = asphalt[v[ok], u[ok]]
+    return out
+
+def resample(line, step):
+    seg = np.hypot(*np.diff(line, axis=0).T); L = np.concatenate([[0], np.cumsum(seg)])
+    n = max(2, int(np.ceil(L[-1] / step)) + 1); t = np.linspace(0, L[-1], n)
+    return np.stack([np.interp(t, L, line[:, 0]), np.interp(t, L, line[:, 1])], 1)
+
+def smooth(line, sigma_m, step=1.0):
+    """Gaussian-smooth a polyline with its end points held fixed."""
+    q = resample(line, step)
+    if len(q) < 5:
+        return q
+    k = min(int(3 * sigma_m / step), len(q) - 2); g = np.exp(-0.5 * (np.arange(-k, k + 1) * step / sigma_m) ** 2)
+    pad = np.vstack([2 * q[0] - q[k:0:-1], q, 2 * q[-1] - q[-2:-k - 2:-1]])  # point reflection keeps ends fixed
+    sm = np.stack([np.convolve(pad[:, i], g / g.sum(), 'valid') for i in range(2)], 1)
+    return sm
+
+def normals(q):
+    d = np.gradient(q, axis=0); d /= np.maximum(np.hypot(*d.T), 1e-9)[:, None]
+    return np.stack([-d[:, 1], d[:, 0]], 1)
+
+def fit_to_aerial(q, w0, wmin, wmax):
+    """Shift the centre line onto the asphalt band and measure its width."""
+    n = normals(q); offs = np.arange(-wmax, wmax + 0.01, 0.4)
+    prof = np.stack([aer_sample(q + n * o) for o in offs], 1)        # (points, offsets)
+    shifts, widths = [], []
+    for i in range(len(q)):
+        p = prof[i]
+        if np.isnan(p).mean() > 0.3:
+            shifts.append(np.nan); widths.append(np.nan); continue
+        on = np.nan_to_num(p) > 0.5
+        c = len(offs) // 2
+        # contiguous asphalt run nearest the current centre
+        idx = np.nonzero(on)[0]
+        if not len(idx):
+            shifts.append(np.nan); widths.append(np.nan); continue
+        j = idx[np.argmin(np.abs(idx - c))]
+        a = j
+        while a > 0 and on[a - 1]: a -= 1
+        b = j
+        while b < len(on) - 1 and on[b + 1]: b += 1
+        wd = offs[b] - offs[a]
+        if wd < wmin * 0.7 or wd > wmax * 1.3 or abs(offs[j]) > w0:
+            shifts.append(np.nan); widths.append(np.nan); continue
+        shifts.append((offs[a] + offs[b]) / 2); widths.append(wd)
+    shifts, widths = np.array(shifts), np.array(widths)
+    good = ~np.isnan(shifts)
+    if good.mean() < 0.35:
+        return q, w0
+    # robust smooth of the shift along the line (trees hide the road in places)
+    sh = np.interp(np.arange(len(q)), np.nonzero(good)[0], shifts[good])
+    k = 15; sh = np.array([np.median(sh[max(0, i - k):i + k + 1]) for i in range(len(sh))])
+    sh = np.clip(sh, -3.0, 3.0)
+    sh[:6] *= np.linspace(0, 1, min(6, len(sh))); sh[-6:] *= np.linspace(1, 0, min(6, len(sh)))  # keep junction ends
+    return q + n * sh[:, None], float(np.clip(np.median(widths[good]), wmin, wmax))
+
+def junction_snap(lines, radius=7.0):
+    """Merge line ends that meet near one point into a single node; drop tiny loops/stubs."""
+    ends = np.array([l[i] for l in lines for i in (0, -1)])
+    lab_ = -np.ones(len(ends), int); nid = 0
+    for i in range(len(ends)):
+        if lab_[i] >= 0: continue
+        grp = np.nonzero((np.hypot(*(ends - ends[i]).T) < radius) & (lab_ < 0))[0]
+        lab_[grp] = nid; nid += 1
+    cen = np.array([ends[lab_ == k].mean(0) for k in range(nid)])
+    out = []
+    for n_, l in enumerate(lines):
+        a, b = lab_[2 * n_], lab_[2 * n_ + 1]
+        L = np.hypot(*np.diff(l, axis=0).T).sum()
+        if a == b and L < 40:  # small loop at a junction
+            continue
+        l = l.copy(); l[0] = cen[a]; l[-1] = cen[b]
+        out.append((l, a, b, n_))
+    deg = np.bincount([e for _, a, b, _ in out for e in (a, b)], minlength=nid)
+    return [(l, n_) for l, a, b, n_ in out if not (np.hypot(*np.diff(l, axis=0).T).sum() < 12 and (deg[a] == 1 or deg[b] == 1))]
+
 feats = {'attribution': '© OpenStreetMap contributors', 'roads': [], 'paths': [], 'areas': []}
 road_any = (lab == MINOR) | (lab == MAJOR)
 major_d = cv2.dilate((lab == MAJOR).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+raw = []
 for px, line, dist in centrelines(road_any, 5, 6, 1.0, 10):
     ix, iy = px[:, 0].astype(int), px[:, 1].astype(int)
-    name = 'major' if major_d[iy, ix].mean() > 0.5 else 'minor'
-    w = float(np.median(dist[iy, ix])) * 2 * S
-    w = max(9.0, min(w, 18.0)) if name == 'major' else max(3.5, min(w, 8.0))
-    feats['roads'].append({'class': name, 'width': round(w, 1), 'pts': simplify(line)})
+    major = major_d[iy, ix].mean() > 0.5
+    osm_w = float(np.median(dist[iy, ix])) * 2 * S   # OSM pixel width: ~4 m residential, ~2 m service
+    raw.append((to_model(px), major, osm_w))
+for l, i_ in junction_snap([r[0] for r in raw]):
+    _, major, osm_w = raw[i_]
+    if major:
+        w0, wmin, wmax = 11.0, 8.0, 16.0
+    elif osm_w >= 3.0:
+        w0, wmin, wmax = 6.5, 5.0, 9.0
+    else:
+        w0, wmin, wmax = 4.5, 3.0, 6.5
+    q = smooth(l, 5.0)
+    q, w = fit_to_aerial(q, w0, wmin, wmax)
+    q = smooth(q, 3.0)
+    feats['roads'].append({'class': 'major' if major else 'minor', 'width': round(w, 1), 'pts': simplify(q, 0.15)})
 def bridge(lines, gap=7.0, cos_min=0.6):
     """Join polyline ends that face each other across a small gap (dashed lines)."""
     lines = [np.asarray(l, float) for l in lines]
@@ -257,11 +370,92 @@ path_lines = bridge([line for _, line, _ in centrelines(lab == PATH, 7, 2, 0.8, 
 for line in path_lines:
     if np.hypot(*np.diff(line, axis=0).T).sum() < 8:
         continue
-    for ind, run in split_indoor(line):
-        feats['paths'].append({'indoor': ind, 'pts': simplify(run, 0.5)})
+    for ind, run in split_indoor(smooth(line, 1.5, 0.5)):
+        feats['paths'].append({'indoor': ind, 'pts': simplify(run, 0.2)})
 for cls, kind, amin in [(WOOD, 'wood', 400), (PARK, 'garden', 60), (WATER, 'water', 20)]:
     for p in polygons(lab == cls, amin):
         feats['areas'].append({'kind': kind, **p})
+
+# ---------- icons (bus stops, lifts, taxi stands) ----------
+import os
+blue = ((b > 170) & (r < 110) & (g > 100) & (g < 190)).astype(np.float32)
+icons = []
+for kind in ('bus', 'lift', 'taxi'):
+    t = np.asarray(Image.open(os.path.join(os.path.dirname(__file__), 'osm-icons', kind + '.png'))).astype(np.float32) / 255
+    res = cv2.matchTemplate(blue, t, cv2.TM_CCOEFF_NORMED)
+    found = []
+    for y, x in sorted(zip(*np.nonzero(res > 0.8)), key=lambda q: -res[q]):
+        c = (x + t.shape[1] / 2, y + t.shape[0] / 2)
+        if all(np.hypot(c[0] - q[0], c[1] - q[1]) > 10 for q in found):
+            found.append(c)
+    icons += [(kind, to_model([c])[0]) for c in found]
+
+# ---------- road markings: crossings, 慢駛, bus bays ----------
+road_segs = []  # (a, b, road index)
+for i, rd in enumerate(feats['roads']):
+    q = np.array(rd['pts'])
+    road_segs += [(q[k], q[k + 1], i) for k in range(len(q) - 1)]
+RA = np.array([s_[0] for s_ in road_segs]); RB = np.array([s_[1] for s_ in road_segs]); RI = np.array([s_[2] for s_ in road_segs])
+
+def nearest_road(pt):
+    d = RB - RA; L2 = np.maximum((d ** 2).sum(1), 1e-9)
+    t = np.clip(((pt - RA) * d).sum(1) / L2, 0, 1)
+    proj = RA + d * t[:, None]; dist = np.hypot(*(proj - pt).T)
+    k = int(np.argmin(dist)); u = d[k] / np.sqrt(L2[k])
+    return proj[k], u, RI[k], dist[k]
+
+def seg_x(p1, p2, q1, q2):
+    d1, d2 = p2 - p1, q2 - q1
+    den = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(den) < 1e-9:
+        return None
+    w = q1 - p1
+    t = (w[0] * d2[1] - w[1] * d2[0]) / den; u = (w[0] * d1[1] - w[1] * d1[0]) / den
+    return p1 + t * d1 if 0 <= t <= 1 and 0 <= u <= 1 else None
+
+marks = {'crossings': [], 'slow': [], 'busStops': [], 'icons': []}
+for pth in feats['paths']:
+    if pth['indoor']:
+        continue
+    q = np.array(pth['pts'])
+    segs = [(q[k], q[k + 1]) for k in range(len(q) - 1)]
+    for e0, e1 in ((q[0], q[1]), (q[-1], q[-2])):  # paths often stop at the kerb: extend their ends by 8 m
+        d = e0 - e1; n_ = np.hypot(*d)
+        if n_ > 1e-6:
+            segs.append((e0, e0 + d / n_ * 8.0))
+    for a_, b_ in segs:
+        pd = (b_ - a_) / max(np.hypot(*(b_ - a_)), 1e-9)
+        lo, hi = np.minimum(a_, b_) - 1, np.maximum(a_, b_) + 1
+        cand = np.nonzero((np.minimum(RA, RB) <= hi).all(1) & (np.maximum(RA, RB) >= lo).all(1))[0]
+        for j in cand:
+            x = seg_x(a_, b_, RA[j], RB[j])
+            if x is None:
+                continue
+            rd = RB[j] - RA[j]; rd = rd / max(np.hypot(*rd), 1e-9)
+            if abs(np.dot(rd, pd)) > 0.6:  # running alongside, not crossing
+                continue
+            if any(np.hypot(*(np.array(c['p']) - x)) < 10 for c in marks['crossings']):
+                continue
+            road = feats['roads'][RI[j]]
+            marks['crossings'].append({'p': [round(x[0], 1), round(x[1], 1)], 'dir': [round(rd[0], 3), round(rd[1], 3)], 'width': road['width']})
+            if road['class'] == 'minor':
+                for sgn in (-1, 1):  # 慢駛 on both approaches, readable by the approaching driver
+                    sp = x + sgn * rd * 8.5
+                    _, _, ri, dd = nearest_road(sp)
+                    if dd < 1.0:
+                        marks['slow'].append({'p': [round(sp[0], 1), round(sp[1], 1)], 'up': [round(-sgn * rd[0], 3), round(-sgn * rd[1], 3)], 'width': road['width']})
+for kind, c in icons:
+    if kind == 'bus':
+        pr, u, ri, dd = nearest_road(c)
+        if dd > 25:
+            continue
+        n = np.array([-u[1], u[0]]); side = 1 if np.dot(c - pr, n) >= 0 else -1
+        marks['busStops'].append({'p': [round(pr[0], 1), round(pr[1], 1)], 'dir': [round(u[0], 3), round(u[1], 3)],
+                                  'side': side, 'width': feats['roads'][ri]['width'], 'icon': [round(c[0], 1), round(c[1], 1)]})
+    else:
+        marks['icons'].append({'kind': kind, 'p': [round(c[0], 1), round(c[1], 1)]})
+feats['marks'] = marks
+print('crossings', len(marks['crossings']), 'slow', len(marks['slow']), 'bus', len(marks['busStops']), 'icons', len(marks['icons']))
 
 json.dump(feats, open('data/mapfeatures.json', 'w'), separators=(',', ':'))
 n_in = sum(p['indoor'] for p in feats['paths'])
