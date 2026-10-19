@@ -356,6 +356,15 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
   const kept = [];
   for (const c of M.crossings || []) {
     if (!clearAt(c.p) || kept.some((k) => Math.hypot(k[0] - c.p[0], k[1] - c.p[1]) < 20)) continue;
+    // crossings are inferred where a mapped footpath meets a road; when a bridge spans the spot the
+    // path goes over (footbridge), not across - no zebra there
+    const g0 = ground(c.p[0], c.p[1]);
+    let bridged = false;
+    for (let dx = -8; dx <= 8 && !bridged; dx += 2) for (let dz = -8; dz <= 8 && !bridged; dz += 2) {
+      const d = deck(c.p[0] + dx, c.p[1] + dz);
+      if (Number.isFinite(d) && d > (Number.isFinite(g0) ? g0 : -1e9) + 3) bridged = true;
+    }
+    if (bridged) continue;
     kept.push(c.p);
     for (let t = -c.width / 2 + 0.6; t <= c.width / 2 - 0.5; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
     // 望右 LOOK RIGHT just off each kerb end, readable by the pedestrian about to cross

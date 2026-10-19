@@ -323,6 +323,7 @@ function setSky(s) {
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
+  BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
   INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
@@ -507,6 +508,9 @@ function infraMaterial() {
    courts and water (ground.glb). They replace the plain infrastructure mesh. */
 /* Surveyed road surfaces and bridges (roads.glb, geometry only - tools/build_surfaces.mjs). The road
    mesh is the grey base; markings from data/roadnet.json are painted onto it (roads.js). */
+// flyovers and footbridges: plain concrete, shaded like the buildings (the road surface on a flyover
+// deck is part of the road mesh, so the structure itself is never drawn as tarmac)
+const BRIDGE_MAT = new THREE.MeshLambertMaterial({ color: 0xd9d5cc, flatShading: true });
 const ROAD_MAT = new THREE.MeshBasicMaterial({ color: 0xa7acb3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 async function loadSurfaces(s) {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -516,7 +520,7 @@ async function loadSurfaces(s) {
   roads.scene.traverse((o) => {
     if (!o.isMesh) return;
     const bridge = /bridge/i.test(o.name || o.parent?.name || '');
-    o.material = bridge ? infraMaterial() : ROAD_MAT;
+    o.material = bridge ? BRIDGE_MAT : ROAD_MAT;
     o.renderOrder = bridge ? 0 : 2;
     s.roadMeshes.push(o);
   });
@@ -559,7 +563,9 @@ async function makeRoads(s) {
   try {
     await loadSurfaces(s);
     const t0 = performance.now();
-    const ground = heightIndex(s.terrain), deck = s.infra ? heightIndex([s.infra], { upOnly: true }) : () => NaN;
+    const bridges = (s.roadMeshes || []).filter((m) => m.material === BRIDGE_MAT);
+    const deckMeshes = bridges.length ? bridges : s.infra ? [s.infra] : [];
+    const ground = heightIndex(s.terrain), deck = deckMeshes.length ? heightIndex(deckMeshes, { upOnly: true }) : () => NaN;
     const bIdx = heightIndex([s.buildings]);
     const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
     const root = document.documentElement;
