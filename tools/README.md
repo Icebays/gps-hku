@@ -21,3 +21,19 @@ python3 -c "import json;B=json.load(open('out/buildings.json'));json.dump([[b['i
 
 Model frame: `x = Easting − 832250`, `z = −(Northing − 815900)` (HK1980 Grid), `y = height in mPD`.
 If you add tiles, building index numbers change but building IDs (`B3…`) stay the same, so `data/places.json` keeps working.
+
+# Rebuilding the map overlay (roads, footpaths, gardens)
+
+`assets/map/overlay-*.png` are drawn from an OpenStreetMap screenshot of the campus (standard OSM style),
+warped into the model frame:
+
+```bash
+python3 tools/build_overlay.py osm-screenshot.png "<s>,<theta>,<tx>,<tz>"
+```
+
+`<s>,<theta>,<tx>,<tz>` map a screenshot pixel (u, v) to the model: `x = s(cos t·u − sin t·v) + tx`, `z = s(sin t·u + cos t·v) + tz`.
+Find them by matching the screenshot's building outlines against the model footprints (top-down render).
+Map data © OpenStreetMap contributors (ODbL).
+
+Buildings missing from the 3D data are listed in `data/campus.json` → `extraBuildings` (footprint in model
+coordinates + height) and are extruded at runtime; use their ids in `data/places.json`.

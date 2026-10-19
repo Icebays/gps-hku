@@ -1,5 +1,5 @@
 {
-  "_readme": "Places shown on the 3D map and in the Building Directory. 'buildings' = model building IDs (click a building in Map > Edit mode to get its ID). Leave [] if not pinned yet. 'floors' = floor plan images in floorplans/<id>/. 'no' = number on the HKU campus map (version 21.1, March 2021). 'at' = [x, z] map position for places that are not buildings (steps, squares). 'guess': true = position estimated from aerial imagery, not yet confirmed.",
+  "_readme": "Places shown on the 3D map and in the Building Directory. 'buildings' = model building IDs (click a building in Map > Edit mode to get its ID). Leave [] if not pinned yet. 'floors' = floor plan images in floorplans/<id>/. 'no' = number on the HKU campus map (version 21.1, March 2021). 'at' = [x, z] map position for places that are not buildings (steps, squares). 'hku': false = label only, not an HKU building (stays see-through). 'guess': true = position estimated from aerial imagery, not yet confirmed.",
   "categories": {
     "landmark": {"en": "Landmarks", "zh": "地標", "color": "#d97706"},
     "academic": {"en": "Teaching & Faculty", "zh": "教學大樓", "color": "#2563eb"},
@@ -7,7 +7,8 @@
     "culture": {"en": "Museum & Culture", "zh": "博物館及文化", "color": "#db2777"},
     "amenity": {"en": "Amenities", "zh": "設施", "color": "#059669"},
     "hall": {"en": "Halls & Colleges", "zh": "宿舍及書院", "color": "#0891b2"},
-    "transport": {"en": "Transport", "zh": "交通", "color": "#dc2626"}
+    "transport": {"en": "Transport", "zh": "交通", "color": "#dc2626"},
+    "other": {"en": "Other", "zh": "其他", "color": "#6b7280"}
   },
   "places": [
     {"id": "main-building", "no": "27", "cat": "landmark", "name": {"en": "Main Building", "zh": "本部大樓"}, "desc": {"en": "HKU's oldest building (1912), home of Loke Yew Hall and the Convocation Room. Declared monument.", "zh": "港大最古老建築（1912年），內有陸佑堂及畢業生議會廳，屬法定古蹟。"}, "buildings": ["B322421612701063C0"], "floors": []},
@@ -15,7 +16,7 @@
     {"id": "jockey-club-tower", "no": "35", "cat": "academic", "name": {"en": "The Jockey Club Tower", "zh": "賽馬會教學樓"}, "desc": {"en": "Centennial Campus. Lifts: 1/F Centennial Garden · G/F Upper University Street · LG/F Lower University Street & Lee Shau Kee Lecture Centre.", "zh": "百周年校園。升降機：1樓往百周年花園 · 地下往上大學街 · LG往下大學街及李兆基會議中心。"}, "buildings": ["B319111603501063C0"], "floors": []},
     {"id": "cheng-yu-tung-tower", "no": "36", "cat": "academic", "name": {"en": "Cheng Yu Tung Tower", "zh": "鄭裕彤教學樓"}, "desc": {"en": "Centennial Campus. Includes the Moot Court.", "zh": "百周年校園，設有模擬法庭。"}, "buildings": ["B318171604401063C0"], "floors": []},
     {"id": "run-run-shaw-tower", "no": "37", "cat": "academic", "name": {"en": "Run Run Shaw Tower", "zh": "邵逸夫教學樓"}, "desc": {"en": "Centennial Campus.", "zh": "百周年校園。"}, "buildings": ["B318871608701063C0"], "floors": []},
-    {"id": "chi-wah-learning-commons", "no": "35a", "cat": "library", "name": {"en": "Chi Wah Learning Commons", "zh": "智華館"}, "desc": {"en": "Centennial Campus study space.", "zh": "百周年校園自修空間。"}, "buildings": ["B319471606501063C0"], "floors": []},
+    {"id": "chi-wah-learning-commons", "no": "35a", "cat": "library", "name": {"en": "Chi Wah Learning Commons", "zh": "智華館"}, "desc": {"en": "Centennial Campus study space.", "zh": "百周年校園自修空間。"}, "buildings": ["B318811603802063C0"], "floors": []},
     {"id": "lee-shau-kee-lecture-centre", "no": "35b", "cat": "academic", "name": {"en": "Lee Shau Kee Lecture Centre / Grand Hall", "zh": "李兆基會議中心 / 大會堂"}, "desc": {"en": "Reach from LG/F of The Jockey Club Tower (Lower University Street).", "zh": "經賽馬會教學樓LG（下大學街）前往。"}, "buildings": ["B318811603802063C0"], "floors": []},
     {"id": "main-library", "no": "26", "cat": "library", "name": {"en": "Main Library (Old & New Wing)", "zh": "總圖書館（舊翼及新翼）"}, "desc": {"en": "Faces Sun Yat-sen Place. New Wing houses Hui Pun Hing Lecture Hall and has a footbridge to Main Building LG1.", "zh": "面向孫中山廣場。新翼設Hui Pun Hing Lecture Hall，並有天橋連接本部大樓LG1。"}, "buildings": ["B322281603001063C0", "B322341606301063C0", "B322731604802063C0"], "floors": []},
     {"id": "sun-yat-sen-place", "no": "25", "cat": "landmark", "name": {"en": "Sun Yat-sen Place", "zh": "孫中山廣場"}, "desc": {"en": "Open plaza in front of the Main Library, with the Sun Yat-sen statue and steps.", "zh": "總圖書館前的廣場，設有孫中山銅像及孫中山階梯。"}, "buildings": [], "at": [26, -155], "floors": []},
@@ -30,12 +31,12 @@
     {"id": "rayson-huang-theatre", "no": "8", "cat": "academic", "name": {"en": "Rayson Huang Theatre", "zh": "黃麗松講堂"}, "desc": {"en": "", "zh": ""}, "buildings": ["B322971596401063C0"], "floors": []},
     {"id": "meng-wah-complex", "no": "10", "cat": "academic", "name": {"en": "Meng Wah Complex", "zh": "明華綜合大樓"}, "desc": {"en": "Footbridge from Wong Chuang Lai Wah Building 3/F to May Hall; 1/F to Eliot Hall.", "zh": "由Wong Chuang Lai Wah Building 3樓有天橋往梅堂，1樓往儀禮堂。"}, "buildings": ["B323741593901063C0", "B323841594901063C0", "B323741592801063C0"], "floors": []},
     {"id": "cym-amenities-centre", "no": "13", "cat": "amenity", "name": {"en": "Chong Yuet Ming Amenities Centre", "zh": "莊月明文娛中心"}, "desc": {"en": "CYM Auditorium (5/F), CYM Canteen (4/F level), Shaw's Podium (2/F).", "zh": "莊月明演講廳（5樓）、莊月明餐廳（4樓層）、Shaw's Podium（2樓）。"}, "buildings": ["B324081598602063C0", "B323661598101063C0"], "floors": []},
-    {"id": "cym-chemistry-building", "no": "15", "cat": "academic", "name": {"en": "Chong Yuet Ming Chemistry Building", "zh": "莊月明化學樓"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [222, -112], "floors": []},
+    {"id": "cym-chemistry-building", "no": "15", "cat": "academic", "name": {"en": "Chong Yuet Ming Chemistry Building", "zh": "莊月明化學樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["X-CYM-CHEMISTRY"], "floors": []},
     {"id": "fung-ping-shan-building", "no": "20", "cat": "culture", "name": {"en": "Fung Ping Shan Building (UMAG)", "zh": "馮平山樓（港大美術博物館）"}, "desc": {"en": "University Museum and Art Gallery, linked by footbridge to T.T. Tsui Building.", "zh": "港大美術博物館，有天橋連接徐展堂樓。"}, "buildings": ["B323741608901063C0", "B323911609701063C0", "B324101608502063C0"], "floors": []},
     {"id": "tt-tsui-building", "no": "19", "cat": "culture", "name": {"en": "T.T. Tsui Building (UMAG Art Gallery)", "zh": "徐展堂樓（美術博物館）"}, "desc": {"en": "3/F leads to Swire, Tang Chi Ngong, K.K. Leung and Knowles.", "zh": "3樓通往太古樓、鄧志昂樓、梁銶琚樓及鈕魯詩樓。"}, "buildings": ["B324031612001063C0"], "floors": []},
     {"id": "swire-building", "no": "18", "cat": "amenity", "name": {"en": "Swire Building", "zh": "太古樓"}, "desc": {"en": "Eastern end of campus. Fong Shu Chuen Amenities Centre, Global Lounge, Swire Hall.", "zh": "校園東端，設有方樹泉文娛中心、Global Lounge及太古堂。"}, "buildings": ["B324341610201063C0"], "floors": []},
-    {"id": "tang-chi-ngong-building", "no": "17", "cat": "culture", "name": {"en": "Tang Chi Ngong Building", "zh": "鄧志昂樓"}, "desc": {"en": "Historic building, home of the Jao Tsung-I Petite Ecole.", "zh": "歷史建築，饒宗頤學術館所在。"}, "buildings": [], "at": [217, -178], "guess": true, "floors": []},
-    {"id": "hung-hing-ying-building", "no": "28", "cat": "landmark", "name": {"en": "Hung Hing Ying Building", "zh": "孔慶熒樓"}, "desc": {"en": "Red-brick declared monument opposite Main Building.", "zh": "本部大樓對面的紅磚法定古蹟。"}, "buildings": ["B322731619001063C0", "B322751617501063C0"], "floors": []},
+    {"id": "tang-chi-ngong-building", "no": "17", "cat": "culture", "name": {"en": "Tang Chi Ngong Building", "zh": "鄧志昂樓"}, "desc": {"en": "Historic building, home of the Jao Tsung-I Petite Ecole.", "zh": "歷史建築，饒宗頤學術館所在。"}, "buildings": ["X-TANG-CHI-NGONG"], "floors": []},
+    {"id": "hung-hing-ying-building", "no": "28", "cat": "landmark", "name": {"en": "Hung Hing Ying Building", "zh": "孔慶熒樓"}, "desc": {"en": "Red-brick declared monument opposite Main Building.", "zh": "本部大樓對面的紅磚法定古蹟。"}, "buildings": ["B322391619701063C0", "B322451617901063C0"], "floors": []},
     {"id": "lily-pond", "no": "23", "cat": "landmark", "name": {"en": "Lily Pond", "zh": "荷花池"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [48, -92], "floors": []},
     {"id": "graduate-house", "no": "4", "cat": "hall", "name": {"en": "Graduate House", "zh": "研究生堂"}, "desc": {"en": "Not wheelchair accessible from James Hsioung Lee / Run Run Shaw Building.", "zh": "由James Hsioung Lee Science Building／邵逸夫樓前往的路線不適合輪椅。"}, "buildings": ["B322071589501063C0", "B322301587401063C0"], "floors": []},
     {"id": "robert-black-college", "no": "2", "cat": "hall", "name": {"en": "Robert Black College", "zh": "柏立基學院"}, "desc": {"en": "", "zh": ""}, "buildings": ["B323811587201063C0"], "floors": []},
@@ -44,12 +45,12 @@
     {"id": "visitor-centre", "no": "39", "cat": "amenity", "name": {"en": "HKU Visitor Centre", "zh": "港大訪客中心"}, "desc": {"en": "", "zh": ""}, "buildings": ["B318661611501063C0"], "floors": []},
     {"id": "mtr-exit-a", "cat": "transport", "name": {"en": "MTR HKU Station Exit A1/A2", "zh": "港鐵香港大學站 A1/A2 出口"}, "desc": {"en": "Lift tower: footbridge level to Upper University Street (Haking Wong 5/F); G to Pokfulam Road.", "zh": "升降機塔：天橋層往上大學街（黃克競樓5樓）；G層往薄扶林道。"}, "buildings": ["B321261605801063C0", "B321301606701063C0"], "floors": []},
     {"id": "mtr-exit-c1", "cat": "transport", "name": {"en": "MTR HKU Station Exit C1", "zh": "港鐵香港大學站 C1 出口"}, "desc": {"en": "Lift tower up to the Central Podium Level of Centennial Campus.", "zh": "升降機塔直達百周年校園中央平台層。"}, "buildings": ["B319041618001063C0", "B319271617201063C0"], "floors": []},
-    {"id": "cym-physics-building", "no": "16", "cat": "academic", "name": {"en": "Chong Yuet Ming Physics Building", "zh": "莊月明物理樓"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [199, -145], "floors": []},
+    {"id": "cym-physics-building", "no": "16", "cat": "academic", "name": {"en": "Chong Yuet Ming Physics Building", "zh": "莊月明物理樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["X-CYM-PHYSICS"], "floors": []},
     {"id": "cym-fountain", "no": "14", "cat": "landmark", "name": {"en": "Chong Yuet Ming Fountain", "zh": "莊月明噴水池"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [173, -95], "floors": []},
     {"id": "university-lodge", "no": "1", "cat": "hall", "name": {"en": "University Lodge", "zh": "大學道一號"}, "desc": {"en": "", "zh": ""}, "buildings": ["B324841582701063C0"], "floors": []},
-    {"id": "james-hsioung-lee-science-building", "no": "5", "cat": "academic", "name": {"en": "James Hsioung Lee Science Building", "zh": "James Hsioung Lee Science Building"}, "desc": {"en": "", "zh": ""}, "buildings": ["B322041596701063C0"], "floors": []},
+    {"id": "james-hsioung-lee-science-building", "no": "5", "cat": "academic", "name": {"en": "James Hsioung Lee Science Building", "zh": "厲樹雄科學館"}, "desc": {"en": "", "zh": ""}, "buildings": ["B322041596701063C0"], "floors": []},
     {"id": "runme-shaw-building", "no": "9", "cat": "academic", "name": {"en": "Runme Shaw Building", "zh": "邵仁枚樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B323231595301063C0"], "floors": []},
-    {"id": "pao-siu-loong-building", "no": "29", "cat": "academic", "name": {"en": "Pao Siu Loong Building", "zh": "包兆龍樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B322391619701063C0", "B322451617901063C0"], "floors": []},
+    {"id": "pao-siu-loong-building", "no": "29", "cat": "academic", "name": {"en": "Pao Siu Loong Building", "zh": "包兆龍樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B322071619201063C0"], "floors": []},
     {"id": "university-street", "no": "31", "cat": "landmark", "name": {"en": "University Street", "zh": "大學街"}, "desc": {"en": "", "zh": ""}, "buildings": ["B321681599202063C0"], "floors": []},
     {"id": "composite-building", "no": "33", "cat": "academic", "name": {"en": "Composite Building", "zh": "綜合大樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B320421603701063C0", "B320431602602063C0"], "floors": []},
     {"id": "simon-ky-lee-hall", "no": "33a", "cat": "hall", "name": {"en": "Simon K.Y. Lee Hall", "zh": "李國賢堂"}, "desc": {"en": "", "zh": ""}, "buildings": ["B320381601901063C0"], "floors": []},
@@ -57,6 +58,13 @@
     {"id": "run-run-shaw-heritage-house", "no": "38", "cat": "culture", "name": {"en": "Run Run Shaw Heritage House", "zh": "Run Run Shaw Heritage House"}, "desc": {"en": "", "zh": ""}, "buildings": ["B319081610801063C0"], "floors": []},
     {"id": "centennial-garden", "no": "40", "cat": "landmark", "name": {"en": "Centennial Garden", "zh": "百周年花園"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [-412, -96], "floors": []},
     {"id": "little-garden", "no": "41", "cat": "landmark", "name": {"en": "Little Garden", "zh": "小花園"}, "desc": {"en": "", "zh": ""}, "buildings": [], "at": [-483, -112], "floors": []},
-    {"id": "yam-pak-building", "no": "42", "cat": "amenity", "name": {"en": "Yam Pak Building", "zh": "任白樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B320201615001063C0", "B320251615402063C0"], "floors": []}
+    {"id": "yam-pak-building", "no": "42", "cat": "amenity", "name": {"en": "Yam Pak Building", "zh": "任白樓"}, "desc": {"en": "", "zh": ""}, "buildings": ["B319911613601063C0"], "floors": []},
+    {"id": "central-podium", "cat": "academic", "name": {"en": "Central Podium", "zh": "中央平台"}, "desc": {"en": "", "zh": ""}, "buildings": ["B319471606501063C0"], "floors": []},
+    {"id": "elliot-treatment-works", "cat": "landmark", "name": {"en": "Elliot Treatment Works Building", "zh": "西區濾水廠房"}, "desc": {"en": "", "zh": ""}, "buildings": ["B318021601601063C0"], "floors": []},
+    {"id": "ricci-hall", "cat": "hall", "name": {"en": "Ricci Hall", "zh": "利瑪竇宿舍"}, "desc": {"en": "", "zh": ""}, "buildings": ["B316781609701063C0"], "floors": []},
+    {"id": "ho-tim-hall", "cat": "hall", "name": {"en": "Jockey Club Student Village I · Ho Tim Hall", "zh": "賽馬會第一舍堂村 · 何添堂"}, "desc": {"en": "", "zh": ""}, "buildings": ["B317391613901063C0"], "floors": []},
+    {"id": "starr-hall", "cat": "hall", "name": {"en": "Jockey Club Student Village I · Starr Hall", "zh": "賽馬會第一舍堂村 · 施德堂"}, "desc": {"en": "", "zh": ""}, "buildings": ["B317121608002063C0", "B317281610901063C0", "B317371610501063C0"], "floors": []},
+    {"id": "lady-ho-tung-hall", "cat": "hall", "name": {"en": "Lady Ho Tung Hall", "zh": "何東夫人紀念堂"}, "desc": {"en": "", "zh": ""}, "buildings": ["B317721614201063C0"], "floors": []},
+    {"id": "pok-fu-lam-substation", "cat": "other", "name": {"en": "Pok Fu Lam Zone Substation", "zh": "薄扶林分區電力站"}, "desc": {"en": "", "zh": ""}, "buildings": ["B316881604802063C0", "B316931603101063C0", "B316991606001063C0"], "hku": false, "floors": []}
   ]
 }

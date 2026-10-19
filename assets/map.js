@@ -110,6 +110,7 @@ async function init() {
     }, rej)),
     fetch('assets/model/buildings.json').then((r) => r.json()),
     fetch('data/campus.json').then((r) => r.json()).catch(() => null),
+    loadOverlay(),
   ]).then(([gltf, bjson, campus]) => {
     s.campus = campus;
     setHills(campus?.hills);
@@ -144,6 +145,7 @@ async function init() {
     s.pickables.push(s.deco);
     scene.add(root);
     root.updateMatrixWorld(true);
+    makeExtraBuildings(s, campus?.extraBuildings || []);
     const ld = wrap.querySelector('.map-loading');
     ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
   }).catch((e) => { console.error(e); pct.textContent = 'Error: ' + e.message; });
@@ -175,7 +177,28 @@ const TERRAIN_U = {
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
   uPhoto: { value: 0 },
+  // OpenStreetMap overlay (tools/build_overlay.py): A = minor road, major road, footpath, coverage; B = garden, woodland, water
+  uOvA: { value: null },
+  uOvB: { value: null },
+  uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) },
+  uOvOn: { value: 0 },
+  uRoad: { value: new THREE.Color(0xffffff) },
+  uMajor: { value: new THREE.Color(0xf6d49a) },
+  uPath: { value: new THREE.Color(0xd9654f) },
+  uGarden: { value: new THREE.Color(0x9fd89a) },
+  uWater: { value: new THREE.Color(0x9cc6dc) },
 };
+async function loadOverlay() {
+  try {
+    const meta = await (await fetch('assets/map/overlay.json')).json();
+    const tl = new THREE.TextureLoader();
+    const [a, b] = await Promise.all(['a', 'b'].map((k) => tl.loadAsync(`assets/map/overlay-${k}.png`)));
+    for (const t of [a, b]) { t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4; t.flipY = false; t.needsUpdate = true; } // row 0 = north (z0)
+    const [x0, x1, z0, z1] = meta.extent;
+    TERRAIN_U.uOvA.value = a; TERRAIN_U.uOvB.value = b;
+    TERRAIN_U.uOvExt.value.set(x0, x1, z0, z1); TERRAIN_U.uOvOn.value = 1;
+  } catch (e) { console.warn('map overlay not loaded', e); }
+}
 function setHills(pts) {
   pts = (pts || []).slice(0, MAX_HILL_PTS);
   pts.forEach(([x, z], i) => TERRAIN_U.uHill.value[i].set(x, z));
@@ -193,8 +216,10 @@ function terrainMaterial(map) {
 varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
-uniform vec3 uBase, uLine, uMist, uPaved;
-uniform float uPhoto;
+uniform vec3 uBase, uLine, uMist, uPaved, uRoad, uMajor, uPath, uGarden, uWater;
+uniform float uPhoto, uOvOn;
+uniform sampler2D uOvA, uOvB;
+uniform vec4 uOvExt;
 // signed distance to the hill polygon: > 0 inside
 float hillDist(vec2 p) {
   float d = 1e9; bool inside = false;
@@ -215,17 +240,32 @@ float contour(float h, float step) {
 {
   float hill = uHillN > 2 ? smoothstep(0.0, 25.0, hillDist(vWorld.xz)) : 0.0;
   float k = max(1.0 - uPhoto, hill);
+  vec4 oa = vec4(0.0), ob = vec4(0.0);
+  if (uOvOn > 0.5) {
+    vec2 ouv = vec2((vWorld.x - uOvExt.x) / (uOvExt.y - uOvExt.x), (vWorld.z - uOvExt.z) / (uOvExt.w - uOvExt.z));
+    if (ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) { oa = texture2D(uOvA, ouv); ob = texture2D(uOvB, ouv); }
+  }
   if (k > 0.0) {
     vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
     if (n.y < 0.0) n = -n;
     float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
     vec3 blur = texture2D(map, vMapUv, 3.5).rgb;
-    float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97) * (1.0 - hill) + hill;
+    float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97);
+    green = mix(green, max(ob.g, ob.r), oa.a);   // OSM woodland / gardens where covered
+    green = max(green * (1.0 - hill) + hill * max(ob.g, 1.0 - oa.a), 0.0);
     vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
     col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
     col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55 * green);
+    // map features: gardens, water, roads, footpaths
+    col = mix(col, uGarden * (0.9 + 0.12 * shade), ob.r * oa.a);
+    col = mix(col, uWater, ob.b * oa.a);
+    col = mix(col, uRoad, oa.r * oa.a);
+    col = mix(col, uMajor, oa.g * oa.a);
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
   }
+  // footpaths and gardens also show on top of the aerial photo
+  diffuseColor.rgb = mix(diffuseColor.rgb, uGarden, ob.r * oa.a * 0.35 * (1.0 - k));
+  diffuseColor.rgb = mix(diffuseColor.rgb, uPath, oa.b * oa.a * 0.95);
 }`);
   };
   return m;
@@ -243,6 +283,11 @@ function setSky(s) {
   TERRAIN_U.uLine.value.set(dark ? 0x8fb39a : 0x5d7a63);
   TERRAIN_U.uMist.value.copy(c);
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
+  TERRAIN_U.uRoad.value.set(dark ? 0x5b605d : 0xffffff);
+  TERRAIN_U.uMajor.value.set(dark ? 0x8a7350 : 0xf6d49a);
+  TERRAIN_U.uPath.value.set(dark ? 0xe08b74 : 0xd9654f);
+  TERRAIN_U.uGarden.value.set(dark ? 0x3f6b43 : 0x9fd89a);
+  TERRAIN_U.uWater.value.set(dark ? 0x2b4a5c : 0x9cc6dc);
 }
 
 function resize() {
@@ -302,7 +347,7 @@ function buildUI() {
     if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
-  ui('map-credit', '3D Spatial Data © Lands Department, HKSAR');
+  ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
   S.info = null; S.editBar = null; S.routePanel = null;
   if (S.edit) setEdit(true);
 }
@@ -401,6 +446,33 @@ function updatePins() {
   }
 }
 
+/* ---------------- extra buildings ----------------
+   Buildings missing from the 3D data (campus.json 'extraBuildings', footprints
+   from OpenStreetMap) are extruded from the ground and get bids after the model's. */
+function makeExtraBuildings(s, list) {
+  s.extras = [];
+  const mat = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
+  for (const e of list) {
+    const ground = Math.min(...e.footprint.map(([x, z]) => groundHeightIn(s, x, z) ?? 80));
+    const shape = new THREE.Shape(e.footprint.map(([x, z]) => new THREE.Vector2(x, -z)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: e.height + 3, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2); geo.translate(0, ground - 3, 0);
+    const mesh = new THREE.Mesh(geo, mat);
+    const bid = s.bmeta.length;
+    const cx = e.footprint.reduce((a, p) => a + p[0], 0) / e.footprint.length, cz = e.footprint.reduce((a, p) => a + p[1], 0) / e.footprint.length;
+    s.bmeta.push({ id: e.id, x: cx, z: cz, base: ground, top: ground + e.height, extra: mesh });
+    s.bidByCode.set(e.id, bid);
+    mesh.userData.bid = bid;
+    s.scene.add(mesh); s.pickables.push(mesh); s.extras.push(mesh);
+  }
+}
+function groundHeightIn(s, x, z) {
+  s.ray = s.ray || new THREE.Raycaster();
+  s.ray.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
+  const hit = s.ray.intersectObjects(s.terrain || [], false)[0];
+  return hit ? hit.point.y : null;
+}
+
 /* ---------------- selection ---------------- */
 // HKU buildings (inside data/campus.json's boundary, or tagged in places.json) stay solid; the rest go to the transparent deco mesh.
 function insidePoly(x, z, poly) {
@@ -415,7 +487,7 @@ function splitBuildings() {
   if (!S.buildings) return;
   const bidAttr = S.buildings.geometry.attributes._bid, idx = S.bIndexAll, hku = [], deco = [];
   const c = S.campus || {}, polys = (c.areas || []).map((a) => a.boundary), exclude = new Set(c.exclude || []);
-  const codes = new Set([...(c.include || []), ...S.places.places.flatMap((p) => p.buildings)]);
+  const codes = new Set([...(c.include || []), ...S.places.places.filter((p) => p.hku !== false).flatMap((p) => p.buildings)]);
   const set = new Set();
   S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && polys.some((poly) => insidePoly(b.x, b.z, poly)))) set.add(i); });
   for (let i = 0; i < idx.length; i += 3) (set.has(bidAttr.getX(idx[i])) ? hku : deco).push(idx[i], idx[i + 1], idx[i + 2]);
@@ -423,9 +495,16 @@ function splitBuildings() {
   S.deco.geometry.setIndex(deco);
   S.deco.geometry.computeBoundingSphere(); S.deco.geometry.computeBoundingBox();
 }
+const HL_MAT = new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
 function highlight(bids) {
   if (S.hl) { S.hl.parent?.remove(S.hl); S.hl = null; }
-  if (!bids?.length || !S.buildings) return;
+  (S.hlx || []).forEach((m) => S.scene.remove(m)); S.hlx = [];
+  for (const b of bids || []) {
+    const ex = S.bmeta[b]?.extra;
+    if (ex) { const m = new THREE.Mesh(ex.geometry, HL_MAT); S.scene.add(m); S.hlx.push(m); }
+  }
+  bids = (bids || []).filter((b) => !S.bmeta[b]?.extra);
+  if (!bids.length || !S.buildings) return;
   const g = S.buildings.geometry;
   const key = bids.join(',');
   let geo = S.highlightCache.get(key);
@@ -437,7 +516,7 @@ function highlight(bids) {
     geo.setIndex(out);
     S.highlightCache.set(key, geo);
   }
-  S.hl = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
+  S.hl = new THREE.Mesh(geo, HL_MAT);
   S.buildings.add(S.hl);
 }
 function selectPlace(p, fly) {
@@ -535,7 +614,8 @@ function onClick(e) {
   if (hit.object === S.buildings || hit.object === S.deco) {
     const bid = S.buildings.geometry.attributes._bid.getX(hit.face.a);
     selectBuilding(bid);
-  } else if (!S.edit) clearSelection();
+  } else if (hit.object.userData.bid != null) selectBuilding(hit.object.userData.bid);
+  else if (!S.edit) clearSelection();
 }
 
 /* ---------------- camera ---------------- */
