@@ -1,0 +1,24 @@
+[
+  { "title": { "en": "Welcome", "zh": "歡迎" }, "pages": [
+    { "id": "index", "title": { "en": "Home", "zh": "首頁" } },
+    { "id": "how-to-use", "title": { "en": "How to use GPS-HKU", "zh": "使用說明" } }
+  ] },
+  { "title": { "en": "3D Map", "zh": "3D 地圖" }, "pages": [
+    { "id": "map", "title": { "en": "Open the 3D campus map", "zh": "開啟 3D 校園地圖" }, "special": "map" },
+    { "id": "map-controls", "title": { "en": "Map controls", "zh": "地圖操作" } }
+  ] },
+  { "title": { "en": "Getting Around", "zh": "校園交通" }, "pages": [
+    { "id": "getting-to-hku", "title": { "en": "Getting to HKU", "zh": "如何前往港大" } },
+    { "id": "university-street", "title": { "en": "Upper & Lower University Street", "zh": "上、下大學街" } },
+    { "id": "lifts-and-ramps", "title": { "en": "Lifts & step-free routes", "zh": "升降機及無障礙路線" } },
+    { "id": "walking-routes", "title": { "en": "Walking routes", "zh": "步行路線" } }
+  ] },
+  { "title": { "en": "Buildings & Floor Plans", "zh": "大樓及平面圖" }, "pages": [
+    { "id": "buildings", "title": { "en": "Building directory", "zh": "大樓索引" }, "special": "buildings" },
+    { "id": "floor-plans", "title": { "en": "About floor plans", "zh": "關於平面圖" } }
+  ] },
+  { "title": { "en": "Appendix", "zh": "附錄" }, "pages": [
+    { "id": "contribute", "title": { "en": "Contribute & edit", "zh": "參與編輯" } },
+    { "id": "about", "title": { "en": "About & credits", "zh": "關於及鳴謝" } }
+  ] }
+]

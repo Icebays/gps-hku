@@ -1,0 +1,4 @@
+{
+  "_readme": "Walking routes drawn on the 3D map. Create one in Map > Edit mode > Draw route, then paste the copied JSON into this list. points = [x, height(mPD), z] in model metres.",
+  "routes": []
+}
