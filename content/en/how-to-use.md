@@ -11,6 +11,8 @@ GPS-HKU is laid out like a handbook. Chapters are in the left sidebar (tap ☰ o
 ## Read the 3D map
 
 - **Gold building**: the place you selected.
+- **Solid white buildings**: HKU buildings. Click one for details.
+- **See-through buildings**: non-HKU buildings, shown for context only. They don't respond to clicks.
 - **Pins**: labelled places. Use the layers button to show or hide categories.
 - **Heights**: shown in metres above Principal Datum (**mPD**), the standard height reference in Hong Kong. Compare two buildings' mPD values to see which one sits higher up the hill.
 

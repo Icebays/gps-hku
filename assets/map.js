@@ -6,6 +6,7 @@ import { loadPlaces, loadRoutes, L, href, esc, getLang, REPO } from './app.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
+const DECO_OPACITY = 0.18;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
         locate: 'My location (GPS)', layers: 'Layers', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
@@ -49,6 +50,7 @@ export async function mount(container, { params }) {
   S.running = true;
   S.renderer.setAnimationLoop(frame);
   await S.ready;
+  splitBuildings();
   makePins();
   applyParams();
 }
@@ -119,6 +121,15 @@ async function init() {
       } else if (n.startsWith('buildings')) {
         o.material = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
         s.buildings = o;
+        s.bIndexAll = o.geometry.index.array;
+        // non-HKU buildings: see-through decoration, not clickable (except in edit mode)
+        s.deco = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
+        s.deco.geometry.setAttribute('position', o.geometry.attributes.position);
+        if (o.geometry.attributes.normal) s.deco.geometry.setAttribute('normal', o.geometry.attributes.normal);
+        s.deco.geometry.setAttribute('_bid', o.geometry.attributes._bid);
+        s.deco.renderOrder = 1;
+        o.parent.add(s.deco);
+        s.pickables.push(s.deco);
       } else {
         o.material = new THREE.MeshLambertMaterial({ color: 0xc9c6bf, flatShading: true });
         s.infra = o;
@@ -264,6 +275,16 @@ function updatePins() {
 }
 
 /* ---------------- selection ---------------- */
+// Buildings tagged in places.json are HKU buildings (solid); the rest go to the transparent deco mesh.
+function splitBuildings() {
+  if (!S.buildings) return;
+  const bidAttr = S.buildings.geometry.attributes._bid, idx = S.bIndexAll, hku = [], deco = [];
+  const set = new Set(S.places.places.flatMap((p) => p.buildings).map((c) => S.bidByCode.get(c)));
+  for (let i = 0; i < idx.length; i += 3) (set.has(bidAttr.getX(idx[i])) ? hku : deco).push(idx[i], idx[i + 1], idx[i + 2]);
+  S.buildings.geometry.setIndex(hku);
+  S.deco.geometry.setIndex(deco);
+  S.deco.geometry.computeBoundingSphere(); S.deco.geometry.computeBoundingBox();
+}
 function highlight(bids) {
   if (S.hl) { S.hl.parent?.remove(S.hl); S.hl = null; }
   if (!bids?.length || !S.buildings) return;
@@ -271,7 +292,7 @@ function highlight(bids) {
   const key = bids.join(',');
   let geo = S.highlightCache.get(key);
   if (!geo) {
-    const bidAttr = g.attributes._bid, idx = g.index.array, set = new Set(bids), out = [];
+    const bidAttr = g.attributes._bid, idx = S.bIndexAll, set = new Set(bids), out = [];
     for (let i = 0; i < idx.length; i += 3) if (set.has(bidAttr.getX(idx[i]))) out.push(idx[i], idx[i + 1], idx[i + 2]);
     geo = new THREE.BufferGeometry();
     geo.setAttribute('position', g.attributes.position);
@@ -347,12 +368,12 @@ function showInfo() {
     const target = S.places.places.find((x) => x.id === e.target.value); if (!target) return;
     const code = S.bmeta[sel.bid].id;
     if (!target.buildings.includes(code)) target.buildings.push(code);
-    S.dirty = true; makePins(); selectBuilding(sel.bid); updateEditBar();
+    S.dirty = true; splitBuildings(); makePins(); selectBuilding(sel.bid); updateEditBar();
   });
   d.querySelector('[data-remove]')?.addEventListener('click', (e) => {
     const target = S.places.places.find((x) => x.id === e.target.dataset.remove);
     target.buildings = target.buildings.filter((c) => c !== S.bmeta[sel.bid].id);
-    S.dirty = true; makePins(); selectBuilding(sel.bid); updateEditBar();
+    S.dirty = true; splitBuildings(); makePins(); selectBuilding(sel.bid); updateEditBar();
   });
   d.querySelector('[data-copy]')?.addEventListener('click', (e) => copy(e.target.dataset.copy));
   S.wrap.appendChild(d);
@@ -366,10 +387,13 @@ function onClick(e) {
   const r = S.renderer.domElement.getBoundingClientRect();
   _ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   S.ray.setFromCamera(_ndc, S.camera);
-  const hit = S.ray.intersectObjects(S.pickables, false)[0];
-  if (S.drawing) { if (hit) addRoutePoint(hit.point); return; }
+  const hits = S.ray.intersectObjects(S.pickables, false);
+  if (S.drawing) { if (hits[0]) addRoutePoint(hits[0].point); return; }
+  // decorative buildings only react in edit mode (so they can still be tagged)
+  const hit = S.edit ? hits[0] : hits.find((h) => h.object !== S.deco);
+  if (!S.edit && hits[0]?.object === S.deco && hit?.object !== S.buildings) return;
   if (!hit) return clearSelection();
-  if (hit.object === S.buildings) {
+  if (hit.object === S.buildings || hit.object === S.deco) {
     const bid = S.buildings.geometry.attributes._bid.getX(hit.face.a);
     selectBuilding(bid);
   } else if (!S.edit) clearSelection();

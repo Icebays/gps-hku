@@ -5,7 +5,7 @@ GPS-HKU is a static website hosted on GitHub Pages. Everything is in plain files
 ## Label a building on the map
 
 1. Open the [3D map](map) and tap **✎ Edit**.
-2. Tap the building you know. Its model ID appears, for example `B322421612701063C0`.
+2. Tap the building you know (in Edit mode, see-through buildings can be tapped too). Its model ID appears, for example `B322421612701063C0`.
 3. In **Assign this building to…**, pick the place. One place can have several buildings, like Centennial Campus.
 4. Repeat for more buildings, then tap **Export places.json**.
 5. On GitHub, open `data/places.json`, click ✎, paste in the exported file and commit.
