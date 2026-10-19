@@ -66,7 +66,67 @@ export function unmount() {
 }
 
 /* ---------------- init (once) ---------------- */
+/* ---------------- map edge fade ----------------
+   Every fogged material (all of them) fades into the fog / sky colour near the outer edge of the loaded
+   tiles (data/tiles.json), via the shared fog shader chunks, so the map has no hard cut-off. Shared
+   edges between adjacent tiles are pushed outwards so seams never fade: adding a tile to tiles.json
+   (and the model) simply extends the map. */
+function installEdgeFade(cfg) {
+  const fade = cfg?.fade ?? 45, rects = (cfg?.tiles || []).map((t) => t.extent.slice());
+  if (!rects.length) return;
+  const touches = (a, b, axis, side) => {   // does rect b abut rect a on a's given edge?
+    const eps = 2, [lo, hi] = axis === 'x' ? [2, 3] : [0, 1];
+    const edge = axis === 'x' ? a[side ? 1 : 0] : a[side ? 3 : 2];
+    const other = axis === 'x' ? b[side ? 0 : 1] : b[side ? 2 : 3];
+    return Math.abs(edge - other) < eps && Math.min(a[hi], b[hi]) - Math.max(a[lo], b[lo]) > eps;
+  };
+  const grown = rects.map((a) => {
+    const r = a.slice();
+    rects.forEach((b) => {
+      if (b === a) return;
+      if (touches(a, b, 'x', 0)) r[0] -= fade * 2; if (touches(a, b, 'x', 1)) r[1] += fade * 2;
+      if (touches(a, b, 'z', 0)) r[2] -= fade * 2; if (touches(a, b, 'z', 1)) r[3] += fade * 2;
+    });
+    return r;
+  });
+  const f = (v) => v.toFixed(2);
+  const arr = grown.map((r) => `vec4(${f(r[0])}, ${f(r[1])}, ${f(r[2])}, ${f(r[3])})`).join(', ');
+  const C = THREE.ShaderChunk;
+  C.fog_pars_vertex += `
+#ifdef USE_FOG
+varying vec3 vEdgeW;
+#endif`;
+  C.fog_vertex += `
+#ifdef USE_FOG
+{
+  vec4 ew = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+  ew = instanceMatrix * ew;
+  #endif
+  vEdgeW = (modelMatrix * ew).xyz;
+}
+#endif`;
+  C.fog_pars_fragment += `
+#ifdef USE_FOG
+varying vec3 vEdgeW;
+const vec4 EDGE_RECTS[${grown.length}] = vec4[](${arr});
+float edgeDepth(vec2 p) {   // distance inside the union of tiles (negative outside)
+  float d = -1e6;
+  for (int i = 0; i < ${grown.length}; i++) {
+    vec4 r = EDGE_RECTS[i];
+    d = max(d, min(min(p.x - r.x, r.y - p.x), min(p.y - r.z, r.w - p.y)));
+  }
+  return d;
+}
+#endif`;
+  C.fog_fragment += `
+#ifdef USE_FOG
+gl_FragColor.rgb = mix(fogColor, gl_FragColor.rgb, smoothstep(0.0, ${f(fade)}, edgeDepth(vEdgeW.xz)));
+#endif`;
+}
+
 async function init() {
+  installEdgeFade(await fetch('data/tiles.json').then((r) => r.json()).catch(() => null));
   const wrap = document.createElement('div');
   wrap.className = 'map-wrap';
   wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels area-labels"></div><div class="labels pin-labels"></div>`;

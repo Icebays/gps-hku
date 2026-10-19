@@ -70,3 +70,12 @@ lines, double yellow kerb lines on main roads, edge lines, parking bays where th
 zebra crossings with 望右 LOOK RIGHT, 慢駛 before crossings on campus roads, bus bays with 巴士站
 (crossings and bus stops from OpenStreetMap, snapped onto the surveyed roads), and street lamps.
 Trees are instanced from `data/landcover.json` (canopy tops: position, height, crown radius).
+
+# Map extent and adding tiles
+
+`data/tiles.json` lists the loaded tiles and their extent in model coordinates. The map fades into the
+background over `fade` metres at the outer edge of the union of these extents (shared edges between
+adjacent tiles never fade). To add a tile (e.g. the northern neighbours 11-SW-5C / 5D): include it when
+building `hku.glb` (`build_raw.py ... 7C,7D,5C`), rebuild the road / land-cover data with its folder,
+and add `{ "id": "11-SW-5C", "extent": [x0, x1, z0, z1] }` to `data/tiles.json`.
+Tile extent = the TERRAIN(TB) node position ± its half size: x = E − 832250, z = −(N − 815900).

@@ -1,0 +1,8 @@
+{
+  "_readme": "Loaded map tiles (3dmap.gov.hk), extent in model coordinates [x0, x1, z0, z1] (x = Easting - 832250, z = -(Northing - 815900)). Everything on the map fades into the background over 'fade' metres at the outer edge of the union of these extents. When adding a tile to the model (tools/README.md), add its extent here; shared edges between tiles are detected automatically and never fade.",
+  "fade": 45,
+  "tiles": [
+    { "id": "11-SW-7C", "extent": [-750.5, 0.5, -300.5, 300.5] },
+    { "id": "11-SW-7D", "extent": [-0.5, 750.5, -300.5, 300.5] }
+  ]
+}
