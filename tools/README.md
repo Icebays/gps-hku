@@ -22,17 +22,21 @@ python3 -c "import json;B=json.load(open('out/buildings.json'));json.dump([[b['i
 Model frame: `x = Easting − 832250`, `z = −(Northing − 815900)` (HK1980 Grid), `y = height in mPD`.
 If you add tiles, building index numbers change but building IDs (`B3…`) stay the same, so `data/places.json` keeps working.
 
-# Rebuilding the map overlay (roads, footpaths, gardens)
+# Rebuilding the map features (roads, footpaths, gardens)
 
-`assets/map/overlay-*.png` are drawn from an OpenStreetMap screenshot of the campus (standard OSM style),
-warped into the model frame:
+`data/mapfeatures.json` holds road centre lines (class + width), footpaths (split into indoor / outdoor
+runs against the model's building footprints), and garden / woodland / water polygons, all in model
+coordinates. The site draws them in its own style. They are vectorised from an OpenStreetMap screenshot
+of the campus (standard OSM style):
 
 ```bash
-python3 tools/build_overlay.py osm-screenshot.png "<s>,<theta>,<tx>,<tz>"
+# needs: pip install numpy pillow opencv-python-headless scikit-image
+python3 tools/build_mapfeatures.py osm-screenshot.png "<s>,<theta>,<tx>,<tz>" footprints.png
 ```
 
 `<s>,<theta>,<tx>,<tz>` map a screenshot pixel (u, v) to the model: `x = s(cos t·u − sin t·v) + tx`, `z = s(sin t·u + cos t·v) + tz`.
-Find them by matching the screenshot's building outlines against the model footprints (top-down render).
+Find them by matching the screenshot's building outlines against the model footprints. `footprints.png` is a
+top-down render of the model's buildings (white on black) covering x −770…760, z −310…290.
 Map data © OpenStreetMap contributors (ODbL).
 
 Buildings missing from the 3D data are listed in `data/campus.json` → `extraBuildings` (footprint in model

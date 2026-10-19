@@ -177,27 +177,62 @@ const TERRAIN_U = {
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
   uPhoto: { value: 0 },
-  // OpenStreetMap overlay (tools/build_overlay.py): A = minor road, major road, footpath, coverage; B = garden, woodland, water
+  // map features (data/mapfeatures.json) drawn into canvases: A = colour layer, B.r = woodland/garden mask
   uOvA: { value: null },
   uOvB: { value: null },
   uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) },
   uOvOn: { value: 0 },
-  uRoad: { value: new THREE.Color(0xffffff) },
-  uMajor: { value: new THREE.Color(0xf6d49a) },
-  uPath: { value: new THREE.Color(0xd9654f) },
-  uGarden: { value: new THREE.Color(0x9fd89a) },
-  uWater: { value: new THREE.Color(0x9cc6dc) },
 };
+let FEAT = null;
 async function loadOverlay() {
   try {
-    const meta = await (await fetch('assets/map/overlay.json')).json();
-    const tl = new THREE.TextureLoader();
-    const [a, b] = await Promise.all(['a', 'b'].map((k) => tl.loadAsync(`assets/map/overlay-${k}.png`)));
-    for (const t of [a, b]) { t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4; t.flipY = false; t.needsUpdate = true; } // row 0 = north (z0)
-    const [x0, x1, z0, z1] = meta.extent;
-    TERRAIN_U.uOvA.value = a; TERRAIN_U.uOvB.value = b;
-    TERRAIN_U.uOvExt.value.set(x0, x1, z0, z1); TERRAIN_U.uOvOn.value = 1;
-  } catch (e) { console.warn('map overlay not loaded', e); }
+    FEAT = await (await fetch('data/mapfeatures.json')).json();
+    const xs = [], zs = [];
+    const add = (pts) => pts.forEach(([x, z]) => { xs.push(x); zs.push(z); });
+    FEAT.roads.forEach((r) => add(r.pts)); FEAT.paths.forEach((p) => add(p.pts)); FEAT.areas.forEach((a) => add(a.outer));
+    FEAT.ext = [Math.min(...xs) - 10, Math.max(...xs) + 10, Math.min(...zs) - 10, Math.max(...zs) + 10];
+    const root = document.documentElement;
+    drawMapFeatures(root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
+  } catch (e) { console.warn('map features not loaded', e); }
+}
+/* Our own cartography: roads, footpaths, gardens and water redrawn from the vectors. */
+const MAP_STYLE = {
+  light: { garden: '#b5e0a6', gardenEdge: '#7fbf72', water: '#a9cfe2', casing: '#d8d1c3', road: '#ffffff', majorCasing: '#dba65e', major: '#f8dca8', path: '#e2775c', indoor: '#8b90a0' },
+  dark: { garden: '#35593a', gardenEdge: '#4d7a52', water: '#29475a', casing: '#2a2e2c', road: '#5d6360', majorCasing: '#6b5532', major: '#8f7650', path: '#e38b72', indoor: '#9aa0b0' },
+};
+function drawMapFeatures(dark) {
+  if (!FEAT) return;
+  const RES = 0.4, [x0, x1, z0, z1] = FEAT.ext;
+  const w = Math.ceil((x1 - x0) / RES), h = Math.ceil((z1 - z0) / RES);
+  const mk = () => Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const A = FEAT.canvasA || (FEAT.canvasA = mk()), B = FEAT.canvasB || (FEAT.canvasB = mk());
+  const a = A.getContext('2d'), b = B.getContext('2d'), st = MAP_STYLE[dark ? 'dark' : 'light'];
+  a.clearRect(0, 0, w, h); b.clearRect(0, 0, w, h);
+  const path = (ctx, pts) => pts.forEach(([x, z], i) => ctx[i ? 'lineTo' : 'moveTo']((x - x0) / RES, (z - z0) / RES));
+  const poly = (ctx, ar) => { ctx.beginPath(); for (const ring of [ar.outer, ...ar.holes]) { path(ctx, ring); ctx.closePath(); } };
+  const stroke = (ctx, pts, color, width, dash) => {
+    ctx.beginPath(); path(ctx, pts);
+    ctx.strokeStyle = color; ctx.lineWidth = width / RES; ctx.setLineDash(dash ? dash.map((d) => d / RES) : []); ctx.stroke();
+  };
+  a.lineCap = b.lineCap = 'round'; a.lineJoin = b.lineJoin = 'round';
+  // woodland + gardens feed the green base (relief + contours); gardens also get their own fill
+  b.fillStyle = '#ff0000';
+  for (const ar of FEAT.areas) if (ar.kind !== 'water') { poly(b, ar); b.fill('evenodd'); }
+  for (const ar of FEAT.areas) {
+    if (ar.kind === 'wood') continue;
+    poly(a, ar); a.fillStyle = ar.kind === 'water' ? st.water : st.garden; a.fill('evenodd');
+    if (ar.kind === 'garden') { a.strokeStyle = st.gardenEdge; a.lineWidth = 0.6 / RES; a.setLineDash([]); a.stroke(); }
+  }
+  const roads = [...FEAT.roads].sort((p, q) => (p.class === 'major') - (q.class === 'major'));
+  for (const r of roads) stroke(a, r.pts, r.class === 'major' ? st.majorCasing : st.casing, r.width + 1.4);
+  for (const r of roads) stroke(a, r.pts, r.class === 'major' ? st.major : st.road, r.width);
+  for (const p of FEAT.paths) if (p.indoor) stroke(a, p.pts, st.indoor, 0.9, [0.1, 2.0]);
+  for (const p of FEAT.paths) if (!p.indoor) stroke(a, p.pts, st.path, 1.3);
+  for (const [k, c] of [['uOvA', A], ['uOvB', B]]) {
+    const t = TERRAIN_U[k].value || (TERRAIN_U[k].value = new THREE.CanvasTexture(c));
+    t.flipY = false; t.colorSpace = k === 'uOvA' ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.needsUpdate = true;
+  }
+  TERRAIN_U.uOvExt.value.set(x0, x1, z0, z1); TERRAIN_U.uOvOn.value = 1;
 }
 function setHills(pts) {
   pts = (pts || []).slice(0, MAX_HILL_PTS);
@@ -216,7 +251,7 @@ function terrainMaterial(map) {
 varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
-uniform vec3 uBase, uLine, uMist, uPaved, uRoad, uMajor, uPath, uGarden, uWater;
+uniform vec3 uBase, uLine, uMist, uPaved;
 uniform float uPhoto, uOvOn;
 uniform sampler2D uOvA, uOvB;
 uniform vec4 uOvExt;
@@ -241,9 +276,14 @@ float contour(float h, float step) {
   float hill = uHillN > 2 ? smoothstep(0.0, 25.0, hillDist(vWorld.xz)) : 0.0;
   float k = max(1.0 - uPhoto, hill);
   vec4 oa = vec4(0.0), ob = vec4(0.0);
+  float cov = 0.0;
   if (uOvOn > 0.5) {
     vec2 ouv = vec2((vWorld.x - uOvExt.x) / (uOvExt.y - uOvExt.x), (vWorld.z - uOvExt.z) / (uOvExt.w - uOvExt.z));
-    if (ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) { oa = texture2D(uOvA, ouv); ob = texture2D(uOvB, ouv); }
+    if (ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) {
+      oa = texture2D(uOvA, ouv); ob = texture2D(uOvB, ouv);
+      cov = smoothstep(0.0, 0.03, min(min(ouv.x, 1.0 - ouv.x), min(ouv.y, 1.0 - ouv.y)));
+      oa.a *= cov;
+    }
   }
   if (k > 0.0) {
     vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
@@ -251,21 +291,17 @@ float contour(float h, float step) {
     float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
     vec3 blur = texture2D(map, vMapUv, 3.5).rgb;
     float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97);
-    green = mix(green, max(ob.g, ob.r), oa.a);   // OSM woodland / gardens where covered
-    green = max(green * (1.0 - hill) + hill * max(ob.g, 1.0 - oa.a), 0.0);
+    green = mix(green, ob.r, cov);   // mapped woodland / gardens where covered
+    green = green * (1.0 - hill) + hill * mix(1.0, ob.r, cov);
     vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
     col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
     col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55 * green);
-    // map features: gardens, water, roads, footpaths
-    col = mix(col, uGarden * (0.9 + 0.12 * shade), ob.r * oa.a);
-    col = mix(col, uWater, ob.b * oa.a);
-    col = mix(col, uRoad, oa.r * oa.a);
-    col = mix(col, uMajor, oa.g * oa.a);
+    // drawn map features: gardens, water, roads, footpaths
+    col = mix(col, oa.rgb * (0.93 + 0.1 * shade), oa.a);
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
   }
-  // footpaths and gardens also show on top of the aerial photo
-  diffuseColor.rgb = mix(diffuseColor.rgb, uGarden, ob.r * oa.a * 0.35 * (1.0 - k));
-  diffuseColor.rgb = mix(diffuseColor.rgb, uPath, oa.b * oa.a * 0.95);
+  // with the aerial photo on, the drawn features sit on top of it
+  diffuseColor.rgb = mix(diffuseColor.rgb, oa.rgb, oa.a * 0.85 * (1.0 - k));
 }`);
   };
   return m;
@@ -283,11 +319,7 @@ function setSky(s) {
   TERRAIN_U.uLine.value.set(dark ? 0x8fb39a : 0x5d7a63);
   TERRAIN_U.uMist.value.copy(c);
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
-  TERRAIN_U.uRoad.value.set(dark ? 0x5b605d : 0xffffff);
-  TERRAIN_U.uMajor.value.set(dark ? 0x8a7350 : 0xf6d49a);
-  TERRAIN_U.uPath.value.set(dark ? 0xe08b74 : 0xd9654f);
-  TERRAIN_U.uGarden.value.set(dark ? 0x3f6b43 : 0x9fd89a);
-  TERRAIN_U.uWater.value.set(dark ? 0x2b4a5c : 0x9cc6dc);
+  drawMapFeatures(dark);
 }
 
 function resize() {
