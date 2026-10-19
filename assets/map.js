@@ -106,7 +106,9 @@ async function init() {
       else pct.textContent = (e.loaded / 1e6).toFixed(1) + ' MB';
     }, rej)),
     fetch('assets/model/buildings.json').then((r) => r.json()),
-  ]).then(([gltf, bjson]) => {
+    fetch('data/campus.json').then((r) => r.json()).catch(() => null),
+  ]).then(([gltf, bjson, campus]) => {
+    s.campus = campus;
     s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top }));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
     const root = gltf.scene;
@@ -275,11 +277,22 @@ function updatePins() {
 }
 
 /* ---------------- selection ---------------- */
-// Buildings tagged in places.json are HKU buildings (solid); the rest go to the transparent deco mesh.
+// HKU buildings (inside data/campus.json's boundary, or tagged in places.json) stay solid; the rest go to the transparent deco mesh.
+function insidePoly(x, z, poly) {
+  let r = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [x1, z1] = poly[i], [x2, z2] = poly[j];
+    if ((z1 > z) !== (z2 > z) && x < ((x2 - x1) * (z - z1)) / (z2 - z1) + x1) r = !r;
+  }
+  return r;
+}
 function splitBuildings() {
   if (!S.buildings) return;
   const bidAttr = S.buildings.geometry.attributes._bid, idx = S.bIndexAll, hku = [], deco = [];
-  const set = new Set(S.places.places.flatMap((p) => p.buildings).map((c) => S.bidByCode.get(c)));
+  const c = S.campus || {}, poly = c.boundary || [], exclude = new Set(c.exclude || []);
+  const codes = new Set([...(c.include || []), ...S.places.places.flatMap((p) => p.buildings)]);
+  const set = new Set();
+  S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && insidePoly(b.x, b.z, poly))) set.add(i); });
   for (let i = 0; i < idx.length; i += 3) (set.has(bidAttr.getX(idx[i])) ? hku : deco).push(idx[i], idx[i + 1], idx[i + 2]);
   S.buildings.geometry.setIndex(hku);
   S.deco.geometry.setIndex(deco);

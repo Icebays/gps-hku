@@ -1,0 +1,10 @@
+{
+  "_readme": "HKU campus boundary in model coordinates [x, z] (x = Easting - 832250, z = -(Northing - 815900)). Buildings whose centre falls inside are drawn solid and clickable; everything else is see-through decoration. Buildings listed in places.json always count as HKU. 'include' / 'exclude' force individual building IDs either way.",
+  "boundary": [
+    [-460, -255], [-340, -255], [-300, -200], [-100, -185], [-70, -200], [-60, -275],
+    [60, -275], [60, -200], [100, -175], [150, -150], [285, -110], [285, 45],
+    [-70, 45], [-110, -80], [-460, -80]
+  ],
+  "include": [],
+  "exclude": []
+}
