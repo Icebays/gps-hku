@@ -50,18 +50,23 @@ Map data © OpenStreetMap contributors (ODbL).
 Buildings missing from the 3D data are listed in `data/campus.json` → `extraBuildings` (footprint in model
 coordinates + height) and are extruded at runtime; use their ids in `data/places.json`.
 
-# Surveyed road, bridge and ground surfaces (high-quality tiles)
+# Surveyed roads, road markings, land cover and trees (high-quality tiles)
 
-`model/11-SW-7C.zip` and `model/11-SW-7D.zip` (Git LFS) are the photo-textured release of the same tiles.
-Their road surfaces (`INFRASTRUCTURE(TB)`), flyovers / footbridges (`INFRASTRUCTURE`), ground surfaces
-(`GENERIC`) and water (`WATERBODY`) become `assets/model/roads.glb` and `assets/model/ground.glb`:
+`model/11-SW-7C.zip` and `model/11-SW-7D.zip` (Git LFS) are the high-quality release of the same tiles.
 
 ```bash
-unzip model/11-SW-7C.zip -x 'BUILDING/*' 'VEGETATION*' -d work/7C
-unzip model/11-SW-7D.zip -x 'BUILDING/*' 'VEGETATION*' -d work/7D
-node tools/build_surfaces.mjs work/7C work/7D
+unzip model/11-SW-7C.zip -x 'BUILDING/*' -d work/7C
+unzip model/11-SW-7D.zip -x 'BUILDING/*' -d work/7D
+node tools/build_surfaces.mjs work/7C work/7D          # assets/model/roads.glb: road surfaces + bridges, geometry only
+python3 tools/build_landcover.py work/7C work/7D       # data/landcover.json: vegetation + water polygons, trees
+# top-down renders of the road surfaces / bridges with their photos, 100 m tiles at 0.1 m/px
+# (magenta background), into road_tiles/ and bridge_tiles/ - then:
+python3 tools/build_roadnet.py road_tiles/ bridge_tiles/   # data/roadnet.json: centre lines, widths, lanes
 ```
 
-The map shows the road and bridge photos (with their real markings); ground surfaces show as flat
-paving / water in map mode and as photos with the aerial-photo layer on. When `roads.glb` loads, the
-drawn roads from `data/mapfeatures.json` are replaced and only street lamps and icons are added.
+The surveyed road mesh is the grey road on the map. `assets/roads.js` paints the markings onto it from
+`data/roadnet.json`: lane lines from the measured width (about 3.4 m per lane), HK double white centre
+lines, double yellow kerb lines on main roads, edge lines, parking bays where there is spare width,
+zebra crossings with 望右 LOOK RIGHT, 慢駛 before crossings on campus roads, bus bays with 巴士站
+(crossings and bus stops from OpenStreetMap, snapped onto the surveyed roads), and street lamps.
+Trees are instanced from `data/landcover.json` (canopy tops: position, height, crown radius).

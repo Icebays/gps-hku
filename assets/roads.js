@@ -121,7 +121,7 @@ const STYLE = {
 
 function decalAtlas() {
   // 4 cells: 慢駛, 巴士站, bus icon, lift icon, taxi icon
-  const c = Object.assign(document.createElement('canvas'), { width: 1280, height: 256 });
+  const c = Object.assign(document.createElement('canvas'), { width: 1536, height: 256 });
   const g = c.getContext('2d');
   const F = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -142,15 +142,19 @@ function decalAtlas() {
   badge(640, (x) => { g.beginPath(); g.roundRect(x - 55, 62, 110, 118, 18); g.fill(); g.fillStyle = '#1c7ed6'; g.fillRect(x - 42, 78, 84, 40); g.fillStyle = '#fff'; g.fillRect(x - 46, 182, 22, 22); g.fillRect(x + 24, 182, 22, 22); });
   badge(896, (x) => { g.fillRect(x - 40, 60, 80, 136); g.fillStyle = '#1c7ed6'; g.beginPath(); g.moveTo(x, 78); g.lineTo(x - 22, 112); g.lineTo(x + 22, 112); g.fill(); g.beginPath(); g.moveTo(x, 178); g.lineTo(x - 22, 144); g.lineTo(x + 22, 144); g.fill(); });
   badge(1152, (x) => { g.font = `bold 96px ${F}`; g.fillText('的士', x, 132); });
+  // 望右 / LOOK RIGHT, painted at the kerb of HK crossings
+  g.fillStyle = '#ffffff'; g.font = `bold 92px ${F}`; g.fillText('望右', 1408, 78);
+  g.font = `bold 52px sans-serif`; g.fillText('LOOK RIGHT', 1408, 186);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
-const CELL = { slow: 0, bus_text: 1, bus: 2, lift: 3, taxi: 4 };
+const CELL = { slow: 0, bus_text: 1, bus: 2, lift: 3, taxi: 4, look: 5 };
 
 /* ---------- build everything ---------- */
-// furnitureOnly: the surveyed, photo-textured road surfaces are shown instead (roads.glb), so only
-// street lamps and pavement icons are added on top.
-export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnitureOnly = false }) {
+// surface: height lookup of the surveyed road surface (roads.glb). When given, that mesh is the
+// road itself, so no road bands are drawn - only the markings, draped onto it, plus lamps and icons.
+export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surface = null }) {
+  const furnitureOnly = false;
   const st = STYLE[dark ? 'dark' : 'light'];
   const L = { pave: new Layer(), kerb: new Layer(), tar: new Layer(), deckTar: new Layer(), white: new Layer(), yellow: new Layer(), walk: new Layer(), walkEdge: new Layer(), indoor: new Layer(), decal: new Layer() };
   const lamps = [];
@@ -180,6 +184,7 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
     return m;
   };
   const heightFor = (x, z, elev) => {
+    if (surface) { const sv = surface(x, z); if (Number.isFinite(sv)) return sv + 0.02; }
     const g = groundMax(x, z);
     const d = deck(x, z);
     if (elev && Number.isFinite(d)) return d + 0.1;
@@ -212,10 +217,12 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
         }
       }
     };
-    band(L.pave, h + 1.8, 0, true);
-    band(L.kerb, h + 0.3, 0.02, true);
-    band(L.tar, h, 0.04, false);
-    band(L.deckTar, h, 0.04, false, true);
+    if (!surface) {
+      band(L.pave, h + 1.8, 0, true);
+      band(L.kerb, h + 0.3, 0.02, true);
+      band(L.tar, h, 0.04, false);
+      band(L.deckTar, h, 0.04, false, true);
+    }
 
     // markings, trimmed near junctions
     const trimA = (deg.get(key(r.pts[0])) || 0) >= 2 ? h + 4 : 0.5, trimB = (deg.get(key(r.pts[r.pts.length - 1])) || 0) >= 2 ? h + 4 : 0.5;
@@ -230,7 +237,36 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
         layer.quad(P(i, off - width / 2), P(i + 1, off - width / 2), P(i, off + width / 2), P(i + 1, off + width / 2));
       }
     };
-    if (r.class === 'major') {
+    if (surface) {
+      // lanes from the measured width; HK practice: double white centre line on two-way roads,
+      // dashed lane lines, double yellow no-stopping lines at the kerb on main roads
+      const lanes = r.lanes || Math.max(1, Math.round(w / 3.4));
+      const twoWay = !r.twin && lanes >= 2;
+      for (let k = 1; k < lanes; k++) {
+        const off = -h + (w * k) / lanes;
+        if (twoWay && (lanes % 2 === 0 ? k === lanes / 2 : false)) { line(L.white, off - 0.18, 0.12); line(L.white, off + 0.18, 0.12); }
+        else line(L.white, off, 0.12, 3, lanes >= 3 ? 6 : 3);
+      }
+      if (lanes === 1 && w >= 4.5) line(L.white, 0, 0.12, 1.5, 1.5);
+      for (const sg of [-1, 1]) {
+        if (r.class === 'major') { line(L.yellow, sg * (h - 0.4), 0.1); line(L.yellow, sg * (h - 0.6), 0.1); }
+        else line(L.white, sg * (h - 0.3), 0.1);
+      }
+      // parking bays along spare width on campus roads (2.5 m x 5 m, kerb side)
+      const spare = w - lanes * 3.4;
+      if (r.class !== 'major' && spare >= 2.3 && len > 30) {
+        const off = -h + 2.4;
+        line(L.white, off, 0.1, null, null);
+        for (let s0 = 8; s0 < len - 8; s0 += 5) {
+          const i = Math.min(Math.round(s0), q.length - 1);
+          const P = (o) => { const x = q[i][0] + n[i][0] * o, z = q[i][1] + n[i][1] * o; return [x, heightFor(x, z, elev[i]) + 0.07, z]; };
+          const t = [n[i][1], -n[i][0]];
+          const a0 = P(-h + 0.1), a1 = P(off);
+          L.white.quad([a0[0] - t[0] * 0.05, a0[1], a0[2] - t[1] * 0.05], [a0[0] + t[0] * 0.05, a0[1], a0[2] + t[1] * 0.05],
+                       [a1[0] - t[0] * 0.05, a1[1], a1[2] - t[1] * 0.05], [a1[0] + t[0] * 0.05, a1[1], a1[2] + t[1] * 0.05]);
+        }
+      }
+    } else if (r.class === 'major') {
       const lanes = Math.max(2, Math.round(w / 3.4));
       for (let k = 1; k < lanes; k++) {
         const off = -h + (w * k) / lanes;
@@ -244,9 +280,9 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
     }
 
     // street lamps along ground sections: ~32 m apart, alternating sides on wide roads
-    if (len > 24) {
+    if (len > (surface ? 40 : 24)) {
       let side = 1;
-      for (let s = 12; s < len - 10; s += r.class === 'major' ? 28 : 34) {
+      for (let s = 12; s < len - 10; s += r.class === 'major' ? 32 : 40) {
         const i = Math.min(Math.round(s), q.length - 1);
         if (elev[i]) continue;
         const o = h + 0.9, x = q[i][0] + n[i][0] * o * side, z = q[i][1] + n[i][1] * o * side;
@@ -261,7 +297,7 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
   }
 
   // junction plates: round tarmac where 3+ roads meet, so corners are filled
-  for (const [k, d] of deg) {
+  for (const [k, d] of surface ? [] : deg) {
     if (d < 3) continue;
     const [x, z] = k.split(',').map((v) => +v / 2);
     const rr = Math.max(...roads.filter((r) => [r.pts[0], r.pts[r.pts.length - 1]].some((p) => key(p) === k)).map((r) => r.width)) / 2;
@@ -271,7 +307,7 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
   }
 
   // footpaths
-  for (const p of FEAT.paths) {
+  for (const p of surface ? [] : FEAT.paths) {
     const { pts: q } = resample(p.pts, 1.5);
     if (q.length < 2) continue;
     const n = normalsOf(q);
@@ -293,9 +329,17 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnit
     const P = (a, b) => { const x = cx + ux * a + vx * b, z = cz + uz * a + vz * b; return [x, heightFor(x, z, false) + dy, z]; };
     layer.quad(P(a0, b0), P(a1, b0), P(a0, b1), P(a1, b1), uv);
   };
-  if (!furnitureOnly) for (const c of M.crossings || []) for (let t = -c.width / 2 + 0.5; t <= c.width / 2 - 0.4; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
-  const cellUV = (k) => { const u0 = k / 5, u1 = (k + 1) / 5; return [u0, 1, u1, 1, u0, 0, u1, 0]; };
+  const cellUV = (k) => { const u0 = k / 6, u1 = (k + 1) / 6; return [u0, 1, u1, 1, u0, 0, u1, 0]; };
   const uvFor = (k, turn) => { const uv = cellUV(k); return turn ? [uv[6], uv[7], uv[4], uv[5], uv[2], uv[3], uv[0], uv[1]] : uv; }; // turn = rotate 180°
+  for (const c of M.crossings || []) {
+    for (let t = -c.width / 2 + 0.6; t <= c.width / 2 - 0.5; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
+    // 望右 LOOK RIGHT just off each kerb end, readable by the pedestrian about to cross
+    // (beside the zebra at each kerb, text top towards the road centre)
+    if (c.width >= 5) for (const sg of [-1, 1]) {
+      const o = sg * (c.width / 2 - 1.1);
+      flat(L.decal, c.p[0], c.p[1], c.dir[0], c.dir[1], 2.0, 3.8, o - 0.9, o + 0.9, 0.09, uvFor(CELL.look, sg < 0));
+    }
+  }
   for (const s of furnitureOnly ? [] : M.slow || []) {
     const half = Math.min(1.1, s.width * 0.18);
     // glyph tops point along the direction of travel, so the approaching driver reads 慢 then 駛

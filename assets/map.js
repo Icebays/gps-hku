@@ -106,7 +106,7 @@ async function init() {
   const bar = wrap.querySelector('.bar i'), pct = wrap.querySelector('.pct');
   s.ready = Promise.all([
     new Promise((res, rej) => loader.load('assets/model/hku.glb', res, (e) => {
-      if (e.total) { const p = Math.round((e.loaded / e.total) * 100); bar.style.width = p + '%'; pct.textContent = p + '%'; }
+      if (e.total) { const p = Math.min(100, Math.round((e.loaded / e.total) * 100)); bar.style.width = p + '%'; pct.textContent = p + '%'; }
       else pct.textContent = (e.loaded / 1e6).toFixed(1) + ' MB';
     }, rej)),
     fetch('assets/model/buildings.json').then((r) => r.json()),
@@ -180,31 +180,25 @@ const TERRAIN_U = {
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
   uPhoto: { value: 0 },
-  // map features (data/mapfeatures.json) drawn into canvases: A = colour layer, B.r = woodland/garden mask
+  // land cover (data/landcover.json, surveyed) drawn into canvases: A = water colour layer, B.r = vegetation mask
   uOvA: { value: null },
   uOvB: { value: null },
   uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) },
   uOvOn: { value: 0 },
 };
-let FEAT = null;
+let FEAT = null, LAND = null;
+const isDark = () => { const root = document.documentElement; return root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 async function loadOverlay() {
-  try {
-    FEAT = await (await fetch('data/mapfeatures.json')).json();
-    const xs = [], zs = [];
-    const add = (pts) => pts.forEach(([x, z]) => { xs.push(x); zs.push(z); });
-    FEAT.roads.forEach((r) => add(r.pts)); FEAT.paths.forEach((p) => add(p.pts)); FEAT.areas.forEach((a) => add(a.outer));
-    (FEAT.marks?.busStops || []).forEach((b) => add([b.icon]));
-    FEAT.ext = [Math.min(...xs) - 10, Math.max(...xs) + 10, Math.min(...zs) - 10, Math.max(...zs) + 10];
-    const root = document.documentElement;
-    drawMapFeatures(root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
-  } catch (e) { console.warn('map features not loaded', e); }
+  const get = (u) => fetch(u).then((r) => r.json()).catch((e) => (console.warn(u, e), null));
+  [FEAT, LAND] = await Promise.all([get('data/mapfeatures.json'), get('data/landcover.json')]);
+  if (LAND) { LAND.ext = [-750, 750, -305, 305]; drawMapFeatures(isDark()); }
 }
-/* Ground cover drawn into the terrain: gardens, water, and the woodland mask for the green relief.
-   Roads, footpaths and markings are 3D geometry (roads.js). */
+/* Ground cover drawn into the terrain from the surveyed land cover: the vegetation mask (green relief +
+   contours) and water. Roads and their markings are 3D geometry (roads.glb + data/roadmarks.json). */
 const MAP_STYLE = {
-  light: { garden: '#b5e0a6', gardenEdge: '#7fbf72', water: '#a9cfe2', pavement: '#ebe7df', kerb: '#c8c1b4', tarmac: '#aeb3ba', tarmacMajor: '#a3a9b1',
+  light: { waterEdge: '#7fb3cf', garden: '#b5e0a6', gardenEdge: '#7fbf72', water: '#a9cfe2', pavement: '#ebe7df', kerb: '#c8c1b4', tarmac: '#aeb3ba', tarmacMajor: '#a3a9b1',
            paint: '#ffffff', yellow: '#f2c230', walk: '#eadbc0', walkEdge: '#cfb48a', indoor: '#8b90a0', icon: '#1c7ed6' },
-  dark: { garden: '#35593a', gardenEdge: '#4d7a52', water: '#29475a', pavement: '#3d413f', kerb: '#2a2d2c', tarmac: '#50555c', tarmacMajor: '#4a4f57',
+  dark: { waterEdge: '#3d6a84', garden: '#35593a', gardenEdge: '#4d7a52', water: '#29475a', pavement: '#3d413f', kerb: '#2a2d2c', tarmac: '#50555c', tarmacMajor: '#4a4f57',
           paint: '#d9dde2', yellow: '#c9a33a', walk: '#5a5144', walkEdge: '#6f634f', indoor: '#9aa0b0', icon: '#4dabf7' },
 };
 // shift a polyline sideways by d metres (positive = left of travel direction in map view)
@@ -216,12 +210,11 @@ function offsetLine(pts, d) {
   });
 }
 function drawMapFeatures(dark) {
-  if (!FEAT) return;
-  const [x0, x1, z0, z1] = FEAT.ext;
-  const maxTex = S?.renderer?.capabilities.maxTextureSize || 4096;
-  const RES = Math.max(0.25, (x1 - x0) / (maxTex - 8), (z1 - z0) / (maxTex - 8)), RB = 1;
+  if (!LAND) return;
+  const [x0, x1, z0, z1] = LAND.ext;
+  const RES = 0.75, RB = 1;   // kept small: large canvases crash mobile Safari
   const mk = (r) => Object.assign(document.createElement('canvas'), { width: Math.ceil((x1 - x0) / r), height: Math.ceil((z1 - z0) / r) });
-  const A = FEAT.canvasA || (FEAT.canvasA = mk(RES)), B = FEAT.canvasB || (FEAT.canvasB = mk(RB));
+  const A = LAND.canvasA || (LAND.canvasA = mk(RES)), B = LAND.canvasB || (LAND.canvasB = mk(RB));
   const a = A.getContext('2d'), b = B.getContext('2d'), st = MAP_STYLE[dark ? 'dark' : 'light'];
   a.setTransform(1, 0, 0, 1, 0, 0); b.setTransform(1, 0, 0, 1, 0, 0);
   a.clearRect(0, 0, A.width, A.height); b.clearRect(0, 0, B.width, B.height);
@@ -229,21 +222,12 @@ function drawMapFeatures(dark) {
   a.setTransform(1 / RES, 0, 0, 1 / RES, -x0 / RES, -z0 / RES); b.setTransform(1 / RB, 0, 0, 1 / RB, -x0 / RB, -z0 / RB);
   const path = (ctx, pts) => pts.forEach(([x, z], i) => ctx[i ? 'lineTo' : 'moveTo'](x, z));
   const poly = (ctx, ar) => { ctx.beginPath(); for (const ring of [ar.outer, ...ar.holes]) { path(ctx, ring); ctx.closePath(); } };
-  const stroke = (ctx, pts, color, width, dash, cap = 'round') => {
-    ctx.beginPath(); path(ctx, pts);
-    ctx.lineCap = cap; ctx.lineJoin = 'round';
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.stroke();
-  };
-  const at = (ctx, p, u, fn) => { ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(Math.atan2(u[1], u[0])); fn(); ctx.restore(); };
-  const FONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
-
-  // woodland + gardens feed the green base (relief + contours)
+  // vegetation feeds the green base (relief + contours); water is filled on top
   b.fillStyle = '#ff0000';
-  for (const ar of FEAT.areas) if (ar.kind !== 'water') { poly(b, ar); b.fill('evenodd'); }
-  for (const ar of FEAT.areas) {
-    if (ar.kind === 'wood') continue;
-    poly(a, ar); a.fillStyle = ar.kind === 'water' ? st.water : st.garden; a.fill('evenodd');
-    if (ar.kind === 'garden') { a.strokeStyle = st.gardenEdge; a.lineWidth = 0.6; a.setLineDash([]); a.stroke(); }
+  for (const ar of LAND.green) { poly(b, ar); b.fill('evenodd'); }
+  for (const ar of LAND.water) {
+    poly(a, ar); a.fillStyle = st.water; a.fill('evenodd');
+    a.strokeStyle = st.waterEdge; a.lineWidth = 0.5; a.stroke();
   }
   for (const [k, c] of [['uOvA', A], ['uOvB', B]]) {
     const t = TERRAIN_U[k].value || (TERRAIN_U[k].value = new THREE.CanvasTexture(c));
@@ -308,7 +292,7 @@ float contour(float h, float step) {
     float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
     vec3 blur = texture2D(map, vMapUv, 3.5).rgb;
     float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97);
-    green = mix(green, ob.r, cov);   // mapped woodland / gardens where covered
+    green = mix(green, ob.r, cov);   // surveyed vegetation where covered
     green = green * (1.0 - hill) + hill * mix(1.0, ob.r, cov);
     vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
     col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
@@ -338,7 +322,7 @@ function setSky(s) {
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
-  setGroundStyle(s);
+  ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
@@ -396,7 +380,7 @@ function buildUI() {
   S.legend = ui('map-legend', `<label><input type="checkbox" data-photo ${TERRAIN_U.uPhoto.value ? 'checked' : ''}>🛰 ${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
   S.legend.hidden = true;
   S.legend.addEventListener('change', (e) => {
-    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); setGroundStyle(S); return; }
+    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
@@ -422,7 +406,7 @@ function makeAreas() {
         }
       });
       const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
-        new THREE.LineDashedMaterial({ color: 0x0f5132, dashSize: 6, gapSize: 4, transparent: true, opacity: 0.7, depthTest: false }));
+        new THREE.LineDashedMaterial({ color: 0x0f5132, dashSize: 6, gapSize: 4, transparent: true, opacity: 0.45 }));
       line.computeLineDistances(); line.renderOrder = 2;
       S.areaLines.add(line);
     }
@@ -520,52 +504,45 @@ function infraMaterial() {
 /* Surveyed surfaces from the high-quality 3D data (tools/build_surfaces.mjs): photo-textured road
    surfaces, flyovers and footbridges (roads.glb), and ground surfaces such as pavements, plazas,
    courts and water (ground.glb). They replace the plain infrastructure mesh. */
+/* Surveyed road surfaces and bridges (roads.glb, geometry only - tools/build_surfaces.mjs). The road
+   mesh is the grey base; markings from data/roadnet.json are painted onto it (roads.js). */
+const ROAD_MAT = new THREE.MeshBasicMaterial({ color: 0xa7acb3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 async function loadSurfaces(s) {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  const prep = (gltf, order, offset) => {
-    gltf.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      const old = o.material, map = old.map;
-      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = s.renderer.capabilities.getMaxAnisotropy(); }
-      o.material = new THREE.MeshBasicMaterial({ map, color: map ? 0xffffff : 0xb9bcc0, polygonOffset: offset, polygonOffsetFactor: -2, polygonOffsetUnits: -2 * order });
-      o.renderOrder = order;
-      o.userData.surface = o.name || o.parent?.name;
-    });
-    return gltf.scene;
-  };
-  const [roads, ground] = await Promise.all([
-    loader.loadAsync('assets/model/roads.glb').catch((e) => (console.warn('roads.glb', e), null)),
-    loader.loadAsync('assets/model/ground.glb').catch((e) => (console.warn('ground.glb', e), null)),
-  ]);
-  if (ground) {
-    s.ground3d = prep(ground, 1, true);
-    s.ground3d.traverse((o) => { if (o.isMesh) o.userData.photo = o.material.map; });
-    s.scene.add(s.ground3d);
-    setGroundStyle(s);
-  }
-  if (roads) {
-    s.roads3d = prep(roads, 2, true);
-    // bridges are solid structures: no depth offset (it would let them show through hillsides)
-    s.roads3d.traverse((o) => { if (o.isMesh && /bridge/i.test(o.userData.surface || '')) { o.material.polygonOffset = false; o.renderOrder = 0; } });
-    s.scene.add(s.roads3d);
-    if (s.infra) s.infra.visible = false;
-  }
+  const roads = await loader.loadAsync('assets/model/roads.glb').catch((e) => (console.warn('roads.glb', e), null));
+  if (!roads) return;
+  s.roadMeshes = [];
+  roads.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const bridge = /bridge/i.test(o.name || o.parent?.name || '');
+    o.material = bridge ? infraMaterial() : ROAD_MAT;
+    o.renderOrder = bridge ? 0 : 2;
+    s.roadMeshes.push(o);
+  });
+  s.roads3d = roads.scene;
+  s.scene.add(s.roads3d);
+  if (s.infra) s.infra.visible = false;
   s.scene.updateMatrixWorld(true);
 }
 
-// ground surfaces: photo in aerial-photo mode, flat paving / water colours in map mode
-function setGroundStyle(s) {
-  if (!s.ground3d) return;
-  const photo = TERRAIN_U.uPhoto.value > 0.5;
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  s.ground3d.traverse((o) => {
-    if (!o.isMesh) return;
-    const water = /water/i.test(o.userData.surface || '');
-    o.material.map = photo ? o.userData.photo : null;
-    o.material.color.set(photo ? 0xffffff : water ? (dark ? 0x29475a : 0xa9cfe2) : (dark ? 0x434745 : 0xebe8e1));
-    o.material.needsUpdate = true;
+/* Trees from the surveyed canopy (data/landcover.json): one instanced trunk + crown per tree. */
+function makeTrees(s) {
+  if (!LAND?.trees?.length) return;
+  const trees = LAND.trees.filter((t) => t[3] >= 3);
+  const crownGeo = new THREE.IcosahedronGeometry(1, 0), trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1, 5).translate(0, 0.5, 0);
+  const crown = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), trees.length);
+  const trunk = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x8a7462 }), trees.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color(), e = new THREE.Euler();
+  trees.forEach(([x, z, y, h, r], i) => {
+    const ch = Math.min(h * 0.55, r * 1.6), cy = y + h - ch / 2;
+    const k = ((x * 73.1 + z * 31.7) % 1 + 1) % 1;               // stable per-tree variation
+    q.setFromEuler(e.set(0, k * 6.28, 0));
+    crown.setMatrixAt(i, m.compose(new THREE.Vector3(x, cy, z), q, new THREE.Vector3(r, ch / 2, r)));
+    trunk.setMatrixAt(i, m.compose(new THREE.Vector3(x, y - 0.3, z), q, new THREE.Vector3(1, Math.max(0.5, h - ch + 0.6), 1)));
+    crown.setColorAt(i, c.setHSL(0.27 + k * 0.06, 0.32 + k * 0.12, 0.36 + k * 0.08));
   });
+  crown.name = 'trees'; trunk.name = 'trunks';
+  s.trees = new THREE.Group(); s.trees.add(crown, trunk); s.scene.add(s.trees);
 }
 
 async function makeRoads(s) {
@@ -578,7 +555,11 @@ async function makeRoads(s) {
     const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
     const root = document.documentElement;
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    s.roads = buildRoads({ FEAT, ground, deck, building: bIdx, lampGeo, dark, furnitureOnly: !!s.roads3d });
+    makeTrees(s);
+    const NET = await fetch('data/roadnet.json').then((r) => r.json()).catch(() => null);
+    const surface = s.roadMeshes ? heightIndex(s.roadMeshes, { upOnly: true }) : null;
+    const feat = NET && surface ? { ...FEAT, roads: NET.roads, marks: { ...NET.marks, icons: FEAT.marks?.icons || [] } } : FEAT;
+    s.roads = buildRoads({ FEAT: feat, ground, deck, building: bIdx, lampGeo, dark, surface: NET ? surface : null });
     s.scene.add(s.roads);
     console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
   } catch (e) { console.warn('roads not built', e); }
