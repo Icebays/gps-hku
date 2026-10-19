@@ -15,7 +15,7 @@ const T = {
         undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
         min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
-        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.' },
+        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', photo: 'Aerial photo' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
@@ -23,7 +23,7 @@ const T = {
         undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
         min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
-        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。' },
+        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', photo: '航拍相片' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
@@ -161,15 +161,20 @@ async function init() {
 }
 
 /* ---------------- terrain ----------------
-   Inside the 'hills' polygon (data/campus.json) the aerial photo is replaced by
-   shaded relief + 10 m / 50 m contour lines that fade into mist with height. */
+   Default "map" style: the aerial photo is only used (heavily blurred) to tell
+   greenery from paved ground; both are drawn as flat map colours with shaded
+   relief and 10 m / 50 m contour lines that fade into mist with height.
+   With the aerial-photo layer on, the photo shows except inside the 'hills'
+   polygon (data/campus.json), which keeps the map style. */
 const MAX_HILL_PTS = 32;
 const TERRAIN_U = {
   uHill: { value: Array.from({ length: MAX_HILL_PTS }, () => new THREE.Vector2()) },
   uHillN: { value: 0 },
-  uBase: { value: new THREE.Color(0xe4e9dc) },
+  uBase: { value: new THREE.Color(0xcfe0bf) },
   uLine: { value: new THREE.Color(0x5d7a63) },
   uMist: { value: new THREE.Color(0xcfe0e8) },
+  uPaved: { value: new THREE.Color(0xf6f3ec) },
+  uPhoto: { value: 0 },
 };
 function setHills(pts) {
   pts = (pts || []).slice(0, MAX_HILL_PTS);
@@ -188,7 +193,8 @@ function terrainMaterial(map) {
 varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
-uniform vec3 uBase, uLine, uMist;
+uniform vec3 uBase, uLine, uMist, uPaved;
+uniform float uPhoto;
 // signed distance to the hill polygon: > 0 inside
 float hillDist(vec2 p) {
   float d = 1e9; bool inside = false;
@@ -206,15 +212,18 @@ float contour(float h, float step) {
   return 1.0 - clamp(abs(fract(v - 0.5) - 0.5) / fwidth(v), 0.0, 1.0);
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
-if (uHillN > 2) {
-  float k = smoothstep(0.0, 25.0, hillDist(vWorld.xz));
+{
+  float hill = uHillN > 2 ? smoothstep(0.0, 25.0, hillDist(vWorld.xz)) : 0.0;
+  float k = max(1.0 - uPhoto, hill);
   if (k > 0.0) {
     vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
     if (n.y < 0.0) n = -n;
     float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
-    vec3 col = uBase * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
-    col = mix(col, uLine, contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75);
-    col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55);
+    vec3 blur = texture2D(map, vMapUv, 3.5).rgb;
+    float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97) * (1.0 - hill) + hill;
+    vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
+    col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
+    col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55 * green);
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
   }
 }`);
@@ -228,10 +237,12 @@ function setSky(s) {
   const c = new THREE.Color(dark ? 0x1a2420 : 0xcfe0e8);
   s.scene.background = c;
   s.scene.fog = new THREE.Fog(c, 1200, 3800);
-  s.ground?.material.color.set(dark ? 0x26302a : 0x6d7a62);
-  TERRAIN_U.uBase.value.set(dark ? 0x2c3a31 : 0xe4e9dc);
+  const photo = TERRAIN_U.uPhoto.value;
+  s.ground?.material.color.set(photo ? (dark ? 0x26302a : 0x6d7a62) : (dark ? 0x1d2b35 : 0xb9d3e0));
+  TERRAIN_U.uBase.value.set(dark ? 0x2c3d30 : 0xcfe0bf);
   TERRAIN_U.uLine.value.set(dark ? 0x8fb39a : 0x5d7a63);
   TERRAIN_U.uMist.value.copy(c);
+  TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
 }
 
 function resize() {
@@ -285,9 +296,11 @@ function buildUI() {
 
   const cats = S.places?.categories || {};
   S.hiddenCats = S.hiddenCats || new Set();
-  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
+  S.legend = ui('map-legend', `<label><input type="checkbox" data-photo ${TERRAIN_U.uPhoto.value ? 'checked' : ''}>🛰 ${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
   S.legend.hidden = true;
-  S.legend.addEventListener('change', (e) => { const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
+  S.legend.addEventListener('change', (e) => {
+    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
+    const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR');
   S.info = null; S.editBar = null; S.routePanel = null;

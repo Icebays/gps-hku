@@ -14,7 +14,7 @@ GPS-HKU is laid out like a handbook. Chapters are in the left sidebar (tap ☰ o
 - **Solid white buildings**: HKU buildings. Click one for details.
 - **See-through buildings**: non-HKU buildings, shown for context only. They don't respond to clicks.
 - **Dashed outlines**: the Main Campus and Centennial Campus.
-- **Contour-line hills**: Lung Fu Shan behind the campus, drawn as terrain with a line every 10 m.
+- **Map colours**: green is vegetation, pale is roads and built-up ground, with a contour line every 10 m. To see the aerial photo, tick **Aerial photo** in the layers panel (the hills behind campus stay as contours).
 - **⚠︎ Approximate position**: some places are not yet confirmed. Fix them in Edit mode.
 - **Pins**: labelled places. Use the layers button to show or hide categories.
 - **Heights**: shown in metres above Principal Datum (**mPD**), the standard height reference in Hong Kong. Compare two buildings' mPD values to see which one sits higher up the hill.

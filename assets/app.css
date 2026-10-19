@@ -245,3 +245,4 @@ body.map-mode .page { max-width: none; padding: 0; }
 [data-theme="dark"] .area-label { color: #b7e4c7; text-shadow: 0 0 4px #000, 0 0 10px #000; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .area-label { color: #b7e4c7; text-shadow: 0 0 4px #000, 0 0 10px #000; } }
 .map-info .guess { font-size: 12.5px; color: inherit; background: rgba(217,119,6,.1); border-radius: 8px; padding: 6px 8px; }
+.map-legend hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
