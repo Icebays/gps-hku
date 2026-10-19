@@ -16,7 +16,7 @@ const T = {
         undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
         min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
-        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', photo: 'Aerial photo' },
+        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', photo: 'Aerial photo', basemap: 'Map style', classic: 'Classic', real: 'Real imagery' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
@@ -24,7 +24,7 @@ const T = {
         undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
         min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
-        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', photo: '航拍相片' },
+        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', photo: '航拍相片', basemap: '地圖樣式', classic: '經典', real: '真實影像' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
@@ -89,6 +89,7 @@ async function init() {
   controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 25; controls.maxDistance = 1800;
   controls.zoomToCursor = true; controls.screenSpacePanning = false;
   s.controls = controls;
+  oneFingerZoom(renderer.domElement, camera, controls);
   s.home = { pos: new THREE.Vector3(-110, 400, 210), target: new THREE.Vector3(-100, 75, -130) };
   if (innerWidth < innerHeight) s.home.pos = s.home.target.clone().add(s.home.pos.clone().sub(s.home.target).multiplyScalar(1.7));
   camera.position.copy(s.home.pos); controls.target.copy(s.home.target);
@@ -180,6 +181,7 @@ const TERRAIN_U = {
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
   uPhoto: { value: 0 },
+  uReal: { value: 0 },   // real-imagery base map: photo everywhere, no drawn overlays
   // land cover (data/landcover.json, surveyed) drawn into canvases: A = water colour layer, B.r = vegetation mask
   uOvA: { value: null },
   uOvB: { value: null },
@@ -253,7 +255,7 @@ varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
 uniform vec3 uBase, uLine, uMist, uPaved;
-uniform float uPhoto, uOvOn;
+uniform float uPhoto, uOvOn, uReal;
 uniform sampler2D uOvA, uOvB;
 uniform vec4 uOvExt;
 // signed distance to the hill polygon: > 0 inside
@@ -274,7 +276,7 @@ float contour(float h, float step) {
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 {
-  float hill = uHillN > 2 ? smoothstep(0.0, 25.0, hillDist(vWorld.xz)) : 0.0;
+  float hill = uHillN > 2 && uReal < 0.5 ? smoothstep(0.0, 25.0, hillDist(vWorld.xz)) : 0.0;
   float k = max(1.0 - uPhoto, hill);
   vec4 oa = vec4(0.0), ob = vec4(0.0);
   float cov = 0.0;
@@ -302,7 +304,7 @@ float contour(float h, float step) {
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
   }
   // with the aerial photo on, the drawn features sit on top of it
-  diffuseColor.rgb = mix(diffuseColor.rgb, oa.rgb, oa.a * 0.85 * (1.0 - k));
+  diffuseColor.rgb = mix(diffuseColor.rgb, oa.rgb, oa.a * 0.85 * (1.0 - k) * (1.0 - uReal));
 }`);
   };
   return m;
@@ -325,7 +327,7 @@ function setSky(s) {
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
-  INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
+  INFRA_U.uDeck.value.set(dark ? 0x4d535b : 0xa7acb3); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
 function resize() {
@@ -379,9 +381,17 @@ function buildUI() {
 
   const cats = S.places?.categories || {};
   S.hiddenCats = S.hiddenCats || new Set();
-  S.legend = ui('map-legend', `<label><input type="checkbox" data-photo ${TERRAIN_U.uPhoto.value ? 'checked' : ''}>🛰 ${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
+  const bm = S.basemap || 'classic';
+  S.legend = ui('map-legend', `<b class="legend-h">${tt('basemap')}</b>` +
+    ['classic', 'real'].map((k) => `<label><input type="radio" name="basemap" data-basemap="${k}" ${bm === k ? 'checked' : ''}>${k === 'classic' ? '🗺' : '🛰'} ${tt(k)}</label>`).join('') +
+    `<label class="photo-opt" ${bm === 'classic' ? '' : 'hidden'}><input type="checkbox" data-photo ${bm === 'classic' && TERRAIN_U.uPhoto.value ? 'checked' : ''}>${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
   S.legend.hidden = true;
   S.legend.addEventListener('change', (e) => {
+    if ('basemap' in e.target.dataset) {
+      setBasemap(S, e.target.dataset.basemap);
+      const opt = S.legend.querySelector('.photo-opt'); opt.hidden = S.basemap !== 'classic'; opt.querySelector('input').checked = false;
+      return;
+    }
     if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
@@ -502,6 +512,53 @@ function infraMaterial() {
   return m;
 }
 
+/* One-finger zoom (phones), as in Google / Apple Maps: double-tap and hold, then drag up to zoom in
+   and down to zoom out; a plain double-tap zooms in. Runs in the capture phase so the map controls
+   never see the second touch. */
+function oneFingerZoom(el, camera, controls) {
+  const touches = new Set();
+  let lastTap = null, drag = null;
+  const dist = () => camera.position.distanceTo(controls.target);
+  const setDist = (d) => {
+    d = Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
+    const off = camera.position.clone().sub(controls.target).setLength(d);
+    camera.position.copy(controls.target).add(off);
+    controls.update();
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    touches.add(e.pointerId);
+    if (touches.size > 1) { drag = null; return; }
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+      drag = { id: e.pointerId, y: e.clientY, d0: dist(), moved: false };
+      e.stopImmediatePropagation(); e.preventDefault();
+      controls.enabled = false;
+      el.setPointerCapture?.(e.pointerId);
+    }
+  }, { capture: true });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 6) drag.moved = true;
+    setDist(drag.d0 * Math.exp(dy * 0.008));   // up = closer (zoom in), down = farther (zoom out)
+    e.stopImmediatePropagation();
+  }, { capture: true });
+  const end = (e) => {
+    if (e.pointerType !== 'touch') return;
+    touches.delete(e.pointerId);
+    if (drag && e.pointerId === drag.id) {
+      if (!drag.moved) setDist(drag.d0 * 0.5);   // double-tap without dragging: zoom in
+      drag = null; lastTap = null; controls.enabled = true;
+      e.stopImmediatePropagation();
+      return;
+    }
+    lastTap = { t: performance.now(), x: e.clientX, y: e.clientY };
+  };
+  el.addEventListener('pointerup', end, { capture: true });
+  el.addEventListener('pointercancel', (e) => { touches.delete(e.pointerId); if (drag) { drag = null; controls.enabled = true; } }, { capture: true });
+}
+
 /* ---------------- roads, footpaths, street lamps ---------------- */
 /* Surveyed surfaces from the high-quality 3D data (tools/build_surfaces.mjs): photo-textured road
    surfaces, flyovers and footbridges (roads.glb), and ground surfaces such as pavements, plazas,
@@ -511,6 +568,7 @@ function infraMaterial() {
 // flyovers and footbridges: plain concrete, shaded like the buildings (the road surface on a flyover
 // deck is part of the road mesh, so the structure itself is never drawn as tarmac)
 const BRIDGE_MAT = new THREE.MeshLambertMaterial({ color: 0xd9d5cc, flatShading: true });
+let FLYOVER_MAT = null;   // carriageway flyovers: tarmac deck, concrete sides (created on first use)
 const ROAD_MAT = new THREE.MeshBasicMaterial({ color: 0xa7acb3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 async function loadSurfaces(s) {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -528,6 +586,37 @@ async function loadSurfaces(s) {
   s.scene.add(s.roads3d);
   if (s.infra) s.infra.visible = false;
   s.scene.updateMatrixWorld(true);
+}
+
+/* Base map: 'classic' (drawn map: plain roads with painted markings, contour hills, land cover) or
+   'real' (aerial photo everywhere and the photo-textured surveyed roads and bridges, loaded on first use). */
+const BASEMAP_KEY = 'gps-basemap';
+async function setBasemap(s, mode) {
+  s.basemap = mode;
+  try { localStorage.setItem(BASEMAP_KEY, mode); } catch (e) {}
+  const real = mode === 'real';
+  TERRAIN_U.uReal.value = real ? 1 : 0;
+  TERRAIN_U.uPhoto.value = real ? 1 : 0;
+  setSky(s);
+  if (real && !s.roadsPhoto && !s.roadsPhotoLoading) {
+    s.roadsPhotoLoading = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/model/roads-photo.glb').then((g) => {
+      g.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const map = o.material.map;
+        if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+        const bridge = /bridge/i.test(o.name || o.parent?.name || '');
+        o.material = new THREE.MeshBasicMaterial({ map, polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+        o.renderOrder = bridge ? 0 : 2;
+      });
+      s.roadsPhoto = g.scene; s.scene.add(g.scene);
+    }).catch((e) => console.warn('roads-photo.glb', e));
+  }
+  if (real) await s.roadsPhotoLoading;
+  const isReal = s.basemap === 'real';
+  if (s.roadsPhoto) s.roadsPhoto.visible = isReal;
+  if (s.roads3d) s.roads3d.visible = !isReal;
+  // painted markings belong to the drawn map; lamps stay in both
+  s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !isReal; });
 }
 
 // per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler)
@@ -563,7 +652,27 @@ async function makeRoads(s) {
   try {
     await loadSurfaces(s);
     const t0 = performance.now();
+    const NET = await fetch('data/roadnet.json').then((r) => r.json()).catch(() => null);
     const bridges = (s.roadMeshes || []).filter((m) => m.material === BRIDGE_MAT);
+    // a bridge that carries at least 20 m of a measured road centre line is a vehicle flyover:
+    // tarmac deck + markings; the rest (footbridges) stay concrete
+    const g0 = heightIndex(s.terrain);
+    for (const m of NET ? bridges : []) {
+      const hb = heightIndex([m], { upOnly: true });
+      let carried = 0;
+      for (const r of NET.roads) {
+        if (r.width < 6) continue;
+        for (let i = 0; i < r.pts.length - 1; i++) {
+          const [a, b] = [r.pts[i], r.pts[i + 1]], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(L / 2);
+          for (let k = 0; k < n; k++) {
+            const x = a[0] + ((b[0] - a[0]) * (k + 0.5)) / n, z = a[1] + ((b[1] - a[1]) * (k + 0.5)) / n;
+            const hy = hb(x, z), gy = g0(x, z);
+            if (Number.isFinite(hy) && Number.isFinite(gy) && hy - gy > 2.5) carried += L / n;
+          }
+        }
+      }
+      if (carried >= 20) { m.material = FLYOVER_MAT || (FLYOVER_MAT = infraMaterial()); m.userData.flyover = true; }
+    }
     const deckMeshes = bridges.length ? bridges : s.infra ? [s.infra] : [];
     const ground = heightIndex(s.terrain), deck = deckMeshes.length ? heightIndex(deckMeshes, { upOnly: true }) : () => NaN;
     const bIdx = heightIndex([s.buildings]);
@@ -571,13 +680,15 @@ async function makeRoads(s) {
     const root = document.documentElement;
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     makeTrees(s);
-    const NET = await fetch('data/roadnet.json').then((r) => r.json()).catch(() => null);
-    // road surfaces only - bridge decks (footbridges) must never carry the markings of the road below
-    const roadOnly = (s.roadMeshes || []).filter((m) => m.material === ROAD_MAT);
+    // road surfaces and flyover decks - footbridges must never carry the markings of the road below
+    const roadOnly = (s.roadMeshes || []).filter((m) => m.material === ROAD_MAT || m.userData.flyover);
     const surface = roadOnly.length ? heightIndex(roadOnly, { upOnly: true }) : null;
     const feat = NET && surface ? { ...FEAT, roads: NET.roads, marks: { ...NET.marks, icons: FEAT.marks?.icons || [] } } : FEAT;
     s.roads = buildRoads({ FEAT: feat, ground, deck, building: bIdx, lampGeo, dark, surface: NET ? surface : null });
     s.scene.add(s.roads);
+    let saved = 'classic';
+    try { saved = localStorage.getItem(BASEMAP_KEY) || 'classic'; } catch (e) {}
+    if (saved !== 'classic' || s.basemap) setBasemap(s, s.basemap || saved);
     console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
   } catch (e) { console.warn('roads not built', e); }
 }
