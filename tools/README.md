@@ -49,3 +49,19 @@ Map data © OpenStreetMap contributors (ODbL).
 
 Buildings missing from the 3D data are listed in `data/campus.json` → `extraBuildings` (footprint in model
 coordinates + height) and are extruded at runtime; use their ids in `data/places.json`.
+
+# Surveyed road, bridge and ground surfaces (high-quality tiles)
+
+`model/11-SW-7C.zip` and `model/11-SW-7D.zip` (Git LFS) are the photo-textured release of the same tiles.
+Their road surfaces (`INFRASTRUCTURE(TB)`), flyovers / footbridges (`INFRASTRUCTURE`), ground surfaces
+(`GENERIC`) and water (`WATERBODY`) become `assets/model/roads.glb` and `assets/model/ground.glb`:
+
+```bash
+unzip model/11-SW-7C.zip -x 'BUILDING/*' 'VEGETATION*' -d work/7C
+unzip model/11-SW-7D.zip -x 'BUILDING/*' 'VEGETATION*' -d work/7D
+node tools/build_surfaces.mjs work/7C work/7D
+```
+
+The map shows the road and bridge photos (with their real markings); ground surfaces show as flat
+paving / water in map mode and as photos with the aerial-photo layer on. When `roads.glb` loads, the
+drawn roads from `data/mapfeatures.json` are replaced and only street lamps and icons are added.

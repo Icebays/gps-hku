@@ -338,6 +338,7 @@ function setSky(s) {
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
+  setGroundStyle(s);
   INFRA_U.uDeck.value.set(dark ? 0x50565e : 0xa3a9b1); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
@@ -395,7 +396,7 @@ function buildUI() {
   S.legend = ui('map-legend', `<label><input type="checkbox" data-photo ${TERRAIN_U.uPhoto.value ? 'checked' : ''}>🛰 ${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
   S.legend.hidden = true;
   S.legend.addEventListener('change', (e) => {
-    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
+    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); setGroundStyle(S); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
@@ -516,16 +517,68 @@ function infraMaterial() {
 }
 
 /* ---------------- roads, footpaths, street lamps ---------------- */
+/* Surveyed surfaces from the high-quality 3D data (tools/build_surfaces.mjs): photo-textured road
+   surfaces, flyovers and footbridges (roads.glb), and ground surfaces such as pavements, plazas,
+   courts and water (ground.glb). They replace the plain infrastructure mesh. */
+async function loadSurfaces(s) {
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  const prep = (gltf, order, offset) => {
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const old = o.material, map = old.map;
+      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = s.renderer.capabilities.getMaxAnisotropy(); }
+      o.material = new THREE.MeshBasicMaterial({ map, color: map ? 0xffffff : 0xb9bcc0, polygonOffset: offset, polygonOffsetFactor: -2, polygonOffsetUnits: -2 * order });
+      o.renderOrder = order;
+      o.userData.surface = o.name || o.parent?.name;
+    });
+    return gltf.scene;
+  };
+  const [roads, ground] = await Promise.all([
+    loader.loadAsync('assets/model/roads.glb').catch((e) => (console.warn('roads.glb', e), null)),
+    loader.loadAsync('assets/model/ground.glb').catch((e) => (console.warn('ground.glb', e), null)),
+  ]);
+  if (ground) {
+    s.ground3d = prep(ground, 1, true);
+    s.ground3d.traverse((o) => { if (o.isMesh) o.userData.photo = o.material.map; });
+    s.scene.add(s.ground3d);
+    setGroundStyle(s);
+  }
+  if (roads) {
+    s.roads3d = prep(roads, 2, true);
+    // bridges are solid structures: no depth offset (it would let them show through hillsides)
+    s.roads3d.traverse((o) => { if (o.isMesh && /bridge/i.test(o.userData.surface || '')) { o.material.polygonOffset = false; o.renderOrder = 0; } });
+    s.scene.add(s.roads3d);
+    if (s.infra) s.infra.visible = false;
+  }
+  s.scene.updateMatrixWorld(true);
+}
+
+// ground surfaces: photo in aerial-photo mode, flat paving / water colours in map mode
+function setGroundStyle(s) {
+  if (!s.ground3d) return;
+  const photo = TERRAIN_U.uPhoto.value > 0.5;
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  s.ground3d.traverse((o) => {
+    if (!o.isMesh) return;
+    const water = /water/i.test(o.userData.surface || '');
+    o.material.map = photo ? o.userData.photo : null;
+    o.material.color.set(photo ? 0xffffff : water ? (dark ? 0x29475a : 0xa9cfe2) : (dark ? 0x434745 : 0xebe8e1));
+    o.material.needsUpdate = true;
+  });
+}
+
 async function makeRoads(s) {
   if (!FEAT) return;
   try {
+    await loadSurfaces(s);
     const t0 = performance.now();
     const ground = heightIndex(s.terrain), deck = s.infra ? heightIndex([s.infra], { upOnly: true }) : () => NaN;
     const bIdx = heightIndex([s.buildings]);
     const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
     const root = document.documentElement;
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    s.roads = buildRoads({ FEAT, ground, deck, building: bIdx, lampGeo, dark });
+    s.roads = buildRoads({ FEAT, ground, deck, building: bIdx, lampGeo, dark, furnitureOnly: !!s.roads3d });
     s.scene.add(s.roads);
     console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
   } catch (e) { console.warn('roads not built', e); }

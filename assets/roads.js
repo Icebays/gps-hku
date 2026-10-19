@@ -148,7 +148,9 @@ function decalAtlas() {
 const CELL = { slow: 0, bus_text: 1, bus: 2, lift: 3, taxi: 4 };
 
 /* ---------- build everything ---------- */
-export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark }) {
+// furnitureOnly: the surveyed, photo-textured road surfaces are shown instead (roads.glb), so only
+// street lamps and pavement icons are added on top.
+export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, furnitureOnly = false }) {
   const st = STYLE[dark ? 'dark' : 'light'];
   const L = { pave: new Layer(), kerb: new Layer(), tar: new Layer(), deckTar: new Layer(), white: new Layer(), yellow: new Layer(), walk: new Layer(), walkEdge: new Layer(), indoor: new Layer(), decal: new Layer() };
   const lamps = [];
@@ -291,10 +293,10 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark }) {
     const P = (a, b) => { const x = cx + ux * a + vx * b, z = cz + uz * a + vz * b; return [x, heightFor(x, z, false) + dy, z]; };
     layer.quad(P(a0, b0), P(a1, b0), P(a0, b1), P(a1, b1), uv);
   };
-  for (const c of M.crossings || []) for (let t = -c.width / 2 + 0.5; t <= c.width / 2 - 0.4; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
+  if (!furnitureOnly) for (const c of M.crossings || []) for (let t = -c.width / 2 + 0.5; t <= c.width / 2 - 0.4; t += 1.0) flat(L.white, c.p[0], c.p[1], c.dir[0], c.dir[1], -1.8, 1.8, t - 0.25, t + 0.25, 0.08);
   const cellUV = (k) => { const u0 = k / 5, u1 = (k + 1) / 5; return [u0, 1, u1, 1, u0, 0, u1, 0]; };
   const uvFor = (k, turn) => { const uv = cellUV(k); return turn ? [uv[6], uv[7], uv[4], uv[5], uv[2], uv[3], uv[0], uv[1]] : uv; }; // turn = rotate 180°
-  for (const s of M.slow || []) {
+  for (const s of furnitureOnly ? [] : M.slow || []) {
     const half = Math.min(1.1, s.width * 0.18);
     // glyph tops point along the direction of travel, so the approaching driver reads 慢 then 駛
     flat(L.decal, s.p[0], s.p[1], -s.up[1], s.up[0], -half, half, -2.6, 2.6, 0.09, uvFor(CELL.slow));
@@ -302,9 +304,9 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark }) {
   for (const b of M.busStops || []) {
     const nx = -b.dir[1] * b.side, nz = b.dir[0] * b.side, off = b.width / 2 - 1.5;
     const cx = b.p[0] + nx * off, cz = b.p[1] + nz * off;
-    for (const [a0, a1, b0, b1] of [[-7.5, 7.5, -1.4, -1.25], [-7.5, 7.5, 1.25, 1.4], [-7.5, -7.35, -1.4, 1.4], [7.35, 7.5, -1.4, 1.4]]) flat(L.yellow, cx, cz, b.dir[0], b.dir[1], a0, a1, b0, b1, 0.08);
+    if (!furnitureOnly) for (const [a0, a1, b0, b1] of [[-7.5, 7.5, -1.4, -1.25], [-7.5, 7.5, 1.25, 1.4], [-7.5, -7.35, -1.4, 1.4], [7.35, 7.5, -1.4, 1.4]]) flat(L.yellow, cx, cz, b.dir[0], b.dir[1], a0, a1, b0, b1, 0.08);
     // 巴士站 reads for traffic in the kerb lane (HK drives on the left)
-    flat(L.decal, cx, cz, b.dir[1] * b.side, -b.dir[0] * b.side, -0.9, 0.9, -3.4, 3.4, 0.09, uvFor(CELL.bus_text)); // tops toward -side*dir
+    if (!furnitureOnly) flat(L.decal, cx, cz, b.dir[1] * b.side, -b.dir[0] * b.side, -0.9, 0.9, -3.4, 3.4, 0.09, uvFor(CELL.bus_text)); // tops toward -side*dir
     const ix = b.p[0] + nx * (b.width / 2 + 1.2), iz = b.p[1] + nz * (b.width / 2 + 1.2);
     flat(L.decal, ix, iz, 1, 0, -1.3, 1.3, -1.3, 1.3, 0.12, uvFor(CELL.bus));
   }
@@ -319,7 +321,7 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark }) {
     decal: mat(0xffffff, 6, { map: decalAtlas(), transparent: true }),
   };
   const order = { pave: 1, walkEdge: 1, walk: 2, kerb: 2, tar: 3, deckTar: 3, indoor: 3, white: 5, yellow: 5, decal: 6 };
-  for (const k of Object.keys(L)) if (L[k].i.length) group.add(L[k].mesh(mats[k], order[k]));
+  for (const k of Object.keys(L)) if (L[k].i.length && (!furnitureOnly || k === 'decal')) group.add(L[k].mesh(mats[k], order[k]));
 
   // lamps (instanced) + lanterns
   if (lampGeo && lamps.length) {
