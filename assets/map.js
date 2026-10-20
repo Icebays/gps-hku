@@ -6,6 +6,7 @@ import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
 import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
+import { createIndoor, cutify } from './indoor.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -176,6 +177,19 @@ async function init() {
   window.addEventListener('gps-theme', () => setSky(s));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setSky(s));
 
+  // indoor floor plans (floor selector, building cut open above the chosen floor)
+  s.indoor = createIndoor(s);
+  s.onIndoor = (fl) => {
+    setParam('floor', fl ? fl.id : null);
+    if (s.hl) s.hl.visible = !fl;   // the gold highlight would hide the plan
+    (s.hlx || []).forEach((m) => (m.visible = !fl));
+    // bring the floor into view (closer than the building overview), keeping the heading
+    if (fl && fl._c) {
+      const span = fl._c.size * (innerWidth < innerHeight ? 1.6 : 1), d = s.camera.position.distanceTo(s.controls.target);
+      if (d > span * 2.4 || s.controls.target.distanceTo(fl._c.center) > span) flyTo(behind(fl._c.center, span * 1.25, span * 0.95), fl._c.center);
+    }
+  };
+
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const bar = wrap.querySelector('.bar i'), pct = wrap.querySelector('.pct');
   s.ready = Promise.all([
@@ -202,7 +216,7 @@ async function init() {
         o.material.polygonOffset = true; o.material.polygonOffsetFactor = 1; o.material.polygonOffsetUnits = 4; // roads draped on top win near-ties
         s.terrain = (s.terrain || []).concat(o);
       } else if (n.startsWith('buildings')) {
-        o.material = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
+        o.material = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
         o.castShadow = o.receiveShadow = true;
         s.buildings = o;
         s.bIndexAll = o.geometry.index.array;
@@ -215,7 +229,7 @@ async function init() {
     // non-HKU buildings: see-through decoration, not clickable (except in edit mode).
     // Child of the buildings mesh so it shares its (dequantizing) transform.
     const bg = s.buildings.geometry;
-    s.deco = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
+    s.deco = new THREE.Mesh(new THREE.BufferGeometry(), cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false })));
     for (const k of ['position', 'normal', '_bid']) if (bg.attributes[k]) s.deco.geometry.setAttribute(k, bg.attributes[k]);
     s.deco.renderOrder = 1; s.deco.castShadow = true;
     s.buildings.add(s.deco);
@@ -403,6 +417,7 @@ function setSky(s) {
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
+  s.indoor?.paint();
   INFRA_U.uDeck.value.set(dark ? 0x4d535b : 0xa7acb3); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
@@ -928,7 +943,7 @@ async function setBasemap(s, mode) {
       if (!o.isMesh) return;
       const map = o.material.map;
       if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-      o.material = new THREE.MeshBasicMaterial({ map });   // photo is already lit
+      o.material = cutify(new THREE.MeshBasicMaterial({ map }));   // photo is already lit
       o.castShadow = true;
     });
     s.satBuildings = g.scene; s.scene.add(g.scene);
@@ -1064,7 +1079,7 @@ async function makeRoads(s) {
    from OpenStreetMap) are extruded from the ground and get bids after the model's. */
 function makeExtraBuildings(s, list) {
   s.extras = [];
-  const mat = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
+  const mat = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
   for (const e of list) {
     const ground = Math.min(...e.footprint.map(([x, z]) => groundHeightIn(s, x, z) ?? 80));
     const shape = new THREE.Shape(e.footprint.map(([x, z]) => new THREE.Vector2(x, -z)));
@@ -1109,7 +1124,7 @@ function splitBuildings() {
   S.deco.geometry.setIndex(deco);
   S.deco.geometry.computeBoundingSphere(); S.deco.geometry.computeBoundingBox();
 }
-const HL_MAT = new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+const HL_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
 function highlight(bids) {
   if (S.hl) { S.hl.parent?.remove(S.hl); S.hl = null; }
   (S.hlx || []).forEach((m) => S.scene.remove(m)); S.hlx = [];
@@ -1151,6 +1166,9 @@ function selectPlace(p, fly) {
     }
   }
   setParam('place', p.id);
+  // floor plans: selector + the chosen floor (from ?floor= when shared)
+  const want = S.params?.get('floor');
+  S.indoor.open(p.id, want).then((ok) => { if (!ok && S.indoor.place) S.indoor.close(); });
 }
 function selectBuilding(bid) {
   const code = S.bmeta[bid].id;
@@ -1164,6 +1182,7 @@ function selectBuilding(bid) {
   setParam('place', null);
 }
 function clearSelection() {
+  S.indoor?.close(); setParam('floor', null);
   S.selected = null; highlight(null);
   S.pins.forEach((q) => q.el.classList.remove('active'));
   S.info?.remove(); S.info = null;
@@ -1427,6 +1446,7 @@ function frame(now) {
   if (S.anim) S.anim(now);
   S.controls.update();
   fitShadow(S);
+  S.indoor?.update();
   S.renderer.render(S.scene, S.camera);
   if (S.compass) S.compass.style.transform = `rotate(${(S.controls.getAzimuthalAngle() * 180) / Math.PI}deg)`;
   updatePins();

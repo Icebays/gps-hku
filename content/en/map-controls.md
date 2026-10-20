@@ -20,6 +20,10 @@
 | Filter (sliders) | Shows or hides place categories. |
 | ✎ Edit | Contributor mode for labelling buildings and drawing routes. See [Contribute & edit](contribute). |
 
+## Floor plans (indoor)
+
+Pick a building that has floor plans (now: the **Main Library**, Old & New Wing) and a floor selector appears on the left, as in Google or Apple Maps. Choose a floor (G–6) and the building is cut open above it so you see that floor drawn at its real height: study areas, bookshelves, tables, walls and stairs, room and collection names (call-number signs appear as you zoom in) and symbols for toilets, lifts, fire exits, printers, catalogue (OPAC) terminals and dictionary stands. The house button shows the building from outside again. The floor is kept in the page address (`&floor=3`), so a shared link opens the same floor. Plans are redrawn from [HKU Libraries' floor plans](https://lib.hku.hk/mainlib/floorplan.html); floor heights are estimated from the 3D model.
+
 ## Sun, shadows and weather
 
 - **Sun and shadows**: the sun is placed where it really is at HKU right now. Buildings, bridges and trees cast soft shadows, the light warms near sunrise and sunset, and at night it goes flat with no shadows. Cloud and rain soften the shadows. In the Satellite style the photo already has its own shadows, so the ground gets none added.

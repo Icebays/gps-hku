@@ -1,0 +1,192 @@
+{
+ "_readme": "Main Library floor plans: one entry per floor, its PDF(s) from HKU Libraries (https://lib.hku.hk/mainlib/floorplan.html) and each plan's registration to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = PDF points; fitted to the surveyed footprints of the Old Wing B32228..., New Wing B32234... and podium B32273... and to the plans' common column grid). y = floor level in mPD: G/F is Sun Yat-sen Place (81 m, the podium roof) and floors are 4 m apart (New Wing roof 101 m above 4/F, Old Wing roof 109 m above 6/F).",
+ "place": "main-library",
+ "source": {
+  "en": "Floor plans: HKU Libraries (redrawn)",
+  "zh": "平面圖：香港大學圖書館（重新繪製）",
+  "url": "https://lib.hku.hk/mainlib/floorplan.html"
+ },
+ "extent": [
+  -80,
+  70,
+  -225,
+  -90
+ ],
+ "default": "G",
+ "floors": [
+  {
+   "id": "G",
+   "name": {
+    "en": "G/F",
+    "zh": "地下"
+   },
+   "y": 81.0,
+   "h": 4.0,
+   "updated": "Feb 2023",
+   "plans": [
+    {
+     "file": "FloorPlan-GF-202302.pdf",
+     "M": [
+      -0.0815468,
+      -0.0031332,
+      28.5309015,
+      -108.4410128
+     ]
+    }
+   ]
+  },
+  {
+   "id": "1",
+   "name": {
+    "en": "1/F",
+    "zh": "1 樓"
+   },
+   "y": 85.0,
+   "h": 4.0,
+   "updated": "Jun 2023 / Jun 2026",
+   "plans": [
+    {
+     "file": "FloorPlan-1F-OW-202306_2.pdf",
+     "M": [
+      -0.0655221,
+      -0.0022483,
+      26.7058452,
+      -101.7976699
+     ]
+    },
+    {
+     "file": "FloorPlan-1F-NW-202606_2.pdf",
+     "M": [
+      -0.0857115,
+      -0.0038851,
+      31.4548223,
+      -121.1942674
+     ]
+    }
+   ]
+  },
+  {
+   "id": "2",
+   "name": {
+    "en": "2/F",
+    "zh": "2 樓"
+   },
+   "y": 89.0,
+   "h": 4.0,
+   "updated": "Nov 2024",
+   "plans": [
+    {
+     "file": "FloorPlan-2F-OW-202411.pdf",
+     "M": [
+      -0.0614897,
+      -0.0022772,
+      24.2254151,
+      -103.1062957
+     ]
+    },
+    {
+     "file": "FloorPlan-2F-NW-202606.pdf",
+     "M": [
+      -0.0709476,
+      -0.0026277,
+      29.2960937,
+      -128.6820061
+     ]
+    }
+   ]
+  },
+  {
+   "id": "3",
+   "name": {
+    "en": "3/F",
+    "zh": "3 樓"
+   },
+   "y": 93.0,
+   "h": 4.0,
+   "updated": "Sep 2024",
+   "plans": [
+    {
+     "file": "FloorPlan-3F-NOW-20240919.pdf",
+     "M": [
+      -0.0693363,
+      -0.0028832,
+      25.756001,
+      -108.7190183
+     ]
+    }
+   ]
+  },
+  {
+   "id": "4",
+   "name": {
+    "en": "4/F",
+    "zh": "4 樓"
+   },
+   "y": 97.0,
+   "h": 4.0,
+   "updated": "Feb 2023",
+   "plans": [
+    {
+     "file": "FloorPlan-4F-OW-202302.pdf",
+     "M": [
+      -0.0626406,
+      -0.0025979,
+      25.1000699,
+      -102.8574943
+     ]
+    },
+    {
+     "file": "FloorPlan-4F-NW-202302.pdf",
+     "M": [
+      -0.0693416,
+      -0.0028274,
+      29.0787426,
+      -129.0825681
+     ]
+    }
+   ]
+  },
+  {
+   "id": "5",
+   "name": {
+    "en": "5/F",
+    "zh": "5 樓"
+   },
+   "y": 101.0,
+   "h": 4.0,
+   "updated": "Nov 2024",
+   "plans": [
+    {
+     "file": "FloorPlan-5F-202411.pdf",
+     "M": [
+      -0.0633102,
+      -0.0021964,
+      25.132482,
+      -103.3347194
+     ]
+    }
+   ]
+  },
+  {
+   "id": "6",
+   "name": {
+    "en": "6/F",
+    "zh": "6 樓"
+   },
+   "y": 105.0,
+   "h": 4.0,
+   "updated": "Feb 2023",
+   "plans": [
+    {
+     "file": "FloorPlan-6F-202302.pdf",
+     "M": [
+      -0.0640024,
+      -0.0021921,
+      25.341366,
+      -103.2437218
+     ]
+    }
+   ]
+  }
+ ]
+}

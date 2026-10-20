@@ -277,3 +277,22 @@ body.map-mode .page { max-width: none; padding: 0; }
 .map-weather .wx-src:hover { text-decoration: underline; }
 @media (max-width: 860px) { .map-weather { left: 8px; bottom: 8px; } }
 @media (max-width: 860px) { .map-credit { max-width: calc(100% - 200px); right: 8px; bottom: 8px; } }
+
+/* indoor floor plans: floor selector (left, above the info card / weather) and labels */
+.map-floors { left: 14px; bottom: 66px; display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; max-height: calc(100% - 140px); overflow-y: auto; }
+.map-floors button { width: 42px; height: 36px; flex: none; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); cursor: pointer; font: inherit; font-size: 14px; font-weight: 650; display: grid; place-items: center; }
+.map-floors button:hover { background: var(--bg-hover); }
+.map-floors button.on { background: var(--accent); color: #fff; }
+.map-floors button.out.on { background: var(--bg-hover); color: var(--text); }
+.map-floors .src { display: block; text-align: center; font-size: 12px; line-height: 22px; color: var(--text-soft); text-decoration: none; }
+.indoor-labels { z-index: 3; }
+.indoor-label { position: absolute; left: 0; top: 0; font-size: 11px; line-height: 1.2; font-weight: 600; color: var(--text); text-align: center; white-space: nowrap; pointer-events: none; will-change: transform;
+  text-shadow: 0 0 2px var(--bg), 0 0 4px var(--bg), 0 0 7px var(--bg); }
+.indoor-label.shelf { font-size: 10px; font-weight: 500; color: #8a5a2b; }
+.indoor-label.zone { font-size: 12.5px; font-weight: 700; color: var(--accent-text); }
+.indoor-icon { position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; color: #fff; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.25); will-change: transform; }
+.indoor-icon.wc-m { background: #3d6fb5; } .indoor-icon.wc-f { background: #b8457a; } .indoor-icon.lift { background: #4b5563; }
+.indoor-icon.exit { background: #15803d; } .indoor-icon.opac { background: #c2410c; } .indoor-icon.dict { background: #8d5524; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .indoor-label.shelf { color: #d9b58c; } }
+:root[data-theme="dark"] .indoor-label.shelf { color: #d9b58c; }
+@media (max-width: 860px) { .map-floors { left: 8px; } .map-floors button { width: 40px; height: 34px; } }

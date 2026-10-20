@@ -103,3 +103,18 @@ split along the cuts, packed into 2048 px atlas pages with real neighbouring pix
 are KTX2 / Basis ETC1S, which stay compressed on the GPU (about 3 MB a page instead of 22 MB), so phones can
 hold them; the site decodes them with three.js KTX2Loader (`vendor/three/addons/libs/basis`).
 They load only when the layers menu picks "Classic + real buildings" (buildings) or "Satellite" (all).
+
+# Indoor floor plans
+
+```bash
+python3 tools/build_indoor.py tools/indoor/main-library.json <folder with the PDFs> data/indoor/main-library.json
+```
+
+`tools/indoor/<place>.json` lists each floor (id, name, level in mPD) with its floor-plan PDF(s) and their
+registration to the model frame (x = a·u − b·v + tx, z = b·u + a·v + tz; u, v in PDF points). The Main Library
+PDFs are HKU Libraries' plans (https://lib.hku.hk/mainlib/floorplan.html, file names as published, not kept in
+this repo). They were registered by matching each plan's outline to the surveyed footprints of the Old Wing,
+New Wing and podium and the plans' common column grid. The script reads the vector drawing, classifies every
+path by colour, merges shelves / tables / seats into blocks, keeps walls as lines, turns legend symbols into
+icons and texts into labels, and writes `data/indoor/<place>.json`; `data/indoor/index.json` maps place ids to
+these files. The map draws them with `assets/indoor.js`.

@@ -1,0 +1,1 @@
+{ "_readme": "place id -> floor-plan file (tools/build_indoor.py); a place listed here gets the floor selector on the map", "main-library": "main-library.json" }
