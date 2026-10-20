@@ -213,8 +213,10 @@ export function createIndoor(S) {
   }
   const loadIndex = () => st.index || (st.index = fetch('data/indoor/index.json').then((r) => r.json()).catch(() => ({})));
 
-  function cutMask(d) {
-    // all floors' outlines, 1.5 m wider, as the top-down cut mask
+  function cutMask(d, cur) {
+    // the outlines of this floor and the floors above it, 1.5 m wider, as the top-down cut mask: the building is cut
+    // open where the plan is drawn and where floors above it stand, so a neighbouring part the plans only cover lower
+    // down (the west building, on G/F and 1/F) stays whole, roof and all, when the floor shown is above it
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
     for (const fl of d.floors) for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) {
       x0 = Math.min(x0, p[0][i]); x1 = Math.max(x1, p[0][i]); z0 = Math.min(z0, p[0][i + 1]); z1 = Math.max(z1, p[0][i + 1]);
@@ -222,7 +224,7 @@ export function createIndoor(S) {
     x0 -= 4; z0 -= 4; x1 += 4; z1 += 4;
     const R = 4, cv = document.createElement('canvas'); cv.width = Math.ceil((x1 - x0) * R); cv.height = Math.ceil((z1 - z0) * R);
     const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = 3 * R; g.lineJoin = 'round';
-    for (const fl of d.floors) for (const p of fl.slab) {
+    for (const fl of d.floors) if (fl.y >= cur.y - 0.1) for (const p of fl.slab) {
       g.beginPath();
       for (let i = 0; i < p[0].length; i += 2) g[i ? 'lineTo' : 'moveTo']((p[0][i] - x0) * R, (p[0][i + 1] - z0) * R);
       g.closePath(); g.fill(); g.stroke();
@@ -314,6 +316,8 @@ export function createIndoor(S) {
     S.scene.add(st.group.group);
     st.under = below(d, fl).map(built); st.under.forEach((u) => S.scene.add(u.group));
     st.group.labels.forEach((l) => labelBox.appendChild(l.el));
+    fl._cut = fl._cut || cutMask(d, fl);
+    CUT_U.uCutMap.value = fl._cut.tex; CUT_U.uCutBox.value.copy(fl._cut.box);
     CUT_U.uCutOn.value = 1; CUT_U.uCutY.value = fl.y + 0.25;
     paint();
     S.onIndoor?.(fl);
@@ -347,12 +351,11 @@ export function createIndoor(S) {
     if (!st.data[placeId]) {
       const d = await fetch('data/indoor/' + idx[placeId]).then((r) => r.json()).catch(() => null);
       if (!d) return false;
-      d._cut = cutMask(d); st.data[placeId] = d;
+      st.data[placeId] = d;
     }
     const d = st.data[placeId];
     if (st.place !== placeId) close();
     st.place = placeId;
-    CUT_U.uCutMap.value = d._cut.tex; CUT_U.uCutBox.value.copy(d._cut.box);
     selector(d);
     show(floorId && d.floors.some((f) => f.id === floorId) ? floorId : d.default || d.floors[0].id);
     return true;
