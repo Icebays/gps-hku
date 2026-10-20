@@ -11,7 +11,7 @@ import { weld, simplifyPrimitive, quantize, meshopt, textureCompress, prune } fr
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
-const [, , input, vegRatio = '0.08'] = process.argv;
+const [, , input, vegRatio = '0.06'] = process.argv;
 await MeshoptEncoder.ready; await MeshoptSimplifier.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
 
@@ -22,11 +22,11 @@ async function part(prefix, out, compressGeometry) {
   await doc.transform(prune(), weld());   // weld only merges identical vertices: lossless
   for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) {
     const n0 = prim.getIndices().getCount() / 3;
-    if (compressGeometry) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: +vegRatio, error: 0.02 });
+    if (compressGeometry) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: +vegRatio, error: 0.03 });
     console.log(mesh.getName(), n0, '->', prim.getIndices().getCount() / 3, 'triangles');
   }
   const steps = [prune(), textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 82 })];
-  if (compressGeometry) steps.push(quantize({ quantizePosition: 16, quantizeTexcoord: 14 }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
+  if (compressGeometry) steps.push(quantize({ quantizePosition: 16, quantizeColor: 8 }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
   await doc.transform(...steps);
   await io.write(out, doc);
   console.log('written', out);

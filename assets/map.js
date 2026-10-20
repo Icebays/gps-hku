@@ -678,7 +678,9 @@ async function setBasemap(s, mode) {
         if (!o.isMesh) return;
         const map = o.material.map;
         if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-        o.material = new THREE.MeshBasicMaterial({ map });
+        // buildings: photo (already lit); vegetation: colours sampled from its photos, lightly shaded
+        o.material = map ? new THREE.MeshBasicMaterial({ map })
+          : new THREE.MeshLambertMaterial({ vertexColors: !!o.geometry.attributes.color, flatShading: true });
       });
       return g.scene;
     };

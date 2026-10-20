@@ -6,8 +6,9 @@
 Takes the high-quality tiles (model/11-SW-7C.zip, 11-SW-7D.zip unzipped with BUILDING and VEGETATION):
 - HKU buildings only (the same rule as the map: inside a campus area of data/campus.json, or tagged
   in data/places.json, plus 'include', minus 'exclude'); every other building stays white on the map.
-- the VEGETATION(TB) tree meshes.
-Their photos are cropped to the part actually used, scaled to a pixel budget and packed into a few
+- the VEGETATION(TB) tree meshes, as vertex colours sampled from their photos (welded, so
+  tools/optimize_satellite.mjs can simplify them; leaf texture detail is invisible at map scale).
+The building photos are cropped to the part actually used, scaled to a pixel budget and packed into a few
 2048 px atlas pages (one draw call and a small, fixed GPU memory cost per page). Faces whose texture
 repeats (UV span > 1) get the photo's average colour. Coordinates: x = E - 832250, y = mPD, z = -(N - 815900).
 Needs: numpy, pillow
@@ -125,7 +126,29 @@ bitems = gather([os.path.join(d, os.path.basename(d) + '.gltf') for d in bdirs])
 vitems = gather([f for t in tiles for f in glob.glob(f'{t}/VEGETATION*/*/*.gltf')])
 print('HKU buildings', len(bdirs), 'textured prims', len(bitems), '| vegetation prims', len(vitems))
 bpages, (bres,) = pack([(bitems, 1.0)], 4 * PAGE * PAGE * 0.8)
-vpages, (vres,) = pack([(vitems, 1.0)], PAGE * PAGE * 0.85)
+
+def vegetation_colours(items):
+    """Per-vertex colours: each triangle samples its photo at the centroid; shared corners average."""
+    Ps, Cs = [], []
+    cache = {}
+    for T, UV, img in items:
+        if img not in cache:
+            im = Image.open(img).convert('RGB'); im.thumbnail((256, 256))
+            cache[img] = np.asarray(im).astype(np.float32)
+        a = cache[img]; h, w = a.shape[:2]
+        c = UV.mean(1); c = c - np.floor(c)
+        col = a[np.clip((c[:, 1] * h).astype(int), 0, h - 1), np.clip((c[:, 0] * w).astype(int), 0, w - 1)]
+        Ps.append(T.reshape(-1, 3)); Cs.append(np.repeat(col, 3, 0))
+    P_ = np.concatenate(Ps); C_ = np.concatenate(Cs)
+    key = np.round(P_ * 1000).astype(np.int64)
+    uniq, inv = np.unique(key, axis=0, return_inverse=True); inv = inv.ravel()
+    cnt = np.bincount(inv); col = np.stack([np.bincount(inv, C_[:, i]) / cnt for i in range(3)], 1)
+    pos = np.zeros((len(uniq), 3)); np.add.at(pos, inv, P_); pos /= cnt[:, None]
+    I = inv.reshape(-1, 3)
+    I = I[(I[:, 0] != I[:, 1]) & (I[:, 1] != I[:, 2]) & (I[:, 0] != I[:, 2])]
+    return pos.astype(np.float32), (col / 255).astype(np.float32), I.astype(np.uint32)
+vpos, vcol, vidx = vegetation_colours(vitems)
+print('vegetation', len(vpos), 'vertices', len(vidx), 'triangles')
 
 # ---------- GLB writer ----------
 chunks, views, accs, meshes, nodes, mats, images, textures = [], [], [], [], [], [], [], []
@@ -156,7 +179,10 @@ def emit(name, res, pages):
                                                               indices=add_acc(I, 'SCALAR', 5125, 34963), material=mids[k])]))
         nodes.append(dict(name=f'{name}_{k}', mesh=len(meshes) - 1))
 emit('hku_buildings', bres, bpages)
-emit('vegetation', vres, vpages)
+mats.append(dict(pbrMetallicRoughness=dict(metallicFactor=0, roughnessFactor=1)))
+meshes.append(dict(name='vegetation', primitives=[dict(attributes=dict(POSITION=add_acc(vpos, 'VEC3', 5126, 34962, True), COLOR_0=add_acc(vcol, 'VEC3', 5126, 34962)),
+                                                     indices=add_acc(vidx, 'SCALAR', 5125, 34963), material=len(mats) - 1)]))
+nodes.append(dict(name='vegetation', mesh=len(meshes) - 1))
 g = dict(asset=dict(version='2.0', copyright='3D Spatial Data © Lands Department, HKSAR Government'), scene=0, scenes=[dict(nodes=list(range(len(nodes))))],
          nodes=nodes, meshes=meshes, materials=mats, images=images, textures=textures, accessors=accs, bufferViews=views,
          samplers=[dict(magFilter=9729, minFilter=9987, wrapS=33071, wrapT=33071)], buffers=[dict(byteLength=sum(len(c) for c in chunks))])
@@ -166,4 +192,4 @@ with open(out, 'wb') as fo:
     fo.write(struct.pack('<III', 0x46546C67, 2, 28 + len(js) + len(bb)))
     fo.write(struct.pack('<II', len(js), 0x4E4F534A)); fo.write(js)
     fo.write(struct.pack('<II', len(bb), 0x004E4942)); fo.write(bb)
-print('pages: buildings', len(bpages), 'vegetation', len(vpages), '->', out, round(os.path.getsize(out) / 1e6, 1), 'MB')
+print('pages: buildings', len(bpages), '->', out, round(os.path.getsize(out) / 1e6, 1), 'MB')
