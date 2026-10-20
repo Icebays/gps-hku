@@ -13,21 +13,17 @@ const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.18;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
-        locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
-        height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans', help: 'Know this building? Help label it',
-        editBar: 'Edit mode — click a building to tag it', exportPlaces: 'Export places.json', drawRoute: 'Draw route', finishRoute: 'Copy route JSON',
-        undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
-        outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
+        locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
+        height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans',
+        outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet.',
         min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
-        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
+        guess: 'Approximate position, not yet confirmed.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
-        locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
-        height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
-        editBar: '編輯模式 — 點選大樓以標示', exportPlaces: '匯出 places.json', drawRoute: '繪畫路線', finishRoute: '複製路線 JSON',
-        undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
-        outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
+        locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', unnamed: '未命名大樓',
+        height: '高度', guide: '大樓指南', floorPlans: '平面圖',
+        outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。',
         min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
-        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
+        guess: '位置係估計，未經確認。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
@@ -38,7 +34,6 @@ const ICON = {
   filter: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>',
   layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   routes: '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="6" cy="19" r="2.5" fill="currentColor"/><circle cx="18" cy="5" r="2.5" fill="currentColor"/><path d="M6 16.5V12a3 3 0 0 1 3-3h6a3 3 0 0 0 3-3V7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2.5"/></svg>',
-  edit: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
@@ -134,7 +129,7 @@ async function init() {
   const wrap = document.createElement('div');
   wrap.className = 'map-wrap';
   wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels area-labels"></div><div class="labels pin-labels"></div>`;
-  const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, edit: false, drawing: null, highlightCache: new Map() };
+  const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, highlightCache: new Map() };
 
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
@@ -226,7 +221,7 @@ async function init() {
       }
       s.pickables.push(o);
     });
-    // non-HKU buildings: see-through decoration, not clickable (except in edit mode).
+    // non-HKU buildings: see-through decoration, not clickable.
     // Child of the buildings mesh so it shares its (dequantizing) transform.
     const bg = s.buildings.geometry;
     s.deco = new THREE.Mesh(new THREE.BufferGeometry(), cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false })));
@@ -568,12 +563,11 @@ function buildUI() {
     <button data-a="locate" title="${tt('locate')}">${ICON.locate}</button>
     <button data-a="routes" title="${tt('routes')}">${ICON.routes}</button>
     <button data-a="layers" title="${tt('layers')}" class="${S.basemap && S.basemap !== 'classic' ? 'on' : ''}">${ICON.layers}</button>
-    <button data-a="filter" title="${tt('filter')}">${ICON.filter}</button>
-    <button data-a="edit" title="${tt('edit')}" class="${S.edit ? 'on' : ''}">${ICON.edit}</button>`);
+    <button data-a="filter" title="${tt('filter')}">${ICON.filter}</button>`);
   S.compass = tools.querySelector('.compass svg');
   tools.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    ({ north: faceNorth, reset: () => flyTo(S.home.pos, S.home.target), top: toggleTop, locate, routes: toggleRoutes, layers: cycleBasemap, filter: toggleLayers, edit: () => setEdit(!S.edit) })[b.dataset.a]();
+    ({ north: faceNorth, reset: () => flyTo(S.home.pos, S.home.target), top: toggleTop, locate, routes: toggleRoutes, layers: cycleBasemap, filter: toggleLayers })[b.dataset.a]();
   });
 
   const cats = S.places?.categories || {};
@@ -589,10 +583,9 @@ function buildUI() {
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
-  S.info = null; S.editBar = null; S.routePanel = null;
+  S.info = null; S.routePanel = null;
   // weather + HKO warnings (bottom left); cloud and rain soften the sun's shadows
   S.weather = mountWeather(S.wrap, { lang: getLang(), onSky: (clear) => { if (S.weatherClear !== clear) { S.weatherClear = clear; updateSun(S); } } });
-  if (S.edit) setEdit(true);
 }
 
 // layers button: switch the base map, classic <-> satellite
@@ -1179,7 +1172,7 @@ function selectBuilding(bid) {
   const code = S.bmeta[bid].id;
   // a building can belong to several places (e.g. a tower and its campus): pick the most specific
   const p = S.places.places.filter((x) => x.buildings.includes(code)).sort((a, b) => a.buildings.length - b.buildings.length)[0];
-  if (p && !S.edit) return selectPlace(p, false);
+  if (p) return selectPlace(p, false);
   S.selected = { bid, place: p || null, bids: [bid] };
   highlight([bid]);
   S.pins.forEach((q) => q.el.classList.toggle('active', false));
@@ -1204,35 +1197,16 @@ function showInfo() {
   const hgt = bm.length ? Math.round(Math.max(...bm.map((b) => b.top - b.base))) : null;
   const cat = p && S.places.categories[p.cat];
   let html = `<button class="icon-btn close">${ICON.close}</button>`;
-  if (p && (!S.edit || sel.bid == null)) {
+  if (p) {
     html += `<h3>${esc(L(p.name))}</h3><div class="sub"><i class="dot" style="background:${cat?.color}"></i>${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
       ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}${p.guess ? `<p class="guess">⚠︎ ${tt('guess')}</p>` : ''}
       <div class="acts"><a class="btn primary" href="${href('buildings', { b: p.id })}">${tt('guide')}</a>${p.floors?.length ? `<a class="btn" href="${href('buildings', { b: p.id })}">🗺 ${tt('floorPlans')} (${p.floors.length})</a>` : ''}</div>`;
   } else {
     const b = S.bmeta[sel.bid];
-    html += `<h3>${p ? esc(L(p.name)) : tt('unnamed')}</h3><div class="sub">${tt('height')} ≈ ${hgt} m · ${Math.round(b.base)}–${Math.round(b.top)} mPD</div>`;
-    if (S.edit) {
-      html += `<p><code>${b.id}</code></p><label style="font-size:13px">${tt('assign')}</label><select>${`<option value="">${tt('choose')}</option>` +
-        S.places.places.map((x) => `<option value="${x.id}" ${x.buildings.includes(b.id) ? 'selected' : ''}>${esc(L(x.name))}${x.buildings.includes(b.id) ? ' ✓' : ''}</option>`).join('')}</select>
-        <div class="acts"><button class="btn" data-copy="${b.id}">Copy ID</button>${p ? `<button class="btn" data-remove="${p.id}">${tt('remove')} ${esc(L(p.name))}</button>` : ''}</div>`;
-    } else {
-      html += `<p></p><div class="acts"><a class="btn" href="${href('contribute')}">${tt('help')}</a></div>`;
-    }
+    html += `<h3>${tt('unnamed')}</h3><div class="sub">${tt('height')} ≈ ${hgt} m · ${Math.round(b.base)}–${Math.round(b.top)} mPD</div>`;
   }
   d.innerHTML = html;
   d.querySelector('.close').addEventListener('click', clearSelection);
-  d.querySelector('select')?.addEventListener('change', (e) => {
-    const target = S.places.places.find((x) => x.id === e.target.value); if (!target) return;
-    const code = S.bmeta[sel.bid].id;
-    if (!target.buildings.includes(code)) target.buildings.push(code);
-    S.dirty = true; splitBuildings(); makePins(); selectBuilding(sel.bid); updateEditBar();
-  });
-  d.querySelector('[data-remove]')?.addEventListener('click', (e) => {
-    const target = S.places.places.find((x) => x.id === e.target.dataset.remove);
-    target.buildings = target.buildings.filter((c) => c !== S.bmeta[sel.bid].id);
-    S.dirty = true; splitBuildings(); makePins(); selectBuilding(sel.bid); updateEditBar();
-  });
-  d.querySelector('[data-copy]')?.addEventListener('click', (e) => copy(e.target.dataset.copy));
   S.wrap.appendChild(d);
   S.info = d;
   S.wrap.classList.add('info-open');
@@ -1246,16 +1220,15 @@ function onClick(e) {
   _ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   S.ray.setFromCamera(_ndc, S.camera);
   const hits = S.ray.intersectObjects(S.pickables, false);
-  if (S.drawing) { if (hits[0]) addRoutePoint(hits[0].point); return; }
-  // decorative buildings only react in edit mode (so they can still be tagged)
-  const hit = S.edit ? hits[0] : hits.find((h) => h.object !== S.deco);
-  if (!S.edit && hits[0]?.object === S.deco && hit?.object !== S.buildings) return;
+  // decorative (non-HKU) buildings don't react, and clicks pass through them
+  const hit = hits.find((h) => h.object !== S.deco);
+  if (hits[0]?.object === S.deco && hit?.object !== S.buildings) return;
   if (!hit) return clearSelection();
-  if (hit.object === S.buildings || hit.object === S.deco) {
+  if (hit.object === S.buildings) {
     const bid = S.buildings.geometry.attributes._bid.getX(hit.face.a);
     selectBuilding(bid);
   } else if (hit.object.userData.bid != null) selectBuilding(hit.object.userData.bid);
-  else if (!S.edit) clearSelection();
+  else clearSelection();
 }
 
 /* ---------------- camera ---------------- */
@@ -1374,49 +1347,6 @@ function showRoute(i, fly) {
     flyTo(behind(c, size * 0.9 + 80, size * 0.7 + 60), c);
   }
 }
-function addRoutePoint(p) {
-  S.drawing.push([+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)]);
-  redrawDraft();
-}
-function redrawDraft() {
-  if (S.drawObj) S.scene.remove(S.drawObj);
-  S.drawObj = routeMesh(S.drawing, 0x2563eb);
-  if (S.drawObj) S.scene.add(S.drawObj);
-  updateEditBar();
-}
-
-/* ---------------- edit mode ---------------- */
-function setEdit(on) {
-  S.edit = on;
-  S.wrap.querySelector('[data-a="edit"]')?.classList.toggle('on', on);
-  S.editBar?.remove(); S.editBar = null;
-  if (!on) { S.drawing = null; if (S.drawObj) S.scene.remove(S.drawObj); S.drawObj = null; setParam('edit', null); if (S.selected) clearSelection(); return; }
-  setParam('edit', '1');
-  const d = document.createElement('div');
-  d.className = 'map-ui map-edit-bar';
-  S.wrap.appendChild(d); S.editBar = d;
-  d.addEventListener('click', (e) => {
-    const a = e.target.closest('[data-x]')?.dataset.x;
-    if (a === 'export') download('places.json', JSON.stringify(S.places, null, 2));
-    if (a === 'draw') { S.drawing = []; updateEditBar(); }
-    if (a === 'undo') { S.drawing.pop(); redrawDraft(); }
-    if (a === 'finish') {
-      const { len } = routeStats(S.drawing);
-      copy(JSON.stringify({ id: 'new-route', name: { en: 'New route', zh: '新路線' }, color: '#e11d48', length_m: Math.round(len), points: S.drawing }));
-      S.drawing = null; if (S.drawObj) S.scene.remove(S.drawObj); S.drawObj = null; updateEditBar();
-    }
-  });
-  updateEditBar();
-}
-function updateEditBar() {
-  if (!S.editBar) return;
-  if (S.drawing) {
-    S.editBar.innerHTML = `<span>${tt('drawRoute')}: ${S.drawing.length} pts · ${Math.round(routeStats(S.drawing).len)} m</span><button class="btn" data-x="undo">${tt('undo')}</button><button class="btn" data-x="finish">${tt('finishRoute')}</button>`;
-  } else {
-    S.editBar.innerHTML = `<span>${tt('editBar')}</span><button class="btn" data-x="draw">${tt('drawRoute')}</button><button class="btn" data-x="export">${tt('exportPlaces')}${S.dirty ? ' •' : ''}</button>`;
-  }
-}
-
 /* ---------------- helpers ---------------- */
 function setParam(k, v) {
   const [base, qs] = location.hash.split('?');
@@ -1427,21 +1357,14 @@ function setParam(k, v) {
 }
 function applyParams() {
   const p = S.params;
-  if (p.get('edit') === '1' && !S.edit) setEdit(true);
   const pl = p.get('place') && S.places.places.find((x) => x.id === p.get('place'));
   if (pl) selectPlace(pl, true);
   const r = p.get('route') && S.routes.findIndex((x) => x.id === p.get('route'));
   if (r != null && r >= 0) { toggleRoutes(); showRoute(r, true); }
 }
-function download(name, text) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-function copy(text) { navigator.clipboard?.writeText(text).then(() => toast(tt('copied')), () => prompt('Copy:', text)); }
 function toast(msg) {
   const d = document.createElement('div');
-  d.className = 'map-ui map-edit-bar'; d.style.top = 'auto'; d.style.bottom = '80px'; d.style.paddingRight = '16px';
+  d.className = 'map-ui map-toast';
   d.textContent = msg; S.wrap.appendChild(d); setTimeout(() => d.remove(), 2500);
 }
 

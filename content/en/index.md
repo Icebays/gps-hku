@@ -20,7 +20,7 @@ HKU is built on a hillside. A building's "G/F" can sit at a completely different
 
 ## This is a living guide
 
-GPS-HKU is built by students, for students. Most buildings are **not labelled on the map yet**. If you know campus well, you can help. Labelling a building takes a few clicks; see [Contribute & edit](contribute).
+GPS-HKU is built by students, for students. Some buildings are **not labelled on the map yet**; more are added as the guide grows.
 
 > [!NOTE]
 > GPS-HKU is an unofficial project and is not affiliated with The University of Hong Kong. For official information, check the HKU and Estates Office websites.

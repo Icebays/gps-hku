@@ -18,7 +18,6 @@
 | ⤴ Routes | Lists walking routes. Tap one to draw it on the map. |
 | Layers (stacked squares) | Map style: Classic (default) · Classic + real buildings (HKU buildings with their photos) · Satellite (aerial photo, photo roads and HKU buildings, 3D tree canopy). |
 | Filter (sliders) | Shows or hides place categories. |
-| ✎ Edit | Contributor mode for labelling buildings and drawing routes. See [Contribute & edit](contribute). |
 
 ## Floor plans (indoor)
 

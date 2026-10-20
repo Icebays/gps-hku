@@ -18,7 +18,6 @@
     { "id": "floor-plans", "title": { "en": "About floor plans", "zh": "關於平面圖" } }
   ] },
   { "title": { "en": "Appendix", "zh": "附錄" }, "pages": [
-    { "id": "contribute", "title": { "en": "Contribute & edit", "zh": "參與編輯" } },
     { "id": "about", "title": { "en": "About & credits", "zh": "關於及鳴謝" } }
   ] }
 ]

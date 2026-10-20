@@ -3,12 +3,12 @@ import { marked } from '../vendor/marked.esm.js';
 /* ---------------- i18n ---------------- */
 const UI = {
   en: { search: 'Search GPS-HKU…', openMap: '3D Map', prev: 'Previous', next: 'Next', onThisPage: 'On this page',
-        edit: 'Edit this page on GitHub', noResults: 'No results', showOnMap: 'Show on map', notPinned: 'Not on map yet',
+        noResults: 'No results', showOnMap: 'Show on map', notPinned: 'Not on map yet',
         floorPlans: 'Floor plans', noFloorPlans: 'No floor plans yet — see “About floor plans” to add them.',
         all: 'All', places: 'Places', pages: 'Pages', notFound: 'Page not found', notFoundText: 'This page does not exist yet.',
         mapNo: 'Map no.', updated: 'Unofficial student-made guide. Not affiliated with HKU.' },
   zh: { search: '搜尋 GPS-HKU…', openMap: '3D 地圖', prev: '上一頁', next: '下一頁', onThisPage: '本頁內容',
-        edit: '在 GitHub 編輯此頁', noResults: '找不到結果', showOnMap: '在地圖顯示', notPinned: '尚未標示',
+        noResults: '找不到結果', showOnMap: '在地圖顯示', notPinned: '尚未標示',
         floorPlans: '平面圖', noFloorPlans: '暫未有平面圖 — 請參閱「關於平面圖」加入。',
         all: '全部', places: '地點', pages: '頁面', notFound: '找不到頁面', notFoundText: '此頁面尚未建立。',
         mapNo: '地圖編號', updated: '學生自製非官方指南，與香港大學無關。' },
@@ -154,7 +154,7 @@ function pager(id) {
   const p = list[i - 1], n = list[i + 1];
   return `<nav class="pager">${p ? `<a class="prev" href="${href(p.id)}"><small>← ${t('prev')}</small>${esc(L(p.title))}</a>` : ''}${n ? `<a class="next" href="${href(n.id)}"><small>${t('next')} →</small>${esc(L(n.title))}</a>` : ''}</nav>`;
 }
-const pageFoot = (id) => `<div class="page-foot"><span>${t('updated')}</span><a href="${REPO}/blob/main/content/${lang}/${id}.md" target="_blank" rel="noopener">✎ ${t('edit')}</a></div>`;
+const pageFoot = () => `<div class="page-foot"><span>${t('updated')}</span></div>`;
 
 /* ---------------- chrome ---------------- */
 function applyChrome() {

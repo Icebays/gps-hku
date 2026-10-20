@@ -18,4 +18,4 @@ Many bus and green minibus routes stop along **Pokfulam Road** and **Bonham Road
 
 ## On the 3D map
 
-Open the [3D map](map) and tap 🎯 to see where you are relative to the campus. Exits will appear as pins once a contributor has labelled them. You can help with that on the [Contribute & edit](contribute) page.
+Open the [3D map](map) and tap 🎯 to see where you are relative to the campus. Exits will appear as pins once they are labelled.

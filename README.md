@@ -17,6 +17,6 @@ Settings → Pages → Source: *Deploy from a branch* → Branch `main` / `(root
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-See the in-site **Contribute & edit** page for how to label buildings, add routes and floor plans.
+Buildings are labelled in `data/places.json`, routes in `data/routes.json` and floor plans under `data/indoor/` (see `tools/README.md`). Editing is by the maintainers only; the site has no public editing.
 
 3D Spatial Data © Lands Department, HKSAR Government. Unofficial project, not affiliated with HKU.
