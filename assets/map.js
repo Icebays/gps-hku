@@ -10,21 +10,21 @@ const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.18;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
-        locate: 'My location (GPS)', layers: 'Change map layer (classic / satellite)', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
+        locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans', help: 'Know this building? Help label it',
         editBar: 'Edit mode — click a building to tag it', exportPlaces: 'Export places.json', drawRoute: 'Draw route', finishRoute: 'Copy route JSON',
         undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
         min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
-        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', basemap: 'Map style', classic: 'Classic map', real: 'Satellite', filter: 'Show / hide places' },
+        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
-        locate: '我的位置（GPS）', layers: '更換圖層（經典／衛星）', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
+        locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
         editBar: '編輯模式 — 點選大樓以標示', exportPlaces: '匯出 places.json', drawRoute: '繪畫路線', finishRoute: '複製路線 JSON',
         undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
         min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
-        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', basemap: '地圖樣式', classic: '經典地圖', real: '衛星圖像', filter: '顯示／隱藏地點' },
+        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
@@ -432,7 +432,7 @@ function buildUI() {
     <button data-a="top" title="${tt('top')}">${ICON.top}</button>
     <button data-a="locate" title="${tt('locate')}">${ICON.locate}</button>
     <button data-a="routes" title="${tt('routes')}">${ICON.routes}</button>
-    <button data-a="layers" title="${tt('layers')}" class="${S.basemap === 'real' ? 'on' : ''}">${ICON.layers}</button>
+    <button data-a="layers" title="${tt('layers')}" class="${S.basemap && S.basemap !== 'classic' ? 'on' : ''}">${ICON.layers}</button>
     <button data-a="filter" title="${tt('filter')}">${ICON.filter}</button>
     <button data-a="edit" title="${tt('edit')}" class="${S.edit ? 'on' : ''}">${ICON.edit}</button>`);
   S.compass = tools.querySelector('.compass svg');
@@ -454,10 +454,19 @@ function buildUI() {
 }
 
 // layers button: switch the base map, classic <-> satellite
+// layers button: small menu of base maps
 function cycleBasemap() {
-  const next = S.basemap === 'real' ? 'classic' : 'real';
-  setBasemap(S, next);
-  toast(tt(next));
+  let m = S.wrap.querySelector('.basemap-menu');
+  if (m) { m.remove(); return; }
+  m = document.createElement('div');
+  m.className = 'map-ui basemap-menu';
+  m.innerHTML = `<b class="legend-h">${tt('basemap')}</b>` + ['classic', 'hybrid', 'real'].map((k) =>
+    `<button data-basemap="${k}" class="${(S.basemap || 'classic') === k ? 'on' : ''}"><i class="bm-swatch bm-${k}"></i>${tt(k)}</button>`).join('');
+  m.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-basemap]'); if (!b) return;
+    setBasemap(S, b.dataset.basemap); m.remove();
+  });
+  S.wrap.appendChild(m);
 }
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
@@ -650,59 +659,62 @@ async function loadSurfaces(s) {
 /* Base map: 'classic' (drawn map: plain roads with painted markings, contour hills, land cover) or
    'real' (aerial photo everywhere and the photo-textured surveyed roads and bridges, loaded on first use). */
 const BASEMAP_KEY = 'gps-basemap';
+// Base maps: 'classic' (drawn map), 'hybrid' (drawn map + photo-textured HKU buildings),
+// 'real' (satellite: aerial photo, photo roads, photo HKU buildings, 3D photo canopy instead of drawn trees).
+// Assets load on first use; anything that fails to load leaves the classic layer in place.
+const once = (s, key, fn) => s[key] || (s[key] = fn().catch((e) => (console.warn(key, e), null)));
 async function setBasemap(s, mode) {
   s.basemap = mode;
-  s.wrap.querySelector('[data-a="layers"]')?.classList.toggle('on', mode === 'real');
+  s.wrap.querySelector('[data-a="layers"]')?.classList.toggle('on', mode !== 'classic');
+  s.wrap.querySelectorAll('.basemap-menu [data-basemap]').forEach((b) => b.classList.toggle('on', b.dataset.basemap === mode));
   try { localStorage.setItem(BASEMAP_KEY, mode); } catch (e) {}
-  const real = mode === 'real';
+  const real = mode === 'real', photoBuildings = mode !== 'classic';
   TERRAIN_U.uReal.value = real ? 1 : 0;
   TERRAIN_U.uPhoto.value = real ? 1 : 0;
   setSky(s);
-  if (real && !s.roadsPhoto && !s.roadsPhotoLoading) {
-    s.roadsPhotoLoading = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/model/roads-photo.glb').then((g) => {
-      g.scene.traverse((o) => {
-        if (!o.isMesh) return;
-        const map = o.material.map;
-        if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-        const bridge = /bridge/i.test(o.name || o.parent?.name || '');
-        o.material = new THREE.MeshBasicMaterial({ map, polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-        o.renderOrder = bridge ? 0 : 2;
-      });
-      s.roadsPhoto = g.scene; s.scene.add(g.scene);
-    }).catch((e) => console.warn('roads-photo.glb', e));
-  }
-  if (real && !s.sat && !s.satLoading) {
-    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    const prep = (g) => {
-      g.scene.traverse((o) => {
-        if (!o.isMesh) return;
-        const map = o.material.map;
-        if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-        // buildings: photo (already lit); vegetation: colours sampled from its photos, lightly shaded
-        o.material = map ? new THREE.MeshBasicMaterial({ map })
-          : new THREE.MeshLambertMaterial({ vertexColors: !!o.geometry.attributes.color, flatShading: true });
-      });
-      return g.scene;
-    };
-    s.satLoading = Promise.all(['satellite-buildings', 'satellite-trees'].map((n) =>
-      loader.loadAsync(`assets/model/${n}.glb`).then(prep).catch((e) => (console.warn(n, e), null)))).then(([b, t]) => {
-      s.sat = new THREE.Group(); s.sat.name = 'satellite';
-      if (b) s.sat.add(b); if (t) s.sat.add(t);
-      s.satBuildings = !!b; s.satTrees = !!t;
-      s.scene.add(s.sat);
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  const jobs = [];
+  if (photoBuildings) jobs.push(once(s, 'satBuildingsP', () => loader.loadAsync('assets/model/satellite-buildings.glb').then((g) => {
+    g.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const map = o.material.map;
+      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+      o.material = new THREE.MeshBasicMaterial({ map });   // photo is already lit
     });
-  }
-  if (real) await Promise.all([s.roadsPhotoLoading, s.satLoading]);
-  const isReal = s.basemap === 'real';
-  // satellite: photo-textured HKU buildings and surveyed 3D vegetation replace the white HKU buildings
-  // (kept for picking / highlight, just not drawn) and the drawn trees; other buildings stay white
-  if (s.sat) s.sat.visible = isReal;
-  if (s.buildings) s.buildings.material.visible = !(isReal && s.satBuildings);
-  if (s.trees) s.trees.visible = !(isReal && s.satTrees);
-  if (s.roadsPhoto) s.roadsPhoto.visible = isReal;
-  if (s.roads3d) s.roads3d.visible = !isReal;
-  // painted markings belong to the drawn map; lamps stay in both
-  s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !isReal; });
+    s.satBuildings = g.scene; s.scene.add(g.scene);
+  })));
+  if (real) jobs.push(once(s, 'roadsPhotoP', () => loader.loadAsync('assets/model/roads-photo.glb').then((g) => {
+    g.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const map = o.material.map;
+      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+      const bridge = /bridge/i.test(o.name || o.parent?.name || '');
+      o.material = new THREE.MeshBasicMaterial({ map, polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      o.renderOrder = bridge ? 0 : 2;
+    });
+    s.roadsPhoto = g.scene; s.scene.add(g.scene);
+  })));
+  // canopy: surveyed tree canopy as a height field wearing the terrain's own aerial photo
+  if (real) jobs.push(once(s, 'canopyP', () => loader.loadAsync('assets/model/satellite-trees.glb').then((g) => {
+    g.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const tile = (s.terrain || []).find((t) => (t.name || t.parent?.name || '').endsWith((o.name || o.parent?.name || '').replace('canopy_', '')));
+      o.material = new THREE.MeshBasicMaterial({ map: tile?.material.map || null, color: tile ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    });
+    s.canopy = g.scene; s.scene.add(g.scene);
+  })));
+  await Promise.all(jobs);
+  if (s.basemap !== mode) return;   // switched again while loading
+  const showPhotoB = photoBuildings && !!s.satBuildings;
+  if (s.satBuildings) s.satBuildings.visible = showPhotoB;
+  // the white HKU buildings stay for picking / highlight, just not drawn; other buildings stay white
+  if (s.buildings) s.buildings.material.visible = !showPhotoB;
+  if (s.canopy) s.canopy.visible = real;
+  if (s.trees) s.trees.visible = !(real && s.canopy);
+  if (s.roadsPhoto) s.roadsPhoto.visible = real;
+  if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
+  // painted markings belong to the drawn roads; lamps stay everywhere
+  s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !(real && s.roadsPhoto); });
 }
 
 // per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler)

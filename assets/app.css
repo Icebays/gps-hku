@@ -249,3 +249,11 @@ body.map-mode .page { max-width: none; padding: 0; }
 .map-legend .legend-h { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; opacity: .7; margin-bottom: 2px; }
 .map-legend label[hidden] { display: none; }
 .map-tools .dim-label { font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+.basemap-menu { right: 66px; top: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 10px; display: grid; gap: 6px; min-width: 190px; }
+.basemap-menu button { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; background: none; color: var(--text); font-size: 14px; cursor: pointer; text-align: left; }
+.basemap-menu button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; }
+.bm-swatch { width: 34px; height: 34px; border-radius: 7px; flex: none; border: 1px solid var(--border); }
+.bm-classic { background: linear-gradient(135deg, #eef0ea 0 55%, #b9d2a8 55% 70%, #a7acb3 70%); }
+.bm-hybrid { background: linear-gradient(135deg, #eef0ea 0 45%, #b08a6a 45% 60%, #8fa4b8 60% 75%, #a7acb3 75%); }
+.bm-real { background: linear-gradient(135deg, #4f6b3a 0 40%, #7d8c6b 40% 60%, #5d6470 60%); }
+@media (max-width: 860px) { .basemap-menu { right: 60px; top: 8px; } }

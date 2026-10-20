@@ -2,8 +2,7 @@
 //   assets/model/satellite-buildings.glb  HKU buildings: geometry exactly as surveyed (full float
 //                                         positions, no simplification or quantization); only the
 //                                         photo atlas pages are re-encoded as WebP
-//   assets/model/satellite-trees.glb      vegetation: simplified, quantized, meshopt-compressed
-//   node tools/optimize_satellite.mjs out/sat-raw.glb [vegetationRatio]
+//   node tools/optimize_satellite.mjs out/sat-raw.glb
 // needs: npm i @gltf-transform/core@4 @gltf-transform/functions@4 @gltf-transform/extensions@4 meshoptimizer@0.22 sharp
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
@@ -26,10 +25,10 @@ async function part(prefix, out, compressGeometry) {
     console.log(mesh.getName(), n0, '->', prim.getIndices().getCount() / 3, 'triangles');
   }
   const steps = [prune(), textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 82 })];
-  if (compressGeometry) steps.push(quantize({ quantizePosition: 16, quantizeColor: 8 }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
+  // colours stay float: 3-byte uint8 colours break iOS Safari (vertex stride not 4-aligned)
+  if (compressGeometry) steps.push(quantize({ quantizePosition: 16, pattern: /^POSITION$/ }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
   await doc.transform(...steps);
   await io.write(out, doc);
   console.log('written', out);
 }
 await part('hku_buildings', 'assets/model/satellite-buildings.glb', false);
-await part('vegetation', 'assets/model/satellite-trees.glb', true);

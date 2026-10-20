@@ -16,7 +16,8 @@ def read(path, uv=False):
         arr = np.frombuffer(bufs[bv.get('buffer', 0)], dtype=dt, count=a['count'] * n, offset=bv.get('byteOffset', 0) + a.get('byteOffset', 0))
         return arr.reshape(-1, n) if n > 1 else arr
     out = []
-    for node in d['nodes']:
+    roots = d['scenes'][d.get('scene', 0)]['nodes'] if d.get('scenes') else range(len(d['nodes']))
+    for node in (d['nodes'][i] for i in roots):   # children are reached through their root (with its matrix)
         M = np.array(node.get('matrix', np.eye(4).ravel().tolist()), float).reshape(4, 4).T
         mesh = node.get('mesh')
         kids = [d['nodes'][c] for c in node.get('children', [])]

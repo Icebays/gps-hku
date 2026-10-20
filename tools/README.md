@@ -86,9 +86,12 @@ Tile extent = the TERRAIN(TB) node position ± its half size: x = E − 832250, 
 unzip model/11-SW-7C.zip 'BUILDING/*' 'VEGETATION*' -d work/7C   # (and 7D)
 python3 tools/build_satellite.py work/7C work/7D out/sat-raw.glb
 node tools/optimize_satellite.mjs out/sat-raw.glb
+python3 tools/build_canopy.py work/7C work/7D lod_work/7C lod_work/7D out/canopy-raw.glb   # lod_work: the 11-SW-7C.1 / 7D.1 tiles
+node tools/optimize_canopy.mjs out/canopy-raw.glb assets/model/satellite-trees.glb
 ```
 
 `satellite-buildings.glb`: HKU buildings only (same rule as the map), geometry exactly as surveyed (full
 float positions, no simplification or quantization); their photos are cropped, scaled and packed into
-2048 px atlas pages (WebP). `satellite-trees.glb`: VEGETATION(TB) as vertex-coloured meshes, simplified.
-Both load only when the layers button switches to Satellite.
+2048 px atlas pages (WebP). `satellite-trees.glb`: the surveyed VEGETATION(TB) canopy resampled as a 1.5 m
+height field with the terrain tile's UV mapping, so it wears the terrain's own aerial photo (no extra textures).
+They load only when the layers menu picks "Classic + real buildings" (buildings) or "Satellite" (all).
