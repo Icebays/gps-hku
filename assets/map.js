@@ -10,29 +10,30 @@ const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.18;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
-        locate: 'My location (GPS)', layers: 'Layers', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
+        locate: 'My location (GPS)', layers: 'Change map layer (classic / satellite)', routes: 'Walking routes', edit: 'Edit mode', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans', help: 'Know this building? Help label it',
         editBar: 'Edit mode — click a building to tag it', exportPlaces: 'Export places.json', drawRoute: 'Draw route', finishRoute: 'Copy route JSON',
         undo: 'Undo', assign: 'Assign this building to…', choose: '— choose a place —', remove: 'Remove from', copied: 'Copied to clipboard',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet. Use Edit mode › Draw route to create one.',
         min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
-        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', photo: 'Aerial photo', basemap: 'Map style', classic: 'Classic', real: 'Real imagery' },
+        guess: 'Approximate position, not yet confirmed. Know better? Fix it in Edit mode.', basemap: 'Map style', classic: 'Classic map', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
-        locate: '我的位置（GPS）', layers: '圖層', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
+        locate: '我的位置（GPS）', layers: '更換圖層（經典／衛星）', routes: '步行路線', edit: '編輯模式', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖', help: '認得這座大樓？幫手標示',
         editBar: '編輯模式 — 點選大樓以標示', exportPlaces: '匯出 places.json', drawRoute: '繪畫路線', finishRoute: '複製路線 JSON',
         undo: '復原', assign: '將此大樓標示為…', choose: '— 選擇地點 —', remove: '移除自', copied: '已複製',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。可用編輯模式 › 繪畫路線建立。',
         min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
-        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', photo: '航拍相片', basemap: '地圖樣式', classic: '經典', real: '真實影像' },
+        guess: '位置係估計，未經確認。如有錯漏，可用編輯模式修正。', basemap: '地圖樣式', classic: '經典地圖', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
 const ICON = {
   reset: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  top: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  top: '<b class="dim-label">2D</b>',
   north: '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2l4 10h-8z" fill="#dc2626"/><path d="M12 22l-4-10h8z" fill="currentColor" opacity=".5"/></svg>',
   locate: '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
-  layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>',
+  filter: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>',
+  layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   routes: '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="6" cy="19" r="2.5" fill="currentColor"/><circle cx="18" cy="5" r="2.5" fill="currentColor"/><path d="M6 16.5V12a3 3 0 0 1 3-3h6a3 3 0 0 0 3-3V7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2.5"/></svg>',
   edit: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -431,28 +432,20 @@ function buildUI() {
     <button data-a="top" title="${tt('top')}">${ICON.top}</button>
     <button data-a="locate" title="${tt('locate')}">${ICON.locate}</button>
     <button data-a="routes" title="${tt('routes')}">${ICON.routes}</button>
-    <button data-a="layers" title="${tt('layers')}">${ICON.layers}</button>
+    <button data-a="layers" title="${tt('layers')}" class="${S.basemap === 'real' ? 'on' : ''}">${ICON.layers}</button>
+    <button data-a="filter" title="${tt('filter')}">${ICON.filter}</button>
     <button data-a="edit" title="${tt('edit')}" class="${S.edit ? 'on' : ''}">${ICON.edit}</button>`);
   S.compass = tools.querySelector('.compass svg');
   tools.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    ({ north: faceNorth, reset: () => flyTo(S.home.pos, S.home.target), top: toggleTop, locate, routes: toggleRoutes, layers: toggleLayers, edit: () => setEdit(!S.edit) })[b.dataset.a]();
+    ({ north: faceNorth, reset: () => flyTo(S.home.pos, S.home.target), top: toggleTop, locate, routes: toggleRoutes, layers: cycleBasemap, filter: toggleLayers, edit: () => setEdit(!S.edit) })[b.dataset.a]();
   });
 
   const cats = S.places?.categories || {};
   S.hiddenCats = S.hiddenCats || new Set();
-  const bm = S.basemap || 'classic';
-  S.legend = ui('map-legend', `<b class="legend-h">${tt('basemap')}</b>` +
-    ['classic', 'real'].map((k) => `<label><input type="radio" name="basemap" data-basemap="${k}" ${bm === k ? 'checked' : ''}>${k === 'classic' ? '🗺' : '🛰'} ${tt(k)}</label>`).join('') +
-    `<label class="photo-opt" ${bm === 'classic' ? '' : 'hidden'}><input type="checkbox" data-photo ${bm === 'classic' && TERRAIN_U.uPhoto.value ? 'checked' : ''}>${tt('photo')}</label><hr>` + Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
+  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
   S.legend.hidden = true;
   S.legend.addEventListener('change', (e) => {
-    if ('basemap' in e.target.dataset) {
-      setBasemap(S, e.target.dataset.basemap);
-      const opt = S.legend.querySelector('.photo-opt'); opt.hidden = S.basemap !== 'classic'; opt.querySelector('input').checked = false;
-      return;
-    }
-    if ('photo' in e.target.dataset) { TERRAIN_U.uPhoto.value = e.target.checked ? 1 : 0; setSky(S); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
@@ -460,6 +453,12 @@ function buildUI() {
   if (S.edit) setEdit(true);
 }
 
+// layers button: switch the base map, classic <-> satellite
+function cycleBasemap() {
+  const next = S.basemap === 'real' ? 'classic' : 'real';
+  setBasemap(S, next);
+  toast(tt(next));
+}
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
 /* ---------------- campus areas ---------------- */
@@ -653,6 +652,7 @@ async function loadSurfaces(s) {
 const BASEMAP_KEY = 'gps-basemap';
 async function setBasemap(s, mode) {
   s.basemap = mode;
+  s.wrap.querySelector('[data-a="layers"]')?.classList.toggle('on', mode === 'real');
   try { localStorage.setItem(BASEMAP_KEY, mode); } catch (e) {}
   const real = mode === 'real';
   TERRAIN_U.uReal.value = real ? 1 : 0;
@@ -671,8 +671,32 @@ async function setBasemap(s, mode) {
       s.roadsPhoto = g.scene; s.scene.add(g.scene);
     }).catch((e) => console.warn('roads-photo.glb', e));
   }
-  if (real) await s.roadsPhotoLoading;
+  if (real && !s.sat && !s.satLoading) {
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    const prep = (g) => {
+      g.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const map = o.material.map;
+        if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+        o.material = new THREE.MeshBasicMaterial({ map });
+      });
+      return g.scene;
+    };
+    s.satLoading = Promise.all(['satellite-buildings', 'satellite-trees'].map((n) =>
+      loader.loadAsync(`assets/model/${n}.glb`).then(prep).catch((e) => (console.warn(n, e), null)))).then(([b, t]) => {
+      s.sat = new THREE.Group(); s.sat.name = 'satellite';
+      if (b) s.sat.add(b); if (t) s.sat.add(t);
+      s.satBuildings = !!b; s.satTrees = !!t;
+      s.scene.add(s.sat);
+    });
+  }
+  if (real) await Promise.all([s.roadsPhotoLoading, s.satLoading]);
   const isReal = s.basemap === 'real';
+  // satellite: photo-textured HKU buildings and surveyed 3D vegetation replace the white HKU buildings
+  // (kept for picking / highlight, just not drawn) and the drawn trees; other buildings stay white
+  if (s.sat) s.sat.visible = isReal;
+  if (s.buildings) s.buildings.material.visible = !(isReal && s.satBuildings);
+  if (s.trees) s.trees.visible = !(isReal && s.satTrees);
   if (s.roadsPhoto) s.roadsPhoto.visible = isReal;
   if (s.roads3d) s.roads3d.visible = !isReal;
   // painted markings belong to the drawn map; lamps stay in both
@@ -942,6 +966,8 @@ function faceNorth() {
 function toggleTop() {
   const tg = S.controls.target.clone(), dist = S.camera.position.distanceTo(tg);
   const isTop = S.controls.getPolarAngle() < 0.2;
+  const lbl = S.wrap.querySelector('[data-a="top"] .dim-label');
+  if (lbl) lbl.textContent = isTop ? '2D' : '3D';   // label = the view the next tap switches to
   if (isTop) {
     const az = S.controls.getAzimuthalAngle(), pol = 0.9;
     flyTo(new THREE.Vector3(tg.x + dist * Math.sin(pol) * Math.sin(az), tg.y + dist * Math.cos(pol), tg.z + dist * Math.sin(pol) * Math.cos(az)), tg, 800);
