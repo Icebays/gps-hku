@@ -13,7 +13,7 @@ Legend, title, north arrow and "You are here" marks are dropped; legend symbols 
 become labels. The site draws all of it in its own colours (assets/indoor.js).
 Needs: pymupdf, numpy, opencv-python-headless, scipy
 """
-import json, math, os, re, sys
+import itertools, json, math, os, re, sys
 import numpy as np
 import cv2
 import pymupdf
@@ -287,68 +287,328 @@ def is_glyph(p, s):
 
 # ---------- stairs ----------
 def stair_steps(lines, floor_h):
-    """stair drawings (tread lines) -> flights of 3D steps. Parallel treads 0.6-3.2 m long, 0.15-0.45 m apart, make
-    a flight; side-by-side flights (dog-leg stairs) rise one after the other to the next floor.
-    Returns ([[x0, z0, x1, z1, x2, z2, x3, z3, top], ...], the lines that are not treads)."""
+    """stair drawings (tread lines) -> 3D steps. Parallel treads 0.5-3.2 m long, 0.15-0.45 m apart, make a flight;
+    flights near each other make one staircase, read as
+      U (dog-leg): two flights side by side; the first rises from this floor to a half landing at the end the stair's
+        outline runs past the treads, the second climbs back from the landing to the floor above (floating treads);
+      L: two flights at right angles meeting at a corner landing;
+      straight: one flight (a break mark, the zigzag where the plan is cut, lies on its upper part).
+    Returns ([[x0, z0, x1, z1, x2, z2, x3, z3, top, bottom], ...], the lines that are not treads)."""
     segs = []
     for li, P in enumerate(lines):
         for a, b in zip(P[:-1], P[1:]):
             L = float(np.hypot(*(b - a)))
-            if 0.6 <= L <= 3.2:
+            if L > 0.05:
                 u = (b - a) / L
                 if u[0] < -1e-6 or (abs(u[0]) < 1e-6 and u[1] < 0): u = -u
                 segs.append(dict(a=a, b=b, m=(a + b) / 2, u=u, L=L, li=li))
-    n = len(segs); par = list(range(n))
+    cand = [i for i, s_ in enumerate(segs) if 0.5 <= s_['L'] <= 3.2]
+    par = {i: i for i in cand}
     def f(i):
         while par[i] != i: par[i] = par[par[i]]; i = par[i]
         return i
-    for i in range(n):
-        for j in range(i + 1, n):
+    for x, i in enumerate(cand):
+        for j in cand[x + 1:]:
             si, sj = segs[i], segs[j]
             if abs(si['u'][0] * sj['u'][1] - si['u'][1] * sj['u'][0]) > 0.07: continue
             d = sj['m'] - si['m']
             along, across = abs(np.dot(d, si['u'])), abs(si['u'][0] * d[1] - si['u'][1] * d[0])
-            if along < 0.3 * min(si['L'], sj['L']) and 0.15 <= across <= 0.45 and abs(si['L'] - sj['L']) < 0.35 * max(si['L'], sj['L']): par[f(i)] = f(j)
+            if along < 0.3 * min(si['L'], sj['L']) and 0.12 <= across <= 0.45 and abs(si['L'] - sj['L']) < 0.35 * max(si['L'], sj['L']): par[f(i)] = f(j)
     groups = {}
-    for i in range(n): groups.setdefault(f(i), []).append(i)
-    flights, used_lines = [], set()
+    for i in cand: groups.setdefault(f(i), []).append(i)
+    flights, tread = [], set()
     for g in groups.values():
-        if len(g) < 4: continue
-        u = segs[g[0]]['u']; nrm = np.array([-u[1], u[0]])
-        o = segs[g[0]]['m']
-        t = sorted(set(round(float(np.dot(segs[i]['m'] - o, nrm)), 3) for i in g))
-        # treads are evenly spaced: drop strays far from the median spacing
-        if len(t) < 4: continue
-        W = float(np.median([segs[i]['L'] for i in g])); cu = float(np.mean([np.dot(segs[i]['m'], u) for i in g]))
-        flights.append(dict(u=u, n=nrm, o=o, t=t, W=W, cu=cu, c=np.mean([segs[i]['m'] for i in g], 0)))
-        used_lines.update(segs[i]['li'] for i in g)
-    # dog-legs: pair parallel flights side by side; the second starts where the first ends
-    out = []; done = set()
-    for i, A in enumerate(flights):
-        if i in done: continue
-        pair = None
-        for j, B in enumerate(flights):
-            if j <= i or j in done: continue
-            if abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) > 0.07: continue
-            gap = abs(np.dot(B['c'] - A['c'], A['u']))
-            if gap < (A['W'] + B['W']) / 2 + 1.0 and abs(np.dot(B['c'] - A['c'], A['n'])) < 2.0: pair = j; break
-        seq = [(A, 1)] + ([(flights[pair], -1)] if pair is not None else [])
-        done.add(i)
-        if pair is not None: done.add(pair)
-        total = sum(len(F['t']) - 1 for F, _ in seq)
-        rise = min(0.18, floor_h / max(total, 1)); h = 0.0
-        for F, sgn in seq:
-            ts = F['t'] if sgn > 0 else F['t'][::-1]
-            for a, b in zip(ts[:-1], ts[1:]):
-                h += rise
-                lo, hi = min(a, b), max(a, b)
-                c0 = F['o'] + F['n'] * lo; c1 = F['o'] + F['n'] * hi
-                base = F['u'] * (F['cu'] - np.dot(F['o'], F['u']))
-                half = F['u'] * F['W'] / 2
-                q = [c0 + base - half, c0 + base + half, c1 + base + half, c1 + base - half]
-                out.append([r2(v) for pt in q for v in pt] + [r2(h)])
-    rest = [P for li, P in enumerate(lines) if li not in used_lines]
-    return out, rest
+        if len(g) < 3: continue
+        u = segs[g[0]]['u']; n = np.array([-u[1], u[0]])
+        ts = sorted(float(np.dot(segs[i]['m'], n)) for i in g)
+        t = [ts[0]]
+        for v in ts[1:]:
+            if v - t[-1] > 0.08: t.append(v)
+        if len(t) < 3: continue
+        W = float(np.median([segs[i]['L'] for i in g])); cu = float(np.median([np.dot(segs[i]['m'], u) for i in g]))
+        flights.append(dict(u=u, n=n, t=t, W=W, cu=cu, d=float(np.median(np.diff(t)))))
+        tread.update(g)
+    # treads drawn in two halves (split by the walking line down the middle of the flight): one flight
+    merged = True
+    while merged:
+        merged = False
+        for i, A in enumerate(flights):
+            for j, B in enumerate(flights):
+                if j <= i or abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) > 0.07: continue
+                gap = abs(A['cu'] - B['cu']) - (A['W'] + B['W']) / 2
+                same = np.median([min(abs(v - w) for w in B['t']) for v in A['t']]) < 0.06
+                if abs(gap) < 0.1 and same:
+                    l0 = min(A['cu'] - A['W'] / 2, B['cu'] - B['W'] / 2); l1 = max(A['cu'] + A['W'] / 2, B['cu'] + B['W'] / 2)
+                    A.update(cu=(l0 + l1) / 2, W=l1 - l0, t=A['t'] if len(A['t']) >= len(B['t']) else B['t'])
+                    flights.pop(j); merged = True; break
+            if merged: break
+    # one flight cut in two by a break mark: same band, a gap of a tread or two
+    merged = True
+    while merged:
+        merged = False
+        for i, A in enumerate(flights):
+            for j, B in enumerate(flights):
+                if j <= i or abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) > 0.07: continue
+                if abs(A['cu'] - B['cu']) > 0.35 or abs(A['W'] - B['W']) > 0.6: continue
+                d = min(A['d'], B['d']); lo, hi = (A, B) if A['t'][0] < B['t'][0] else (B, A)
+                gap = hi['t'][0] - lo['t'][-1]
+                if -0.05 < gap < 2.6 * d + 0.05:
+                    k = max(int(round(gap / d)), 1)
+                    fill = [lo['t'][-1] + gap * q / k for q in range(1, k)]
+                    A.update(t=lo['t'] + fill + hi['t'], W=max(A['W'], B['W']), d=d)
+                    flights.pop(j); merged = True; break
+            if merged: break
+    # a wide flight with a (double) line down its middle: two flights side by side whose treads were drawn across both
+    others = [s_ for i, s_ in enumerate(segs) if i not in tread]
+    for F in [F for F in flights]:
+        if F['W'] < 1.8: continue
+        run = F['t'][-1] - F['t'][0]
+        mids = [float(np.dot(s_['m'], F['u'])) for s_ in others if abs(np.dot(s_['u'], F['u'])) < 0.1 and s_['L'] > 0.6 * run
+                and abs(np.dot(s_['m'], F['u']) - F['cu']) < 0.2 * F['W'] and F['t'][0] - 0.3 < np.dot(s_['m'], F['n']) < F['t'][-1] + 0.3]
+        if mids:
+            c = float(np.mean(mids)); l0, l1 = F['cu'] - F['W'] / 2, F['cu'] + F['W'] / 2
+            flights[:] = [G for G in flights if G is not F]
+            for a, b in ((l0, c - 0.08), (c + 0.08, l1)): flights.append(dict(F, cu=(a + b) / 2, W=b - a))
+    def corners(F, t0, t1, l0=None, l1=None):
+        l0 = F['cu'] - F['W'] / 2 if l0 is None else l0; l1 = F['cu'] + F['W'] / 2 if l1 is None else l1
+        return [F['u'] * l + F['n'] * t for l, t in ((l0, t0), (l1, t0), (l1, t1), (l0, t1))]
+    for F in flights:
+        F['poly'] = np.array(corners(F, F['t'][0], F['t'][-1]))
+    # the other stair lines: outline / handrail (where it runs past the treads is the landing) and break marks
+    def near(F, p, r):
+        return cv2.pointPolygonTest(F['poly'].astype(np.float32).reshape(-1, 1, 2), (float(p[0]), float(p[1])), True) > -r
+    def has_break(F):
+        for s_ in others:
+            c = abs(np.dot(s_['u'], F['u']))
+            if 0.3 < c < 0.94 and s_['L'] < 1.6 and near(F, s_['m'], 0.2): return True
+        return False
+    # staircases: flights within 1.2 m of each other
+    nF = len(flights); up = list(range(nF))
+    def fu(i):
+        while up[i] != i: up[i] = up[up[i]]; i = up[i]
+        return i
+    for i in range(nF):
+        for j in range(i + 1, nF):
+            if min(min(-cv2.pointPolygonTest(flights[j]['poly'].astype(np.float32).reshape(-1, 1, 2), (float(x), float(z)), True) for x, z in flights[i]['poly']),
+                   min(-cv2.pointPolygonTest(flights[i]['poly'].astype(np.float32).reshape(-1, 1, 2), (float(x), float(z)), True) for x, z in flights[j]['poly'])) < 1.2:
+                up[fu(i)] = fu(j)
+            A, B = flights[i], flights[j]
+            if abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) < 0.07 and abs(A['cu'] - B['cu']) < 0.4 and \
+                    max(B['t'][0] - A['t'][-1], A['t'][0] - B['t'][-1]) < 3.5: up[fu(i)] = fu(j)      # in line, across a landing
+    units = {}
+    for i in range(nF): units.setdefault(fu(i), []).append(flights[i])
+    out = []
+    def emit(F, ts, h0, rise, floating):
+        """treads between consecutive lines of ts (already in climbing order), the first one rise above h0"""
+        for q, (a, b) in enumerate(zip(ts[:-1], ts[1:])):
+            top = h0 + (q + 1) * rise
+            out.append([r2(v) for pt in corners(F, a, b) for v in pt] + [r2(top), r2(max(top - 0.35, 0) if floating else 0)])
+    def rise_for(k): return min(max(floor_h / max(k, 1), 0.13), 0.19)
+    def par_(A, B): return abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) < 0.1
+    def side_by_side(A, B): return par_(A, B) and abs(A['cu'] - B['cu']) > 0.4 * (A['W'] + B['W'])
+    def landing_hi(A, B):
+        """side-by-side flights: is the landing at their high-t end? (the stair's outline runs on past the treads there)"""
+        lat0 = min(A['cu'] - A['W'] / 2, B['cu'] - B['W'] / 2); lat1 = max(A['cu'] + A['W'] / 2, B['cu'] + B['W'] / 2)
+        tv = [float(np.dot(p, A['n'])) for s_ in others for p in (s_['a'], s_['b'])
+              if lat0 - 0.4 <= np.dot(p, A['u']) <= lat1 + 0.4 and (near(A, p, 3.0) or near(B, p, 3.0))]
+        t_lo, t_hi = min(A['t'][0], B['t'][0]), max(A['t'][-1], B['t'][-1])
+        ext_hi = (max(tv) - t_hi) if tv else 0; ext_lo = (t_lo - min(tv)) if tv else 0
+        return ext_hi >= ext_lo, max(ext_hi, ext_lo)
+    def tip(F, t): return F['u'] * F['cu'] + F['n'] * t
+    def chain(cf):
+        """the order and direction of the flights that joins them end to end best: one climb from floor to floor
+        (U: back along the other side; L / round a lift shaft: round the corner; in line: across a landing)"""
+        best = None
+        for perm in itertools.permutations(range(len(cf))):
+            if perm[0] > perm[-1]: continue     # each path once (the reverse is the same chain climbed the other way)
+            for dirs in itertools.product((1, -1), repeat=len(perm)):
+                cost, ok = 0.0, True
+                for (i, di), (j, dj) in zip(zip(perm, dirs), list(zip(perm, dirs))[1:]):
+                    A, B = cf[i], cf[j]
+                    xa = A['t'][-1] if di > 0 else A['t'][0]; eb = B['t'][0] if dj > 0 else B['t'][-1]
+                    d = float(np.hypot(*(tip(A, xa) - tip(B, eb))))
+                    if par_(A, B):
+                        same = np.dot(A['n'], B['n']) * di * dj > 0
+                        if side_by_side(A, B):
+                            if same: ok = False; break      # a U turns back
+                            hi, _ = landing_hi(A, B)
+                            if (di > 0) != hi: d += 1.0
+                        elif not same: ok = False; break
+                    if d > 4.5: ok = False; break
+                    cost += d
+                if ok and (best is None or cost < best[0] - 1e-6): best = (cost, [(cf[i], d) for i, d in zip(perm, dirs)])
+        return best
+    for fs in units.values():
+        fs = sorted(fs, key=lambda F: -len(F['t'])); extra = fs[8:]; fs = fs[:8]
+        # split the flights into staircases: the cheapest set of chains (a flight left on its own costs 3 m),
+        # e.g. a stair wound round a lift shaft next to a U stair, not one chain wandering from one to the other
+        n = len(fs); cands = {}
+        for k in range(2, min(n, 4) + 1):
+            for sub in itertools.combinations(range(n), k):
+                c = chain([fs[i] for i in sub])
+                if c: cands[sum(1 << i for i in sub)] = c
+        dp = {0: (0.0, [])}
+        for mask in range(1, 1 << n):
+            low = mask & -mask; opts = [(dp[mask ^ low][0] + 3.0, dp[mask ^ low][1] + [None])]
+            sub = mask
+            while sub:
+                if sub & low and sub in cands: opts.append((dp[mask ^ sub][0] + cands[sub][0], dp[mask ^ sub][1] + [cands[sub][1]]))
+                sub = (sub - 1) & mask
+            dp[mask] = min(opts, key=lambda o: o[0])
+        chains = [c for c in dp[(1 << n) - 1][1] if c]
+        in_chain = {id(F) for c in chains for F, _ in c}
+        for ci in range(len(chains) + 1):
+            best = (0, chains[ci]) if ci < len(chains) else None
+            rest = [F for F in fs if id(F) not in in_chain] + extra if best is None else []
+            if best:
+                seq = best[1]
+                # the plan is cut on the way up: the break mark lies on the first flight, not the last
+                if has_break(seq[-1][0]) and not has_break(seq[0][0]): seq = [(F, -d) for F, d in seq[::-1]]
+                rise = rise_for(sum(len(F['t']) for F, _ in seq)); h = 0.0; floating = False
+                for k, (F, d) in enumerate(seq):
+                    ts = F['t'] if d > 0 else F['t'][::-1]
+                    emit(F, ts, h, rise, floating)
+                    h += len(ts) * rise
+                    if k + 1 == len(seq): break
+                    G, dg = seq[k + 1]; tg = G['t'] if dg > 0 else G['t'][::-1]
+                    if side_by_side(F, G):
+                        _, ext = landing_hi(F, G)
+                        depth = ext if 0.7 <= ext <= 2.6 else (F['W'] + G['W']) / 2
+                        eg = float(np.dot(tip(G, tg[0]), F['n']))
+                        start = min(ts[-1], eg) if d > 0 else max(ts[-1], eg)
+                        far = (max(ts[-1], eg) + depth) if d > 0 else (min(ts[-1], eg) - depth)
+                        lat = [float(np.dot(tip(G, tg[0]), F['u'])) + v for v in (-G['W'] / 2, G['W'] / 2)] + [F['cu'] - F['W'] / 2, F['cu'] + F['W'] / 2]
+                        q = corners(F, start, far, min(lat), max(lat)); floating = True
+                    elif par_(F, G):
+                        q = corners(F, ts[-1], float(np.dot(tip(G, tg[0]), F['n'])))
+                    else:
+                        # corner landing: from the end of this flight out to the far side of the next, and along to where it starts
+                        sp = [float(np.dot(p, F['n'])) for p in G['poly']]
+                        far = max(sp) if d > 0 else min(sp)
+                        gl = [float(np.dot(p, F['u'])) for p in corners(G, tg[0], tg[0])[:2]]
+                        q = corners(F, ts[-1], far, min(gl + [F['cu'] - F['W'] / 2]), max(gl + [F['cu'] + F['W'] / 2])); floating = True
+                    out.append([r2(v) for pt in q for v in pt] + [r2(h), r2(h - 0.25 if floating else 0)])
+            for F in rest:
+                # straight: climbs towards its break mark (the plan is cut on the way up)
+                ts = F['t']
+                bs = [float(np.dot(s_['m'], F['n'])) for s_ in others if 0.3 < abs(np.dot(s_['u'], F['u'])) < 0.94 and s_['L'] < 1.6 and near(F, s_['m'], 0.2)]
+                if bs and np.mean(bs) < (ts[0] + ts[-1]) / 2: ts = ts[::-1]
+                emit(F, ts, 0, rise_for(len(ts)), False)
+    used_lines = {segs[i]['li'] for i in tread}
+    rest_lines = [P for li, P in enumerate(lines) if li not in used_lines]
+    return out, rest_lines
+
+# ---------- furniture ----------
+def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, shafts, holes):
+    """Navy outlines are walls only when they belong to the building: a group of touching lines that reaches the
+    plan's outline (the external walls) or a column, or runs on for more than 15 m. Free-standing groups are furniture:
+      - the small faces they enclose are chairs (0.3-0.75 m), larger ones desk and table tops;
+      - a block of a dozen or more cells with no seat near it is compact shelving;
+      - long thin faces are arrows on the floor (under 0.25 m wide) or railings (under 0.35 m); big boxes with no seat
+        near them (over 3 m²) are outlines drawn round shelving or plant, not tables;
+      - lines left over are low screens (desk partitions), or floor markings when shorter than 1.2 m all told or
+        when the whole group is a long thin strip (direction arrows).
+    Returns the walls and door swings that remain; adds to tables, chair_all, screens, thin and solids."""
+    from shapely.geometry import LineString, Polygon, MultiLineString, Point
+    from shapely.ops import unary_union, polygonize
+    from shapely.strtree import STRtree
+    items = [('w', P) for P in walls] + [('d', P) for P in doors]
+    if not items: return walls, doors
+    geo = [LineString(P) for _, P in items]
+    tree = STRtree(geo); n = len(geo); par = list(range(n))
+    def f(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    for i, g in enumerate(geo):
+        for j in tree.query(g, predicate='dwithin', distance=0.05):
+            if j > i: par[f(i)] = f(int(j))
+    comps = {}
+    for i in range(n): comps.setdefault(f(i), []).append(i)
+    edge = MultiLineString([c.reshape(-1, 2).tolist() + [c.reshape(-1, 2)[0].tolist()] for cs in outlines for c in cs])
+    cols = [Polygon(P) for P in solids.get('column', []) if len(P) >= 3]
+    cols += [Polygon(P) for P in solids.get('wallFill', []) if len(P) >= 3 and area(P) > 0.3]
+    cols = [c.buffer(0) for c in cols]
+    ctree = STRtree(cols) if cols else None
+    sh_ = [Polygon(P).buffer(0) for P in shafts if len(P) >= 3]      # lift shafts: the core round them is building
+    vtree = STRtree(sh_) if sh_ else None
+    rim = unary_union([Polygon(P).exterior for P in holes if len(P) >= 3]).buffer(0.6) if holes else None
+    seats = [Point(x, z) for x, z, _, _ in chair_all]
+    stree = STRtree(seats) if seats else None
+    def sides(g):
+        r = g.minimum_rotated_rectangle
+        if r.geom_type != 'Polygon': return [0.0, g.length]
+        xs, zs = r.exterior.coords.xy
+        return sorted([math.hypot(xs[1] - xs[0], zs[1] - zs[0]), math.hypot(xs[2] - xs[1], zs[2] - zs[1])])
+    keep_w, keep_d, new_tops, new_scr = [], [], [], []
+    for ids in comps.values():
+        U = unary_union([geo[i] for i in ids])
+        x0, z0, x1, z1 = U.bounds
+        strip = sides(U)[0] < 0.4
+        structural = U.distance(edge) < 0.3 or (math.hypot(x1 - x0, z1 - z0) > 15 and not strip) or \
+            (ctree is not None and len(ctree.query(U, predicate='dwithin', distance=0.12)) > 0) or \
+            (vtree is not None and len(vtree.query(U, predicate='dwithin', distance=0.6)) > 0)
+        if structural:
+            for i in ids:
+                if rim is not None and items[i][0] == 'w' and geo[i].within(rim): screens.append(items[i][1]); continue     # atrium balustrade
+                if items[i][0] == 'w' and geo[i].length < 2.0 and stree is not None and \
+                        len(stree.query(geo[i].interpolate(0.5, normalized=True).buffer(0.6), predicate='intersects')) > 0:
+                    screens.append(items[i][1]); continue       # a desk pushed against the wall: its edge, by a seat
+                (keep_w if items[i][0] == 'w' else keep_d).append(items[i][1])
+            continue
+        faces = [fc for fc in polygonize(U) if fc.area > 0.03]
+        def seats_near(g, r): return stree is not None and len(stree.query(g.buffer(r), predicate='intersects')) > 0
+        near_seat = seats_near(U, 1.0)
+        tops, seat_f, marks, rails, used_f = [], [], [], [], []
+        for fc in faces:
+            if ctree is not None and any(fc.intersection(cols[k]).area > 0.3 * min(fc.area, cols[k].area) for k in ctree.query(fc)):
+                used_f.append(fc); continue                     # a casing drawn round a column
+            e = sides(fc)
+            if rim is not None and fc.within(rim): continue      # posts of an atrium balustrade
+            if e[0] < 0.25: marks.append(fc); continue           # arrows and lines drawn double on the floor
+            if e[0] < 0.35 and e[1] > 2: rails.append(fc); continue
+            if 0.3 <= e[1] <= 0.75 and fc.area < 0.45: seat_f.append(fc)
+            elif fc.area > 3 and not seats_near(fc, 1.2): marks.append(fc)
+            elif fc.area <= 10: tops.append(fc)
+        cells = tops + seat_f
+        if len(cells) >= 12 and not near_seat and unary_union(cells).area > 0.75 * unary_union(cells).minimum_rotated_rectangle.area:
+            # compact shelving: the cells make one block of shelves
+            blk = unary_union(cells).buffer(0.02).buffer(-0.02)
+            for g in getattr(blk, 'geoms', [blk]):
+                if g.area > 0.3: solids['shelfDark'].append(np.array(g.exterior.coords)[:-1])
+            continue
+        if len(seat_f) > 0 and not tops and len(seat_f) <= 1 and not near_seat:
+            tops, seat_f = seat_f, []                          # a lone small box (a cabinet, a bin), not a chair
+        for fc in seat_f:
+            c = fc.centroid; chair_all.append((c.x, c.y, False, (0.45, 0.45)))
+        new_tops += tops
+        cover = unary_union([fc.boundary for fc in tops + seat_f + used_f]).buffer(0.03) if (tops or seat_f or used_f) else None
+        mk = unary_union([fc.boundary for fc in marks]).buffer(0.03) if marks else None
+        total = sum(geo[i].length for i in ids)
+        for i in ids:
+            g = geo[i]
+            if mk is not None and g.difference(mk).length < 0.1: thin.append(items[i][1]); continue
+            if cover is not None and g.difference(cover).length < 0.1: continue
+            if items[i][0] == 'd' or total < 1.2 or (strip and not tops): thin.append(items[i][1])
+            else: new_scr.append((g, items[i][1]))
+    # compact shelving drawn as separate boxes: a dozen or more packed together (gaps under 0.2 m), or four or more
+    # long narrow ones (shelving units), with no seat near
+    blobs = unary_union([fc.buffer(0.1) for fc in new_tops]) if new_tops else None
+    shelving = []
+    for b in (getattr(blobs, 'geoms', [blobs]) if blobs is not None else []):
+        mem = [fc for fc in new_tops if fc.representative_point().within(b)]
+        long_ = len(mem) >= 4 and np.median([(lambda e: e[1] / max(e[0], 1e-6))(sides(fc)) for fc in mem]) >= 3.5
+        if (len(mem) >= 12 or long_) and not (stree is not None and len(stree.query(b.buffer(0.4), predicate='intersects')) > 1) and \
+                b.area > 0.7 * b.minimum_rotated_rectangle.area:
+            blk = b.buffer(-0.1)
+            for g in getattr(blk, 'geoms', [blk]):
+                if g.area > 0.3: solids['shelfDark'].append(np.array(g.exterior.coords)[:-1])
+            shelving.append(b)
+    sh = unary_union(shelving).buffer(0.1) if shelving else None
+    for fc in new_tops:
+        if sh is None or not fc.within(sh): tables.append(np.array(fc.exterior.simplify(0.02).coords)[:-1])
+    for g, P in new_scr:
+        if sh is None or g.difference(sh).length > 0.1: screens.append(P)
+    return keep_w, keep_d
 
 # ---------- main ----------
 place = CFG['place']; ext = CFG['extent']
@@ -358,7 +618,7 @@ for fl in CFG['floors']:
     areas = {k: [] for k in ('areaY', 'areaG', 'areaC', 'areaN', 'areaP')}
     voids, holes = [], []
     solids = {k: [] for k in ('shelf', 'shelfDark', 'shelfG', 'column', 'wallFill', 'counter', 'bench', 'stool', 'armchair', 'seat')}
-    tables, chairs = [], []
+    tables, chairs, chair_all, screens = [], [], [], []
     walls, doors, stairs, thin = [], [], [], []
     labels, icons = [], []
     claimed = []    # earlier plans' outlines on this floor (model frame): later plans don't redraw what is inside
@@ -525,30 +785,10 @@ for fl in CFG['floors']:
             if not (0.6 <= max(w, h) <= 4.5 and min(w, h) >= 0.45) or len(p['polys']) != 1: continue
             poly, curve = p['polys'][0]
             if not p['close'] and math.dist(poly[0], poly[-1]) > 0.5: continue
-            P = xf(M, poly); c = P.mean(0); r = 0.5 * max(w, h) + 0.9
-            if sum(1 for x, z, _, _ in chair_pts if math.hypot(x - c[0], z - c[1]) < r) >= 1:
+            P = xf(M, poly); Pc = P.astype(np.float32).reshape(-1, 1, 2)
+            if any(cv2.pointPolygonTest(Pc, (float(x), float(z)), True) > -0.9 for x, z, _, _ in chair_pts):
                 tables.append(P); chair_k.add(k)
-        # chairs face the nearest table
-        tcent = [(P.mean(0), P) for P in tables]
-        for x, z, arc, (w, h) in chair_pts:
-            best = None
-            for c, P in tcent:
-                d = np.hypot(*(P - [x, z]).T).min()
-                if d < 1.2 and (best is None or d < best[0]): best = (d, c, P)
-            if best:
-                P = best[2]; q = P[np.argmin(np.hypot(*(P - [x, z]).T))]
-                # direction to the closest point of the table's outline (edges, not just corners)
-                dmin, tgt = 1e9, best[1]
-                for a_, b_ in zip(P, np.roll(P, -1, 0)):
-                    ab = b_ - a_; t = np.clip(np.dot([x, z] - a_, ab) / max(np.dot(ab, ab), 1e-9), 0, 1); pt = a_ + ab * t
-                    d = math.hypot(pt[0] - x, pt[1] - z)
-                    if d < dmin: dmin, tgt = d, pt
-                ang = math.atan2(tgt[1] - z, tgt[0] - x)
-                if arc:     # the arc is the chair's back: move the seat towards the table
-                    x, z = x + 0.18 * math.cos(ang), z + 0.18 * math.sin(ang)
-            else:
-                ang = 0.0
-            chairs.append([r2(x), r2(z), round(ang, 2)])
+        chair_all += chair_pts
         # remaining navy outlines
         for k in navy_k:
             if k in chair_k: continue
@@ -587,6 +827,53 @@ for fl in CFG['floors']:
             later = any(depth(outlines[j], m[0], m[1]) > 1.0 for j in range(src + 1, len(outlines)))
             keep.append(not (edge and later))
         walls = [P for P, k in zip(walls, keep) if k]
+    # crossed squares in among the shelving are shelf units drawn crossed, not lift shafts; the dark bars beside a
+    # lift shaft are its symbol's drop shadow
+    def bb(P): return (*P.min(0), *P.max(0))
+    shb = [(k, i, bb(P)) for k in ('shelf', 'shelfDark') for i, P in enumerate(solids[k])]
+    real, drop_sh = [], set()
+    for P in voids:
+        b = bb(P); nb = [(k, i, q) for k, i, q in shb if touch(b, q, 0.15)]
+        if len(nb) >= 5: solids['shelf'].append(P); continue
+        real.append(P)
+        drop_sh.update((k, i) for k, i, q in nb if min(q[2] - q[0], q[3] - q[1]) < 0.5 and max(q[2] - q[0], q[3] - q[1]) < 1.7)
+    voids[:] = real
+    for k in ('shelf', 'shelfDark'): solids[k] = [P for i, P in enumerate(solids[k]) if (k, i) not in drop_sh]
+    walls, doors = furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, voids, holes)
+    # small dark marks standing free of the walls (lift call arrows, signs) are not walls
+    if solids['wallFill'] and walls:
+        from shapely.geometry import LineString, Polygon
+        from shapely.strtree import STRtree
+        wt = STRtree([LineString(P) for P in walls])
+        solids['wallFill'] = [P for P in solids['wallFill'] if not (max(np.ptp(P, 0)) < 0.8 and area(P) < 0.25 and
+                              len(wt.query(Polygon(P).buffer(0), predicate='dwithin', distance=0.05)) == 0)]
+    # archive shelving is drawn as a grid of orange cells (a counter is one box): eight or more touching cells are shelves
+    if solids['counter']:
+        grp = cluster([(*P.min(0), *P.max(0)) for P in solids['counter']], 0.05)
+        big = {i for g in grp if len(g) >= 8 for i in g}
+        solids['shelf'] += [P for i, P in enumerate(solids['counter']) if i in big]
+        solids['counter'] = [P for i, P in enumerate(solids['counter']) if i not in big]
+    # chairs face the nearest table
+    tcent = [(P.mean(0), P) for P in tables]
+    for x, z, arc, (w, h) in chair_all:
+        best = None
+        for c, P in tcent:
+            d = np.hypot(*(P - [x, z]).T).min()
+            if d < 1.2 and (best is None or d < best[0]): best = (d, c, P)
+        if best:
+            P = best[2]
+            # direction to the closest point of the table's outline (edges, not just corners)
+            dmin, tgt = 1e9, best[1]
+            for a_, b_ in zip(P, np.roll(P, -1, 0)):
+                ab = b_ - a_; t = np.clip(np.dot([x, z] - a_, ab) / max(np.dot(ab, ab), 1e-9), 0, 1); pt = a_ + ab * t
+                d = math.hypot(pt[0] - x, pt[1] - z)
+                if d < dmin: dmin, tgt = d, pt
+            ang = math.atan2(tgt[1] - z, tgt[0] - x)
+            if arc:     # the arc is the chair's back: move the seat towards the table
+                x, z = x + 0.18 * math.cos(ang), z + 0.18 * math.sin(ang)
+        else:
+            ang = 0.0
+        chairs.append([r2(x), r2(z), round(ang, 2)])
     # walls are drawn as two faces; a long line with no parallel partner is a joint, edge or marking on the floor
     if walls:
         W = np.array([np.concatenate([P[0], P[-1]]) for P in walls]); A, B = W[:, :2], W[:, 2:]
@@ -618,10 +905,10 @@ for fl in CFG['floors']:
                areas={k: [flat(P) for P in v if area(P) > 0.3] for k, v in areas.items() if v},
                solids={k: [flat(P) for P in v] for k, v in solids.items() if v},
                tables=[flat(P) for P in tables], chairs=chairs,
-               walls=[flat(P) for P in walls], doors=lines_out(doors), stairs=lines_out(stairs), thin=lines_out(thin), steps=steps,
+               walls=[flat(P) for P in walls], screens=lines_out(screens), doors=lines_out(doors), stairs=lines_out(stairs), thin=lines_out(thin), steps=steps,
                labels=labels, icons=icons)
     floors_out.append(out)
-    print(fl['id'], {k: len(v) for k, v in out['solids'].items()}, 'tables', len(tables), 'chairs', len(chairs), 'walls', len(walls), 'holes', len(holes), 'labels', len(labels), 'icons', len(icons))
+    print(fl['id'], {k: len(v) for k, v in out['solids'].items()}, 'tables', len(tables), 'chairs', len(chairs), 'walls', len(walls), 'screens', len(screens), 'holes', len(holes), 'labels', len(labels), 'icons', len(icons))
 res = dict(place=place, source=CFG['source'], floors=floors_out)
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 json.dump(res, open(out_path, 'w'), ensure_ascii=False, separators=(',', ':'))

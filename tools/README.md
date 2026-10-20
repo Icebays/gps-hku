@@ -117,4 +117,16 @@ this repo). They were registered by matching each plan's outline to the surveyed
 New Wing and podium and the plans' common column grid. The script reads the vector drawing, classifies every
 path by colour, merges shelves / tables / seats into blocks, keeps walls as lines, turns legend symbols into
 icons and texts into labels, and writes `data/indoor/<place>.json`; `data/indoor/index.json` maps place ids to
-these files. The map draws them with `assets/indoor.js`.
+these files. The map draws them with `assets/indoor.js`. Needs `pymupdf`, `opencv-python`, `numpy`, `scipy` and
+`shapely`.
+
+- Stairs: the tread lines make flights, and the flights near each other make one staircase. The script chains
+  them end to end (the cheapest way to join them), so it reads U stairs, stairs wound round a lift shaft, L stairs
+  and straight runs with a landing. The first flight climbs from the floor and the later ones float, with a landing
+  between each pair. A U stair's landing is at the end where the stair's outline runs on past the treads, and the
+  break mark (where the plan is cut) lies on the first flight.
+- Walls vs furniture: navy lines are walls only when their group of touching lines reaches the plan's outline, a
+  column or a lift shaft, or runs on for more than 15 m. Free-standing groups are furniture: the faces they enclose
+  become chairs and desk tops, and blocks of packed boxes with no seats become compact shelving. Long thin faces are
+  floor arrows or railings, and the lines left over become low screens. Small marks free of the walls are dropped
+  (e.g. the lift call arrows).
