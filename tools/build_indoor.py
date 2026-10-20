@@ -235,6 +235,7 @@ def r2(v): return round(float(v), 2)
 def flat(P): return [r2(v) for xy in P for v in xy]
 
 # ---------- labels ----------
+ROOM_NAME = re.compile(r'\b(ROOMS?|LAB|LABORATORY|OFFICES?|STUDIO|CENTRE|STORE|PANTRY)\b', re.I)
 DROP_TEXT = re.compile(r'^(YOU ARE HERE|You Are Here|N|Last update.*|.*\bPLAN\.?$|G/F\s+MAIN LIBRARY|(OLD|NEW)\s*WING\.?)$', re.I)
 def merge_lines(texts):
     """join the lines of multi-line labels"""
@@ -499,9 +500,11 @@ def stair_steps(lines, floor_h):
     return out, rest_lines
 
 # ---------- furniture ----------
-def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, shafts, holes):
+def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, shafts, holes, rooms):
     """Navy outlines are walls only when they belong to the building: a group of touching lines that reaches the
-    plan's outline (the external walls) or a column, or runs on for more than 15 m. Free-standing groups are furniture:
+    plan's outline (the external walls), a column or a lift shaft, runs on for more than 15 m, or closes round a
+    room's name (small rooms with thin walls: group viewing rooms, CC rooms, editing rooms). Free-standing groups are
+    furniture:
       - the small faces they enclose are chairs (0.3-0.75 m), larger ones desk and table tops;
       - a block of a dozen or more cells with no seat near it is compact shelving;
       - long thin faces are arrows on the floor (under 0.25 m wide) or railings (under 0.35 m); big boxes with no seat
@@ -531,6 +534,7 @@ def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, 
     ctree = STRtree(cols) if cols else None
     sh_ = [Polygon(P).buffer(0) for P in shafts if len(P) >= 3]      # lift shafts: the core round them is building
     vtree = STRtree(sh_) if sh_ else None
+    rtree = STRtree([Point(x, z) for x, z in rooms]) if rooms else None
     rim = unary_union([Polygon(P).exterior for P in holes if len(P) >= 3]).buffer(0.6) if holes else None
     seats = [Point(x, z) for x, z, _, _ in chair_all]
     stree = STRtree(seats) if seats else None
@@ -546,7 +550,8 @@ def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, 
         strip = sides(U)[0] < 0.4
         structural = U.distance(edge) < 0.3 or (math.hypot(x1 - x0, z1 - z0) > 15 and not strip) or \
             (ctree is not None and len(ctree.query(U, predicate='dwithin', distance=0.12)) > 0) or \
-            (vtree is not None and len(vtree.query(U, predicate='dwithin', distance=0.6)) > 0)
+            (vtree is not None and len(vtree.query(U, predicate='dwithin', distance=0.6)) > 0) or \
+            (rtree is not None and len(rtree.query(U.convex_hull, predicate='contains')) > 0)
         if structural:
             for i in ids:
                 if rim is not None and items[i][0] == 'w' and geo[i].within(rim): screens.append(items[i][1]); continue     # atrium balustrade
@@ -672,7 +677,7 @@ for fl in CFG['floors']:
         used.update(arrow_k)
         # direction arrows beside the OLD WING / NEW WING signs are not walls
         for t in texts:
-            if re.search(r'WING', t['t']):
+            if re.search(r'\b(OLD|NEW)\s*WING\b', t['t']):
                 b = t['bbox']; cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2; r = 3.5 / s
                 for k, p in enumerate(kp):
                     q = p['bbox']
@@ -839,7 +844,8 @@ for fl in CFG['floors']:
         drop_sh.update((k, i) for k, i, q in nb if min(q[2] - q[0], q[3] - q[1]) < 0.5 and max(q[2] - q[0], q[3] - q[1]) < 1.7)
     voids[:] = real
     for k in ('shelf', 'shelfDark'): solids[k] = [P for i, P in enumerate(solids[k]) if (k, i) not in drop_sh]
-    walls, doors = furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, voids, holes)
+    rooms = [(l['x'], l['z']) for l in labels if l['k'] != 'zone' and ROOM_NAME.search(l['t'])]
+    walls, doors = furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, voids, holes, rooms)
     # small dark marks standing free of the walls (lift call arrows, signs) are not walls
     if solids['wallFill'] and walls:
         from shapely.geometry import LineString, Polygon
