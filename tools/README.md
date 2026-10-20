@@ -79,3 +79,16 @@ adjacent tiles never fade). To add a tile (e.g. the northern neighbours 11-SW-5C
 building `hku.glb` (`build_raw.py ... 7C,7D,5C`), rebuild the road / land-cover data with its folder,
 and add `{ "id": "11-SW-5C", "extent": [x0, x1, z0, z1] }` to `data/tiles.json`.
 Tile extent = the TERRAIN(TB) node position ± its half size: x = E − 832250, z = −(N − 815900).
+
+# Satellite base map
+
+```bash
+unzip model/11-SW-7C.zip 'BUILDING/*' 'VEGETATION*' -d work/7C   # (and 7D)
+python3 tools/build_satellite.py work/7C work/7D out/sat-raw.glb
+node tools/optimize_satellite.mjs out/sat-raw.glb
+```
+
+`satellite-buildings.glb`: HKU buildings only (same rule as the map), geometry exactly as surveyed (full
+float positions, no simplification or quantization); their photos are cropped, scaled and packed into
+2048 px atlas pages (WebP). `satellite-trees.glb`: VEGETATION(TB) as vertex-coloured meshes, simplified.
+Both load only when the layers button switches to Satellite.

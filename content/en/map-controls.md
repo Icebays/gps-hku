@@ -16,7 +16,8 @@
 | ◇ Top / 3D | Switches between a top-down "floor plan" view and a tilted 3D view. |
 | 🎯 Location | Shows your GPS position on the model. |
 | ⤴ Routes | Lists walking routes. Tap one to draw it on the map. |
-| ☰ Layers | Map style: Classic (drawn map, default) or Real imagery (aerial photo and photo-textured roads). Also shows or hides pin categories. |
+| Layers (stacked squares) | Switches the map style: Classic (drawn map, default) ↔ Satellite (aerial photo, photo-textured HKU buildings and roads, surveyed 3D trees). |
+| Filter (sliders) | Shows or hides place categories. |
 | ✎ Edit | Contributor mode for labelling buildings and drawing routes. See [Contribute & edit](contribute). |
 
 ## Sharing a view

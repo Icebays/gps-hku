@@ -181,7 +181,7 @@ def emit(name, res, pages):
 emit('hku_buildings', bres, bpages)
 mats.append(dict(pbrMetallicRoughness=dict(metallicFactor=0, roughnessFactor=1)))
 meshes.append(dict(name='vegetation', primitives=[dict(attributes=dict(POSITION=add_acc(vpos, 'VEC3', 5126, 34962, True), COLOR_0=add_acc(vcol, 'VEC3', 5126, 34962)),
-                                                     indices=add_acc(vidx, 'SCALAR', 5125, 34963), material=len(mats) - 1)]))
+                                                     indices=add_acc(vidx.ravel(), "SCALAR", 5125, 34963), material=len(mats) - 1)]))
 nodes.append(dict(name='vegetation', mesh=len(meshes) - 1))
 g = dict(asset=dict(version='2.0', copyright='3D Spatial Data © Lands Department, HKSAR Government'), scene=0, scenes=[dict(nodes=list(range(len(nodes))))],
          nodes=nodes, meshes=meshes, materials=mats, images=images, textures=textures, accessors=accs, bufferViews=views,
