@@ -16,9 +16,17 @@ const UI = {
 export const REPO = 'https://github.com/Icebays/gps-hku';
 
 /* The page itself never zooms (pinch or double-tap): the 3D map and the floor plans have their own zoom.
-   CSS touch-action covers most browsers; iOS Safari ignores user-scalable=no, so its pinch gesture
-   events are cancelled too. */
+   CSS touch-action covers most browsers; iOS Safari ignores user-scalable=no (and touch-action for
+   pinches), so its gesture events and multi-touch moves are cancelled too. */
 for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+// two-finger moves never pinch the page; a quick second tap never double-tap-zooms it
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd < 320 && e.touches.length === 0 && !e.target.closest?.('input, textarea, select')) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
 let lang = 'en';
 try { lang = localStorage.getItem('gps-lang') || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
 export const t = (k) => UI[lang][k] ?? k;

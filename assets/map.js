@@ -752,43 +752,51 @@ function oneFingerZoom(el, camera, controls) {
 /* Two-finger gestures (phones), as in Google / Apple Maps: pinch zooms and twist rotates about the
    point between the fingers, and that point stays under them while they move (so they also pan); two
    fingers dragged up or down together tilt the view. Lifting one finger carries on as a one-finger pan.
-   Listens on the whole map (labels included) in the capture phase; while a two-finger gesture is on,
-   the map controls never see the touches move. */
+   Every move is applied from the camera as it was when the gesture started (not step by step), so
+   nothing drifts or shakes. Listens on the whole map (labels included) in the capture phase; while a
+   two-finger gesture is on, the map controls never see the touches move. */
 function twoFingerGestures(wrap, s) {
   const pts = new Map();
   let g = null, block = false;
   const Y = new THREE.Vector3(0, 1, 0), plane = new THREE.Plane(), ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
+  const cam = s.camera, c = s.controls;
+  const aim = () => { cam.lookAt(c.target); cam.updateMatrixWorld(); };   // what controls.update() would do
   const at = (x, y, pick) => {
     const r = s.renderer.domElement.getBoundingClientRect();
     ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(ndc, s.camera);
+    ray.setFromCamera(ndc, cam);
     if (pick) { const h = ray.intersectObjects(s.pickables || [], false)[0]; if (h) return h.point.clone(); }
     return ray.ray.intersectPlane(plane, hit) ? hit.clone() : null;
   };
   const two = () => {
     const [a, b] = [...pts.values()];
-    return { a, b, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), ang: Math.atan2(b.y - a.y, b.x - a.x) };
+    return { a: { ...a }, b: { ...b }, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), ang: Math.atan2(b.y - a.y, b.x - a.x) };
   };
   // ground point under the screen point (x, y); the gesture keeps it there
   const grab = (x, y) => {
-    plane.set(Y, -s.controls.target.y);
-    const P = at(x, y, true) || at(x, y, false) || s.controls.target.clone();
+    aim();
+    plane.set(Y, -c.target.y);
+    const P = at(x, y, true) || at(x, y, false) || c.target.clone();
     plane.set(Y, -P.y);
     return P;
   };
   const keepUnder = (P, x, y) => {
+    aim();
     const Q = at(x, y, false);
-    if (!Q) return;
+    if (!Q || Q.distanceTo(P) > 3000) return;
     const dv = P.clone().sub(Q).setY(0);
-    s.camera.position.add(dv); s.controls.target.add(dv);
+    cam.position.add(dv); c.target.add(dv); aim();
   };
+  const stopInertia = () => { c._sphericalDelta?.set(0, 0, 0); c._panOffset?.set(0, 0, 0); if ('_scale' in c) c._scale = 1; };
   const start = () => {
+    stopInertia();
+    const base = { pos0: cam.position.clone(), tgt0: c.target.clone() };
     if (pts.size === 2) {
       const t = two();
-      g = { P: grab(t.mx, t.my), mode: null, a0: { ...t.a }, b0: { ...t.b }, d0: t.d, ang0: t.ang };
+      g = { ...base, P: grab(t.mx, t.my), mode: null, t0: t, phi0: new THREE.Spherical().setFromVector3(cam.position.clone().sub(c.target)).phi };
     } else if (pts.size === 1 && block) {
       const [p] = pts.values();
-      g = { P: grab(p.x, p.y), mode: 'pan' };
+      g = { ...base, P: grab(p.x, p.y), mode: 'pan' };
     } else g = null;
   };
   wrap.addEventListener('pointerdown', (e) => {
@@ -800,41 +808,43 @@ function twoFingerGestures(wrap, s) {
     if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
     if (block) e.stopPropagation();
     const p = pts.get(e.pointerId);
-    if (!g) { p.x = e.clientX; p.y = e.clientY; return; }
-    if (g.mode === 'pan') { p.x = e.clientX; p.y = e.clientY; keepUnder(g.P, p.x, p.y); return; }
-    let prev = two();
     p.x = e.clientX; p.y = e.clientY;
-    const t = two(), cam = s.camera, c = s.controls;
+    if (!g) return;
+    if (g.mode === 'pan') { keepUnder(g.P, p.x, p.y); return; }
+    const t = two(), t0 = g.t0;
     if (!g.mode) {
-      const va = { x: t.a.x - g.a0.x, y: t.a.y - g.a0.y }, vb = { x: t.b.x - g.b0.x, y: t.b.y - g.b0.y };
+      const va = { x: t.a.x - t0.a.x, y: t.a.y - t0.a.y }, vb = { x: t.b.x - t0.b.x, y: t.b.y - t0.b.y };
       if (Math.max(Math.hypot(va.x, va.y), Math.hypot(vb.x, vb.y)) < 10) return;
       const vertical = (v) => Math.abs(v.y) > 2 * Math.abs(v.x);
-      const tilt = vertical(va) && vertical(vb) && Math.sign(va.y) === Math.sign(vb.y) && Math.abs(t.d - g.d0) < 24 && Math.abs(t.ang - g.ang0) < 0.12;
+      const tilt = vertical(va) && vertical(vb) && Math.sign(va.y) === Math.sign(vb.y) && Math.abs(t.d - t0.d) < 24 && Math.abs(t.ang - t0.ang) < 0.12;
       g.mode = tilt ? 'tilt' : 'pinch';
-      // apply the movement made while deciding, from where the fingers started
-      prev = { mx: (g.a0.x + g.b0.x) / 2, my: (g.a0.y + g.b0.y) / 2, d: g.d0, ang: g.ang0 };
     }
     if (g.mode === 'tilt') {
-      const off = cam.position.clone().sub(c.target), sph = new THREE.Spherical().setFromVector3(off);
-      sph.phi = Math.min(c.maxPolarAngle, Math.max(0.02, sph.phi - (t.my - prev.my) * 0.005));   // up = tilt towards the horizon
-      cam.position.copy(c.target).add(off.setFromSpherical(sph));
+      const off = g.pos0.clone().sub(g.tgt0), sph = new THREE.Spherical().setFromVector3(off);
+      sph.phi = Math.min(c.maxPolarAngle, Math.max(0.02, g.phi0 - (t.my - t0.my) * 0.005));   // up = tilt towards the horizon
+      c.target.copy(g.tgt0); cam.position.copy(g.tgt0).add(off.setFromSpherical(sph)); aim();
       return;
     }
-    // pinch: zoom and rotate about P, then put P back under the fingers
-    const P = g.P, dist = cam.position.distanceTo(c.target);
-    const k = Math.min(c.maxDistance, Math.max(c.minDistance, (dist * prev.d) / t.d)) / dist;
-    let da = t.ang - prev.ang;
+    // pinch: zoom and rotate about P from the starting camera, then put P back under the fingers
+    const P = g.P, dist0 = g.pos0.distanceTo(g.tgt0);
+    const k = Math.min(c.maxDistance, Math.max(c.minDistance, (dist0 * t0.d) / t.d)) / dist0;
+    let da = t.ang - t0.ang;
     if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
-    for (const v of [cam.position, c.target]) v.sub(P).multiplyScalar(k).applyAxisAngle(Y, da).add(P);
+    cam.position.copy(g.pos0).sub(P).multiplyScalar(k).applyAxisAngle(Y, da).add(P);
+    c.target.copy(g.tgt0).sub(P).multiplyScalar(k).applyAxisAngle(Y, da).add(P);
     keepUnder(P, t.mx, t.my);
   }, { capture: true });
   const end = (e) => {
     if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
     pts.delete(e.pointerId);
-    if (pts.size === 0) { block = false; g = null; } else start();
+    if (pts.size === 0) { block = false; g = null; stopInertia(); } else start();
   };
   wrap.addEventListener('pointerup', end, { capture: true });
   wrap.addEventListener('pointercancel', end, { capture: true });
+  // the browser must never take a touch on the map as its own scroll / pinch-zoom (iOS Safari ignores
+  // CSS touch-action and user-scalable=no for pinches); taps still work (touchstart is left alone)
+  wrap.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.map-ui')) e.preventDefault(); }, { passive: false });
+  wrap.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
 
 /* ---------------- roads, footpaths, street lamps ---------------- */
