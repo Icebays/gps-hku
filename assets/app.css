@@ -257,3 +257,22 @@ body.map-mode .page { max-width: none; padding: 0; }
 .bm-hybrid { background: linear-gradient(135deg, #eef0ea 0 45%, #b08a6a 45% 60%, #8fa4b8 60% 75%, #a7acb3 75%); }
 .bm-real { background: linear-gradient(135deg, #4f6b3a 0 40%, #7d8c6b 40% 60%, #5d6470 60%); }
 @media (max-width: 860px) { .basemap-menu { right: 60px; top: 8px; } }
+
+/* weather + HKO warnings (bottom left of the map) */
+.map-weather { left: 14px; bottom: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: min(300px, calc(100% - 28px)); }
+.map-wrap.info-open .map-weather { display: none; }
+.map-weather .wx-now { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 12px 0 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-shadow: var(--shadow); cursor: pointer; font: inherit; }
+.map-weather .wx-ico { display: grid; place-items: center; }
+.map-weather .wx-temp { font-size: 17px; font-weight: 650; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.map-weather .wx-warns { display: flex; gap: 4px; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--border); }
+.map-weather .wx-badge { display: block; flex: none; border-radius: 6px; }
+.map-weather .wx-more { order: -1; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; font-size: 13px; line-height: 1.5; display: grid; gap: 6px; min-width: 200px; }
+.map-weather .wx-more[hidden] { display: none; }
+.map-weather .wx-cond { font-weight: 600; }
+.map-weather .wx-meta, .map-weather .wx-src { color: var(--text-soft); font-size: 12px; }
+.map-weather .wx-meta:empty { display: none; }
+.map-weather .wx-warn { display: flex; align-items: center; gap: 8px; }
+.map-weather .wx-src { text-decoration: none; }
+.map-weather .wx-src:hover { text-decoration: underline; }
+@media (max-width: 860px) { .map-weather { left: 8px; bottom: 8px; } }
+@media (max-width: 860px) { .map-credit { max-width: calc(100% - 200px); right: 8px; bottom: 8px; } }

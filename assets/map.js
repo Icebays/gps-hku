@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
 import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
+import { mountWeather } from './weather.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -151,13 +153,21 @@ async function init() {
   controls.zoomToCursor = true; controls.screenSpacePanning = false;
   s.controls = controls;
   oneFingerZoom(renderer.domElement, camera, controls);
-  s.home = { pos: new THREE.Vector3(-110, 400, 210), target: new THREE.Vector3(-100, 75, -130) };
+  // facing south, the way the HKU campus map is drawn (the hill behind, the harbour at your back)
+  s.home = { pos: new THREE.Vector3(-90, 400, -400), target: new THREE.Vector3(-100, 80, -40) };
   if (innerWidth < innerHeight) s.home.pos = s.home.target.clone().add(s.home.pos.clone().sub(s.home.target).multiplyScalar(1.7));
   camera.position.copy(s.home.pos); controls.target.copy(s.home.target);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f7a, 1.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-  sun.position.set(-300, 600, 250); scene.add(sun);
+  s.hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f7a, 1.6);
+  s.sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  scene.add(s.hemi, s.sun, s.sun.target);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;   // re-rendered only when the view or the sun moves (fitShadow)
+  s.sun.shadow.mapSize.set(2048, 2048);
+  s.sun.shadow.bias = -0.0004; s.sun.shadow.normalBias = 0.4;
+  updateSun(s);
+  setInterval(() => updateSun(s), 60000);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), new THREE.MeshBasicMaterial({ color: 0x5d6b52 }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -2; scene.add(ground); s.ground = ground;
   setSky(s);
@@ -186,11 +196,12 @@ async function init() {
       const n = o.name || o.parent?.name || '';
       if (n.startsWith('terrain')) {
         const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
-        o.material = terrainMaterial(map);
+        o.material = shadowify(terrainMaterial(map), TERRAIN_SHADOW);
         o.material.polygonOffset = true; o.material.polygonOffsetFactor = 1; o.material.polygonOffsetUnits = 4; // roads draped on top win near-ties
         s.terrain = (s.terrain || []).concat(o);
       } else if (n.startsWith('buildings')) {
         o.material = new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true });
+        o.castShadow = o.receiveShadow = true;
         s.buildings = o;
         s.bIndexAll = o.geometry.index.array;
       } else {
@@ -204,12 +215,13 @@ async function init() {
     const bg = s.buildings.geometry;
     s.deco = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
     for (const k of ['position', 'normal', '_bid']) if (bg.attributes[k]) s.deco.geometry.setAttribute(k, bg.attributes[k]);
-    s.deco.renderOrder = 1;
+    s.deco.renderOrder = 1; s.deco.castShadow = true;
     s.buildings.add(s.deco);
     s.pickables.push(s.deco);
     scene.add(root);
     root.updateMatrixWorld(true);
     makeExtraBuildings(s, campus?.extraBuildings || []);
+    s.shadowKey = null;   // redraw the shadow map with the buildings in it
     setTimeout(() => makeRoads(s), 0);
     const ld = wrap.querySelector('.map-loading');
     ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
@@ -242,6 +254,7 @@ const TERRAIN_U = {
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
   uPhoto: { value: 0 },
+  uSunDir: { value: new THREE.Vector3(-0.5, 0.8, -0.35).normalize() },   // relief shading follows the sun
   uReal: { value: 0 },   // real-imagery base map: photo everywhere, no drawn overlays
   // land cover (data/landcover.json, surveyed) drawn into canvases: A = water colour layer, B.r = vegetation mask
   uOvA: { value: null },
@@ -315,7 +328,7 @@ function terrainMaterial(map) {
 varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
-uniform vec3 uBase, uLine, uMist, uPaved;
+uniform vec3 uBase, uLine, uMist, uPaved, uSunDir;
 uniform float uPhoto, uOvOn, uReal;
 uniform sampler2D uOvA, uOvB;
 uniform vec4 uOvExt;
@@ -352,7 +365,7 @@ float contour(float h, float step) {
   if (k > 0.0) {
     vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
     if (n.y < 0.0) n = -n;
-    float shade = clamp(dot(n, normalize(vec3(-0.5, 0.8, -0.35))), 0.0, 1.0);
+    float shade = clamp(dot(n, uSunDir), 0.0, 1.0);
     vec3 blur = texture2D(map, vMapUv, 3.5).rgb;
     float green = smoothstep(0.0, 0.05, blur.g - max(blur.r, blur.b) * 0.97);
     green = mix(green, ob.r, cov);   // surveyed vegetation where covered
@@ -391,6 +404,110 @@ function setSky(s) {
   INFRA_U.uDeck.value.set(dark ? 0x4d535b : 0xa7acb3); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
 }
 
+/* ---------------- sun ----------------
+   The sun follows the real time at HKU: it lights the buildings and the relief from where it really is,
+   and the buildings, bridges and trees cast small soft shadows. Near sunrise / sunset the light warms;
+   at night it goes flat with no shadows. Clouds and rain (from the weather widget) soften the shadows.
+   Unlit (MeshBasic) surfaces - drawn ground, roads, markings - get the shadow through shadowify(). */
+const SHADOW_U = {
+  uShadowMap: { value: null },
+  uShadowMatrix: { value: new THREE.Matrix4() },
+  uShadowOn: { value: 0 },
+  uShadowDark: { value: 0.3 },
+  uShadowTexel: { value: 1 / 2048 },
+  uShadowCol: { value: new THREE.Color(0.62, 0.66, 0.76) },   // shade is a little blue
+  uSunTint: { value: new THREE.Color(1, 1, 1) },
+};
+const TERRAIN_SHADOW = { value: 1 };
+const ONE = { value: 1 };
+function shadowify(m, k = ONE) {
+  if (m.userData.shadowified) return m;
+  m.userData.shadowified = true;
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev.call(m, sh, r);
+    Object.assign(sh.uniforms, SHADOW_U, { uShadowK: k });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform mat4 uShadowMatrix;\nvarying vec4 vShadowCoord;')
+      .replace('#include <fog_vertex>', `#include <fog_vertex>
+{ vec4 sw = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+  sw = instanceMatrix * sw;
+#endif
+  vShadowCoord = uShadowMatrix * (modelMatrix * sw); }`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+uniform sampler2D uShadowMap;
+uniform float uShadowOn, uShadowDark, uShadowTexel, uShadowK;
+uniform vec3 uShadowCol, uSunTint;
+varying vec4 vShadowCoord;
+float shDepth(vec2 uv) { return dot(texture2D(uShadowMap, uv), vec4(255.0 / 256.0 / vec3(1.0, 256.0, 65536.0), 1.0 / 16777216.0)); }
+float sunLit() {
+  vec3 c = vShadowCoord.xyz / vShadowCoord.w;
+  if (uShadowOn < 0.5 || c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) return 1.0;
+  float z = c.z - 0.0003, lit = 0.0;
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) lit += step(z, shDepth(c.xy + vec2(float(i), float(j)) * uShadowTexel));
+  vec2 e = min(c.xy, 1.0 - c.xy);
+  return mix(1.0, lit / 9.0, smoothstep(0.0, 0.06, min(e.x, e.y)));   // fade out at the shadow map's edge
+}`).replace('#include <opaque_fragment>', `#include <opaque_fragment>
+gl_FragColor.rgb *= mix(vec3(1.0), mix(mix(vec3(1.0), uShadowCol, uShadowDark), uSunTint, sunLit()), uShadowK);`);
+  };
+  m.customProgramCacheKey = () => (prev ? prev.toString() : '') + '|shadow';
+  m.needsUpdate = true;
+  return m;
+}
+const HKU_LATLON = [22.283, 114.137];
+// solar azimuth (from north, clockwise) and elevation, radians (low-precision almanac, ~0.1 degree)
+export function sunPosition(date = new Date(), [lat, lon] = HKU_LATLON) {
+  const rad = Math.PI / 180, d = date.getTime() / 86400000 - 10957.5;   // days since J2000.0
+  const g = (357.529 + 0.98560028 * d) * rad, q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad, e = (23.439 - 3.6e-7 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)), dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const H = ((280.46061837 + 360.98564736629 * d + lon) % 360) * rad - ra, phi = lat * rad;
+  const el = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+  const az = Math.atan2(-Math.sin(H), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(H));
+  return { az: (az + 2 * Math.PI) % (2 * Math.PI), el };
+}
+function updateSun(s) {
+  const { az, el } = sunPosition(s.sunTime || new Date());
+  const ss = THREE.MathUtils.smoothstep, deg = el / (Math.PI / 180);
+  const day = ss(deg, -2, 8), low = 1 - ss(deg, 4, 30), clear = s.weatherClear ?? 1;
+  const real = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+  // light from at least 12 degrees up (long dawn shadows are mostly noise); at night a soft light from above
+  const dir = deg > 12 ? real : new THREE.Vector3(real.x, 0, real.z).normalize().multiplyScalar(Math.cos(0.21)).setY(Math.sin(0.21));
+  s.sunDir = day > 0 ? dir.lerp(new THREE.Vector3(-0.42, 0.83, 0.35).normalize(), 1 - day).normalize() : new THREE.Vector3(-0.42, 0.83, 0.35).normalize();
+  s.sun.color.setRGB(1, 1 - 0.12 * low * day, 1 - 0.28 * low * day);
+  s.sun.intensity = 1.2 + 1.2 * day * (0.6 + 0.4 * clear);
+  s.hemi.intensity = 1.55 + 0.25 * (1 - clear * day);
+  TERRAIN_U.uSunDir.value.copy(s.sunDir);
+  const on = day > 0.05 && clear > 0.05;
+  s.sun.castShadow = on;
+  s.sun.shadow.intensity = 0.7 * day * clear;
+  SHADOW_U.uShadowOn.value = on ? 1 : 0;
+  SHADOW_U.uShadowDark.value = 0.8 * day * clear;
+  SHADOW_U.uSunTint.value.setRGB(1, 1 - 0.05 * low * day, 1 - 0.13 * low * day);
+  s.shadowKey = null;
+}
+// fit the sun's shadow camera around what is being looked at; redraw the shadow map only when it changes
+function fitShadow(s) {
+  if (!s.sun?.castShadow) return;
+  const t = s.controls.target, dist = s.camera.position.distanceTo(t);
+  const hs = 160 * Math.pow(2, Math.round(Math.log2(Math.min(1000, Math.max(160, dist * 1.15)) / 160) * 2) / 2);
+  const snap = hs / 8, cx = Math.round(t.x / snap) * snap, cz = Math.round(t.z / snap) * snap;
+  const key = `${cx},${cz},${hs}`;
+  if (s.shadowKey === key && SHADOW_U.uShadowMap.value) return;
+  s.shadowKey = key;
+  const cam = s.sun.shadow.camera;
+  s.sun.target.position.set(cx, 60, cz);
+  s.sun.position.copy(s.sun.target.position).addScaledVector(s.sunDir, 1500);
+  cam.left = cam.bottom = -hs; cam.right = cam.top = hs; cam.near = 500; cam.far = 2600;
+  cam.updateProjectionMatrix();
+  s.sun.updateMatrixWorld(); s.sun.target.updateMatrixWorld();
+  s.renderer.shadowMap.needsUpdate = true;
+  s.sun.shadow.updateMatrices(s.sun);
+  SHADOW_U.uShadowMatrix.value.copy(s.sun.shadow.matrix);
+  SHADOW_U.uShadowTexel.value = 1 / s.sun.shadow.mapSize.x;
+  requestAnimationFrame(() => { SHADOW_U.uShadowMap.value = s.sun.shadow.map?.texture || null; });
+}
+
 function resize() {
   if (!S?.renderer) return;
   const r = S.wrap.getBoundingClientRect();
@@ -401,6 +518,7 @@ function resize() {
 
 /* ---------------- UI ---------------- */
 function buildUI() {
+  S.weather?.stop();
   S.wrap.querySelectorAll('.map-ui').forEach((n) => n.remove());
   S.wrap.querySelectorAll('[data-t]').forEach((n) => (n.textContent = tt(n.dataset.t)));
   const ui = (cls, html) => { const d = document.createElement('div'); d.className = 'map-ui ' + cls; d.innerHTML = html; S.wrap.appendChild(d); return d; };
@@ -450,6 +568,8 @@ function buildUI() {
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
   S.info = null; S.editBar = null; S.routePanel = null;
+  // weather + HKO warnings (bottom left); cloud and rain soften the sun's shadows
+  S.weather = mountWeather(S.wrap, { lang: getLang(), onSky: (clear) => { if (S.weatherClear !== clear) { S.weatherClear = clear; updateSun(S); } } });
   if (S.edit) setEdit(true);
 }
 
@@ -637,7 +757,7 @@ function oneFingerZoom(el, camera, controls) {
 // deck is part of the road mesh, so the structure itself is never drawn as tarmac)
 const BRIDGE_MAT = new THREE.MeshLambertMaterial({ color: 0xd9d5cc, flatShading: true });
 let FLYOVER_MAT = null;   // carriageway flyovers: tarmac deck, concrete sides (created on first use)
-const ROAD_MAT = new THREE.MeshBasicMaterial({ color: 0xa7acb3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+const ROAD_MAT = shadowify(new THREE.MeshBasicMaterial({ color: 0xa7acb3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
 async function loadSurfaces(s) {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const roads = await loader.loadAsync('assets/model/roads.glb').catch((e) => (console.warn('roads.glb', e), null));
@@ -648,6 +768,7 @@ async function loadSurfaces(s) {
     const bridge = /bridge/i.test(o.name || o.parent?.name || '');
     o.material = bridge ? BRIDGE_MAT : ROAD_MAT;
     o.renderOrder = bridge ? 0 : 2;
+    o.castShadow = o.receiveShadow = bridge;
     s.roadMeshes.push(o);
   });
   s.roads3d = roads.scene;
@@ -681,7 +802,8 @@ function terrainUVMap(mesh) {
 // 'real' (satellite: aerial photo, photo roads, photo HKU buildings, 3D photo canopy instead of drawn trees).
 // Assets load on first use; anything that fails to load leaves the classic layer in place.
 // bump when the satellite / photo assets are rebuilt, so phones never mix new code with cached old files
-const ASSET_V = '2026-10-20b';
+const ASSET_V = '2026-10-20c';
+const ktx2Loader = (s) => s.ktx2 || (s.ktx2 = new KTX2Loader().setTranscoderPath('vendor/three/addons/libs/basis/').detectSupport(s.renderer));
 const once = (s, key, fn) => s[key] || (s[key] = fn().catch((e) => (console.warn(key, e), null)));
 async function setBasemap(s, mode) {
   s.basemap = mode;
@@ -690,6 +812,7 @@ async function setBasemap(s, mode) {
   try { localStorage.setItem(BASEMAP_KEY, mode); } catch (e) {}
   const real = mode === 'real', photoBuildings = mode !== 'classic';
   TERRAIN_U.uReal.value = real ? 1 : 0;
+  TERRAIN_SHADOW.value = real ? 0 : 1;   // the aerial photo has its own shadows
   TERRAIN_U.uPhoto.value = real ? 1 : 0;
   setSky(s);
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -700,10 +823,12 @@ async function setBasemap(s, mode) {
       const map = o.material.map;
       if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
       o.material = new THREE.MeshBasicMaterial({ map });   // photo is already lit
+      o.castShadow = true;
     });
     s.satBuildings = g.scene; s.scene.add(g.scene);
   })));
-  if (real) jobs.push(once(s, 'roadsPhotoP', () => loader.loadAsync(`assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
+  // photo roads: KTX2 (Basis) atlas pages, kept GPU-compressed so phones can hold full sharpness
+  if (real) jobs.push(once(s, 'roadsPhotoP', () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader(s)).loadAsync(`assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
     g.scene.traverse((o) => {
       if (!o.isMesh) return;
       const map = o.material.map;
@@ -741,6 +866,7 @@ async function setBasemap(s, mode) {
   if (s.trees) s.trees.visible = !(real && s.canopy);
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
   if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
+  s.shadowKey = null;
   // painted markings belong to the drawn roads; lamps stay everywhere
   s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !(real && s.roadsPhoto); });
 }
@@ -769,6 +895,7 @@ function makeTrees(s) {
     crown.setColorAt(i, c.setHSL(0.27 + k * 0.06, 0.32 + k * 0.12, 0.36 + k * 0.08));
   });
   crown.name = 'trees'; trunk.name = 'trunks';
+  crown.castShadow = trunk.castShadow = true;
   s.trees = new THREE.Group(); s.trees.add(crown, trunk); s.scene.add(s.trees);
   setTreeTheme(s, isDark());
 }
@@ -811,10 +938,17 @@ async function makeRoads(s) {
     const surface = roadOnly.length ? heightIndex(roadOnly, { upOnly: true }) : null;
     const feat = NET && surface ? { ...FEAT, roads: NET.roads, marks: { ...NET.marks, icons: FEAT.marks?.icons || [] } } : FEAT;
     s.roads = buildRoads({ FEAT: feat, ground, deck, building: bIdx, lampGeo, dark, surface: NET ? surface : null });
+    // painted markings lie in the same shadows as the road (lamps are lit materials: native shadows)
+    s.roads.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.material.isMeshBasicMaterial && o.name !== 'lanterns') shadowify(o.material);
+      if (o.name === 'streetlamps') o.castShadow = true;
+    });
     s.scene.add(s.roads);
     let saved = 'classic';
     try { saved = localStorage.getItem(BASEMAP_KEY) || 'classic'; } catch (e) {}
     if (saved !== 'classic' || s.basemap) setBasemap(s, s.basemap || saved);
+    s.shadowKey = null;
     console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
   } catch (e) { console.warn('roads not built', e); }
 }
@@ -831,6 +965,7 @@ function makeExtraBuildings(s, list) {
     const geo = new THREE.ExtrudeGeometry(shape, { depth: e.height + 3, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2); geo.translate(0, ground - 3, 0);
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
     const bid = s.bmeta.length;
     const cx = e.footprint.reduce((a, p) => a + p[0], 0) / e.footprint.length, cz = e.footprint.reduce((a, p) => a + p[1], 0) / e.footprint.length;
     s.bmeta.push({ id: e.id, x: cx, z: cz, base: ground, top: ground + e.height, extra: mesh });
@@ -904,7 +1039,7 @@ function selectPlace(p, fly) {
       const span = Math.max(90, ...bids.map((i) => Math.hypot(S.bmeta[i].x - a.x, S.bmeta[i].z - a.z) * 2 + 60));
       const target = new THREE.Vector3(a.x, a.y - 15, a.z);
       const dir = S.camera.position.clone().sub(S.controls.target).setY(0).normalize();
-      if (!isFinite(dir.x)) dir.set(0, 0, 1);
+      if (!isFinite(dir.x)) dir.set(0, 0, -1);
       const pos = target.clone().add(dir.multiplyScalar(span * 2.6)).add(new THREE.Vector3(0, span * 2.0, 0));
       flyTo(pos, target);
     }
@@ -926,6 +1061,7 @@ function clearSelection() {
   S.selected = null; highlight(null);
   S.pins.forEach((q) => q.el.classList.remove('active'));
   S.info?.remove(); S.info = null;
+  S.wrap.classList.remove('info-open');
   setParam('place', null);
 }
 function showInfo() {
@@ -969,6 +1105,7 @@ function showInfo() {
   d.querySelector('[data-copy]')?.addEventListener('click', (e) => copy(e.target.dataset.copy));
   S.wrap.appendChild(d);
   S.info = d;
+  S.wrap.classList.add('info-open');
 }
 
 /* ---------------- click ---------------- */
@@ -1000,10 +1137,17 @@ function flyTo(pos, target, dur = 1100) {
     if (k >= 1) S.anim = null;
   };
 }
+// compass: turn to face north; tapped again (already facing north), turn back to face south
 function faceNorth() {
   const tg = S.controls.target, off = S.camera.position.clone().sub(tg);
-  const horiz = Math.hypot(off.x, off.z);
-  flyTo(new THREE.Vector3(tg.x, S.camera.position.y, tg.z + horiz), tg.clone(), 700);
+  const horiz = Math.hypot(off.x, off.z), north = Math.abs(S.controls.getAzimuthalAngle()) < 0.05;
+  flyTo(new THREE.Vector3(tg.x, S.camera.position.y, tg.z + (north ? -horiz : horiz)), tg.clone(), 700);
+}
+// a camera position looking at tg from the current heading: `back` metres behind, `up` metres above
+function behind(tg, up, back) {
+  const dir = S.camera.position.clone().sub(S.controls.target).setY(0).normalize();
+  if (!Number.isFinite(dir.x) || dir.lengthSq() < 0.5) dir.set(0, 0, -1);
+  return tg.clone().addScaledVector(dir, back).add(new THREE.Vector3(0, up, 0));
 }
 function toggleTop() {
   const tg = S.controls.target.clone(), dist = S.camera.position.distanceTo(tg);
@@ -1014,7 +1158,8 @@ function toggleTop() {
     const az = S.controls.getAzimuthalAngle(), pol = 0.9;
     flyTo(new THREE.Vector3(tg.x + dist * Math.sin(pol) * Math.sin(az), tg.y + dist * Math.cos(pol), tg.z + dist * Math.sin(pol) * Math.cos(az)), tg, 800);
   } else {
-    flyTo(new THREE.Vector3(tg.x, tg.y + dist, tg.z + 0.01), tg, 800);
+    const az = S.controls.getAzimuthalAngle();   // keep the heading (south stays up)
+    flyTo(new THREE.Vector3(tg.x + 0.01 * Math.sin(az), tg.y + dist, tg.z + 0.01 * Math.cos(az)), tg, 800);
   }
 }
 
@@ -1042,7 +1187,7 @@ function locate() {
     S.me.pos = new THREE.Vector3(x, y + 3, z);
     if (!S.me.el.isConnected) S.labels.appendChild(S.me.el);
     const tg = new THREE.Vector3(x, y, z);
-    flyTo(tg.clone().add(new THREE.Vector3(0, 220, 200)), tg);
+    flyTo(behind(tg, 220, 200), tg);
   }, () => toast(tt('noGps')), { enableHighAccuracy: true, timeout: 10000 });
 }
 function groundHeight(x, z, targets = S.pickables) {
@@ -1096,7 +1241,7 @@ function showRoute(i, fly) {
   if (fly) {
     const box = new THREE.Box3().setFromPoints(r.points.map((p) => new THREE.Vector3(...p)));
     const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length();
-    flyTo(c.clone().add(new THREE.Vector3(0, size * 0.9 + 80, size * 0.7 + 60)), c);
+    flyTo(behind(c, size * 0.9 + 80, size * 0.7 + 60), c);
   }
 }
 function addRoutePoint(p) {
@@ -1175,6 +1320,7 @@ function frame(now) {
   if (!S.running) return;
   if (S.anim) S.anim(now);
   S.controls.update();
+  fitShadow(S);
   S.renderer.render(S.scene, S.camera);
   if (S.compass) S.compass.style.transform = `rotate(${(S.controls.getAzimuthalAngle() * 180) / Math.PI}deg)`;
   updatePins();
