@@ -33,6 +33,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+html { touch-action: pan-x pan-y; }   /* no page pinch / double-tap zoom (see app.js) */
 body {
   background: var(--bg); color: var(--text);
   font: 16px/1.7 "Inter", system-ui, -apple-system, "Segoe UI", "PingFang HK", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
@@ -159,13 +160,13 @@ body.map-mode .page { max-width: none; padding: 0; }
 .floorplan .empty { padding: 14px; font-size: 14px; color: var(--text-soft); border: 1px dashed var(--border); border-radius: var(--radius); }
 
 /* ---------- map ---------- */
-.map-wrap { position: relative; height: calc(100vh - var(--top-h)); height: calc(100dvh - var(--top-h)); overflow: hidden; background: #cfd9d4; }
+.map-wrap { touch-action: none; position: relative; height: calc(100vh - var(--top-h)); height: calc(100dvh - var(--top-h)); overflow: hidden; background: #cfd9d4; }
 .map-wrap canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .map-loading { position: absolute; inset: 0; display: grid; place-items: center; background: var(--bg-soft); z-index: 5; transition: opacity .4s; }
 .map-loading .box { width: min(320px, 80%); text-align: center; color: var(--text-soft); font-size: 14px; }
 .map-loading .bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin: 12px 0 8px; }
 .map-loading .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-.map-ui { position: absolute; z-index: 4; }
+.map-ui { position: absolute; z-index: 4; touch-action: pan-x pan-y; }   /* panels may scroll, never zoom */
 .map-search { top: 14px; left: 14px; width: min(340px, calc(100% - 28px)); }
 .map-search .field { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 0 12px; box-shadow: var(--shadow); color: var(--text-soft); }
 .map-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); padding: 11px 0; font: inherit; font-size: 15px; }

@@ -3,8 +3,8 @@
 | Action | Mouse | Touch |
 |---|---|---|
 | Move around | Left-drag | One-finger drag |
-| Rotate / tilt | Right-drag (or Ctrl + drag) | Two-finger twist / drag |
-| Zoom | Scroll wheel | Pinch, or one finger: double-tap and hold, then drag up (in) or down (out). Double-tap zooms in. |
+| Rotate / tilt | Right-drag (or Ctrl + drag) | Twist two fingers to rotate (around the point between them); drag two fingers up or down together to tilt |
+| Zoom | Scroll wheel | Pinch (zooms around the point between your fingers), or one finger: double-tap and hold, then drag up (in) or down (out). Double-tap zooms in. The page itself never zooms. |
 | Select a building | Click | Tap |
 
 ## Buttons

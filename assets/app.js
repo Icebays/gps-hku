@@ -14,6 +14,11 @@ const UI = {
         mapNo: '地圖編號', updated: '學生自製非官方指南，與香港大學無關。' },
 };
 export const REPO = 'https://github.com/Icebays/gps-hku';
+
+/* The page itself never zooms (pinch or double-tap): the 3D map and the floor plans have their own zoom.
+   CSS touch-action covers most browsers; iOS Safari ignores user-scalable=no, so its pinch gesture
+   events are cancelled too. */
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
 let lang = 'en';
 try { lang = localStorage.getItem('gps-lang') || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
 export const t = (k) => UI[lang][k] ?? k;
