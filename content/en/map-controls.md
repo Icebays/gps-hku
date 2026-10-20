@@ -3,7 +3,7 @@
 | Action | Mouse | Touch |
 |---|---|---|
 | Move around | Left-drag | One-finger drag |
-| Rotate / tilt | Right-drag (or Ctrl + drag) | Twist two fingers to rotate (around the point between them); drag two fingers up or down together to tilt |
+| Rotate / tilt | Right-drag (or Ctrl + drag) | Twist two fingers to rotate (around the point between them); push two fingers up or down together to tilt (3D angle) |
 | Zoom | Scroll wheel | Pinch (zooms around the point between your fingers), or one finger: double-tap and hold, then drag up (in) or down (out). Double-tap zooms in. The page itself never zooms. |
 | Select a building | Click | Tap |
 
@@ -23,7 +23,7 @@
 ## Sun, shadows and weather
 
 - **Sun and shadows**: the sun is placed where it really is at HKU right now. Buildings, bridges and trees cast soft shadows, the light warms near sunrise and sunset, and at night it goes flat with no shadows. Cloud and rain soften the shadows. In the Satellite style the photo already has its own shadows, so the ground gets none added.
-- **Weather (bottom left)**: the current weather and temperature from the Hong Kong Observatory (Hong Kong Park station), with any warnings in force shown as icons: typhoon signals, rainstorm (amber, red, black), thunderstorm, very hot or cold weather, strong monsoon, fire danger, landslip, northern New Territories flooding, frost and tsunami. Tap it for humidity, local rainfall and the full warning names. It updates every 10 minutes and stays hidden if the Observatory can't be reached.
+- **Weather (bottom left)**: the current weather at HKU from the Hong Kong Observatory (HKO has no station on campus, so the temperature is from the nearest one, Hong Kong Park), with any warnings in force shown as icons: typhoon signals, rainstorm (amber, red, black), thunderstorm, very hot or cold weather, strong monsoon, fire danger, landslip, northern New Territories flooding, frost and tsunami. Tap it for humidity, local rainfall and the full warning names. It updates every 10 minutes and stays hidden if the Observatory can't be reached.
 
 ## Sharing a view
 

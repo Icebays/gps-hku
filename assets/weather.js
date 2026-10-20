@@ -5,7 +5,10 @@
    If the API cannot be reached the widget simply stays hidden. */
 
 const API = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php';
-const STATIONS = ['Hong Kong Park', '香港公園', 'Hong Kong Observatory', '天文台', 'Wong Chuk Hang', '黃竹坑'];   // nearest to HKU first
+// The weather shown is for HKU. HKO has no station on campus, so the temperature comes from the nearest
+// station it reports (Hong Kong Park, ~2.6 km) - an HKU station is used first if HKO ever lists one.
+const HKU_NAMES = ['The University of Hong Kong', 'University of Hong Kong', '香港大學', 'HKU'];
+const STATIONS = [...HKU_NAMES, 'Hong Kong Park', '香港公園', 'Hong Kong Observatory', '天文台', '香港天文台', 'Wong Chuk Hang', '黃竹坑'];   // nearest to HKU first
 const DISTRICT = ['Central & Western District', '中西區'];
 const REFRESH = 10 * 60 * 1000;
 
@@ -117,13 +120,14 @@ export function mountWeather(wrap, { lang = 'zh', onSky } = {}) {
     const warns = Object.values(warn || {}).filter((w) => w && w.code && w.actionCode !== 'CANCEL');
     const name = (w) => (WARN[w.code] ? WARN[w.code][zh ? 3 : 4] : w.name || w.code);
     const time = new Date(now.updateTime || now.temperature?.recordTime || Date.now()).toLocaleTimeString(zh ? 'zh-HK' : 'en-HK', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Hong_Kong' });
-    el.innerHTML = `<button class="wx-now" aria-expanded="${open}" title="${esc(wx[zh ? 1 : 2])}">
+    el.innerHTML = `<button class="wx-now" aria-expanded="${open}" title="${zh ? '香港大學' : 'HKU'} · ${esc(wx[zh ? 1 : 2])}">
         <span class="wx-ico">${WX_ICON[wx[0]]}</span><b class="wx-temp">${t ? Math.round(t.value) + '°' : '–'}</b>
         ${warns.length ? `<span class="wx-warns">${warns.map((w) => warnBadge(w.code, 24)).join('')}</span>` : ''}
       </button>
       <div class="wx-more"${open ? '' : ' hidden'}>
-        <div class="wx-cond">${esc(wx[zh ? 1 : 2])}${t ? ` · ${esc(t.place)}` : ''}</div>
-        <div class="wx-meta">${h ? `${zh ? '濕度' : 'Humidity'} ${h.value}%` : ''}${rain && rain.max > 0 ? ` · ${zh ? '雨量' : 'Rain'} ${rain.max} mm` : ''}</div>
+        <div class="wx-cond">${zh ? '香港大學' : 'HKU'} · ${esc(wx[zh ? 1 : 2])}</div>
+        <div class="wx-meta">${[h ? `${zh ? '濕度' : 'Humidity'} ${h.value}%` : '', rain ? `${zh ? '中西區雨量' : 'Rain (Central & Western)'} ${rain.max} mm` : ''].filter(Boolean).join(' · ')}</div>
+        ${t && !HKU_NAMES.includes(t.place) ? `<div class="wx-meta">${zh ? `氣溫：最近嘅氣象站（${esc(t.place)}）` : `Temperature: nearest station (${esc(t.place)})`}</div>` : ''}
         ${warns.map((w) => `<div class="wx-warn">${warnBadge(w.code, 22)}<span>${esc(name(w))}</span></div>`).join('')}
         <a class="wx-src" href="https://www.hko.gov.hk/${zh ? 'tc' : 'en'}/wxinfo/currwx/current.htm" target="_blank" rel="noopener">${zh ? '香港天文台' : 'Hong Kong Observatory'} · ${time}</a>
       </div>`;

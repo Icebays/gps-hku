@@ -801,6 +801,7 @@ function twoFingerGestures(wrap, s) {
   };
   wrap.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'touch') return;
+    if (e.isPrimary) { pts.clear(); block = false; g = null; }   // first finger of a new touch: forget any lost ones
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 2) { block = true; start(); }
   }, { capture: true });
@@ -814,9 +815,13 @@ function twoFingerGestures(wrap, s) {
     const t = two(), t0 = g.t0;
     if (!g.mode) {
       const va = { x: t.a.x - t0.a.x, y: t.a.y - t0.a.y }, vb = { x: t.b.x - t0.b.x, y: t.b.y - t0.b.y };
-      if (Math.max(Math.hypot(va.x, va.y), Math.hypot(vb.x, vb.y)) < 10) return;
-      const vertical = (v) => Math.abs(v.y) > 2 * Math.abs(v.x);
-      const tilt = vertical(va) && vertical(vb) && Math.sign(va.y) === Math.sign(vb.y) && Math.abs(t.d - t0.d) < 24 && Math.abs(t.ang - t0.ang) < 0.12;
+      if (Math.max(Math.hypot(va.x, va.y), Math.hypot(vb.x, vb.y)) < 12) return;
+      // tilt when the fingers move up / down together more than they spread or twist (all in px)
+      let turn = t.ang - t0.ang;
+      if (turn > Math.PI) turn -= 2 * Math.PI; else if (turn < -Math.PI) turn += 2 * Math.PI;
+      const cy = (va.y + vb.y) / 2, cx = (va.x + vb.x) / 2;
+      const tilt = Math.sign(va.y) === Math.sign(vb.y) && Math.abs(cy) > 1.5 * Math.abs(cx) &&
+        Math.abs(cy) > 1.3 * Math.max(Math.abs(t.d - t0.d), (Math.abs(turn) * t0.d) / 2);
       g.mode = tilt ? 'tilt' : 'pinch';
     }
     if (g.mode === 'tilt') {
@@ -839,8 +844,9 @@ function twoFingerGestures(wrap, s) {
     pts.delete(e.pointerId);
     if (pts.size === 0) { block = false; g = null; stopInertia(); } else start();
   };
-  wrap.addEventListener('pointerup', end, { capture: true });
-  wrap.addEventListener('pointercancel', end, { capture: true });
+  // on window: a finger may be lifted outside the map (over a panel or the header)
+  window.addEventListener('pointerup', end, { capture: true });
+  window.addEventListener('pointercancel', end, { capture: true });
   // the browser must never take a touch on the map as its own scroll / pinch-zoom (iOS Safari ignores
   // CSS touch-action and user-scalable=no for pinches); taps still work (touchstart is left alone)
   wrap.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.map-ui')) e.preventDefault(); }, { passive: false });
