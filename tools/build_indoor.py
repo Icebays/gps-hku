@@ -163,7 +163,7 @@ def find_icons(paths, s):
         icons.append(('wc-m' if W(b) / H(b) < 0.36 else 'wc-f', (b[0] + b[2]) / 2, (b[1] + b[3]) / 2, H(b))); used.add(i)
     # remaining small navy curved fills are outlined lettering (MALE, LIFT ...): not walls
     for i, p in enumerate(paths):
-        if i not in used and curvy(p) and max(W(p['bbox']), H(p['bbox'])) * s < 1.6: used.add(i)
+        if i not in used and curvy(p) and max(W(p['bbox']), H(p['bbox'])) * s < 1.6 and not (len(p['polys']) == 1 and min(W(p['bbox']), H(p['bbox'])) / max(W(p['bbox']), H(p['bbox']), 1e-6) < 0.4 and max(W(p['bbox']), H(p['bbox'])) * s < 0.75): used.add(i)
     # printers: clusters of green outline strokes
     gi = [i for i, p in enumerate(paths) if i not in used and p['fill'] is None and near(p['stroke'], (0.0, 0.65, 0.31), 0.03)]
     for i in gi:
@@ -175,7 +175,7 @@ def find_icons(paths, s):
     for i, p in enumerate(paths):
         if i in used: continue
         b = p['bbox']
-        if near(p['fill'], (1.0, 0.86, 0.67), 0.03) and 1.8 < W(b) / max(H(b), 1e-6) < 5 and W(b) > 8:
+        if near(p['fill'], (1.0, 0.86, 0.67), 0.03) and 1.8 < W(b) / max(H(b), 1e-6) < 12 and W(b) > 8:
             grp = [j for j, q in enumerate(paths) if j not in used and contains((b[0] - 1, b[1] - 3, b[2] + 1, b[3] + 3), q['bbox'])]
             if any(is_navy(paths[j]['fill']) for j in grp):
                 icons.append(('opac', (b[0] + b[2]) / 2, (b[1] + b[3]) / 2, W(b))); used.update(grp)
@@ -256,14 +256,46 @@ def merge_lines(texts):
     return out
 CALLNO = re.compile(r'^(\[.*\]|期|BOOKS|JOURNALS|REFERENCE|LS?\d|S\d|LB\d|\d{3}|Books)', re.I)
 
+# ---------- furniture from outlines ----------
+def bbox_m(b, s): return (b[2] - b[0]) * s, (b[3] - b[1]) * s
+def touch(a, b, g): return a[0] - g <= b[2] and b[0] - g <= a[2] and a[1] - g <= b[3] and b[1] - g <= a[3]
+def cluster(boxes, gap):
+    """union-find on boxes that touch (gap in the boxes' units)"""
+    par = list(range(len(boxes)))
+    def f(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    order = sorted(range(len(boxes)), key=lambda i: boxes[i][0])
+    for k, i in enumerate(order):
+        for j in order[k + 1:]:
+            if boxes[j][0] > boxes[i][2] + gap: break
+            if touch(boxes[i], boxes[j], gap): par[f(i)] = f(j)
+    groups = {}
+    for i in range(len(boxes)): groups.setdefault(f(i), []).append(i)
+    return list(groups.values())
+def is_crescent(p, s):
+    """a chair drawn as a thin curved sliver (its back) beside a table"""
+    if p['fill'] is None or len(p['polys']) != 1 or not p['polys'][0][1]: return False
+    w, h = bbox_m(p['bbox'], s)
+    return 0.22 <= max(w, h) <= 0.75 and min(w, h) / max(w, h) < 0.4
+def is_glyph(p, s):
+    """outlined lettering (room numbers, OPAC, MALE ...): curved fills made of several small sub-paths"""
+    if p['fill'] is None or not any(c for _, c in p['polys']) or is_crescent(p, s): return False
+    w, h = bbox_m(p['bbox'], s)
+    return max(w, h) < 1.4 and (len(p['polys']) >= 2 or npts(p) > 14) and classify(p['fill']) in ('wall', 'chair')
+
 # ---------- main ----------
 place = CFG['place']; ext = CFG['extent']
 floors_out = []
 for fl in CFG['floors']:
-    R_shelf, R_shelfG, R_table, R_chair, R_seat, R_counter, R_column, R_slab, R_wallfill = (Raster(ext) for _ in range(9))
-    areas = {k: [] for k in ('areaY', 'areaG', 'areaC', 'areaN', 'areaP', 'void')}
+    R_slab = Raster(ext)
+    areas = {k: [] for k in ('areaY', 'areaG', 'areaC', 'areaN', 'areaP')}
+    voids, holes = [], []
+    solids = {k: [] for k in ('shelf', 'shelfDark', 'shelfG', 'column', 'wallFill', 'counter', 'bench', 'stool', 'armchair', 'seat')}
+    tables, chairs = [], []
     walls, doors, stairs, thin = [], [], [], []
     labels, icons = [], []
+    claimed = []    # earlier plans' outlines on this floor (model frame): later plans don't redraw what is inside
     for part in fl['plans']:
         W, H, paths, texts = read_pdf(os.path.join(pdf_dir, part['file']))
         M = part['M']; s = math.hypot(M[0], M[1])     # metres per PDF point
@@ -274,8 +306,10 @@ for fl in CFG['floors']:
         def in_plan(b):
             cx, cy = int((b[0] + b[2]) / 2 * sc), int((b[1] + b[3]) / 2 * sc)
             return 0 <= cy < sil_d.shape[0] and 0 <= cx < sil_d.shape[1] and sil_d[cy, cx] > 0
-        keep = [i for i, p in enumerate(paths) if i not in drop and in_plan(p['bbox'])]
-        kp = [paths[i] for i in keep]
+        def mine(b):    # not already drawn by an earlier plan of this floor
+            (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
+            return not any(cv2.pointPolygonTest(c, (float(x), float(z)), True) > 0.4 for c in claimed)
+        kp = [p for i, p in enumerate(paths) if i not in drop and in_plan(p['bbox']) and mine(p['bbox'])]
         ic, used = find_icons(kp, s)
         for kind, cx, cy, size in ic:
             (x, z), = xf(M, [(cx, cy)]); icons.append([kind, r2(x), r2(z)])
@@ -287,43 +321,125 @@ for fl in CFG['floors']:
             b = p['bbox']; y1 = sq[k + 1]['bbox'][1] - 2 if k + 1 < len(sq) else b[3] + 60
             lines = sorted([t for t in texts if b[2] < t['bbox'][0] < b[2] + 20 and b[1] - 6 <= t['bbox'][1] < y1], key=lambda t: t['bbox'][1])
             if lines: zone_names[classify(p['fill'])] = ' '.join(t['t'] for t in lines)
-        # silhouette -> floor slab
+        # silhouette -> floor slab (and this plan's claim on the floor)
         cs, _ = cv2.findContours(sil, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        new_claims = []
         for c in cs:
             if cv2.contourArea(c) / sc / sc * s * s < 20: continue
-            R_slab.fill(xf(M, c[:, 0, :] / sc))
+            P = xf(M, c[:, 0, :] / sc); R_slab.fill(P); new_claims.append(P.astype(np.float32).reshape(-1, 1, 2))
+        # --- fills ---
+        tbl_boxes = [p['bbox'] for k, p in enumerate(kp) if k not in used and p['fill'] is not None and classify(p['fill']) == 'table']
+        crescents, tbl_fill = [], []
+        # crossed squares drawn as outlines (atria, lift shafts): pink rectangle + diagonals
         for k, p in enumerate(kp):
-            if k in used: continue
-            fcls, scls = classify(p['fill']), classify(p['stroke'])
+            if k in used or p['fill'] is not None or classify(p['stroke']) != 'shelf': continue
+            w, h = bbox_m(p['bbox'], s)
+            if min(w, h) > 1.2 and max(w, h) / min(w, h) < 1.6 and p['close']:
+                P = xf(M, p['polys'][0][0]); (holes if max(w, h) > 4 else voids).append(P); used.add(k)
+                b = p['bbox']; used.update(j for j, q in enumerate(kp) if q['fill'] is None and classify(q['stroke']) == 'shelf' and contains(b, q['bbox'], 1))
+        for k, p in enumerate(kp):
+            if k in used or p['fill'] is None or not p['close']: continue
+            if is_navy(p['fill']) and is_crescent(p, s): crescents.append(k); used.add(k); continue
+            if is_glyph(p, s): used.add(k); continue
+            fcls = classify(p['fill']); w, h = bbox_m(p['bbox'], s)
+            for poly, curve in p['polys']:
+                if len(poly) < 3: continue
+                P = xf(M, poly); A = area(P)
+                if A < 0.004: continue
+                if fcls == 'shelf' and min(w, h) > 1.2 and max(w, h) / max(min(w, h), 1e-6) < 1.6:
+                    (holes if max(w, h) > 4 else voids).append(P)    # crossed squares: lift shafts / atrium voids
+                elif fcls == 'shelf': solids['shelfDark' if p['fill'][1] < 0.3 else 'shelf'].append(P)
+                elif fcls == 'shelfG' or (fcls == 'areaG' and A < 20): solids['shelfG'].append(P)
+                elif fcls in areas: areas[fcls].append(P)
+                elif fcls == 'wall': solids['wallFill'].append(P)
+                elif fcls == 'column': solids['column'].append(P)
+                elif fcls == 'counter': solids['counter'].append(P)
+                elif fcls == 'table':
+                    if p['fill'][0] > 0.95 and p['fill'][1] > 0.95 and A < 0.05: continue      # white specks inside symbols
+                    tbl_fill.append((p['bbox'], P))
+                elif fcls == 'seat': solids['armchair'].append(P)
+                elif fcls == 'chair':
+                    rnd = len(poly) > 12 and abs(w - h) < 0.15 * max(w, h)
+                    if p['fill'][0] < 0.3:      # black: drop shadows behind tables (or dark seats)
+                        b = p['bbox']
+                        if any(touch(b, t, 0) and (min(b[2], t[2]) - max(b[0], t[0])) * (min(b[3], t[3]) - max(b[1], t[1])) > 0.3 * (b[2] - b[0]) * (b[3] - b[1]) for t in tbl_boxes): continue
+                    solids['stool' if rnd else 'bench'].append(P)
+        # study tables are drawn as grids of cells: touching cells that fill their box make one table
+        for g in cluster([b for b, _ in tbl_fill], 0.03 / s):
+            boxes = [tbl_fill[i][0] for i in g]
+            b = (min(q[0] for q in boxes), min(q[1] for q in boxes), max(q[2] for q in boxes), max(q[3] for q in boxes))
+            filled = sum((q[2] - q[0]) * (q[3] - q[1]) for q in boxes) / max((b[2] - b[0]) * (b[3] - b[1]), 1e-9)
+            if len(g) > 1 and filled > 0.8:
+                tables.append(xf(M, [(b[0], b[1]), (b[2], b[1]), (b[2], b[3]), (b[0], b[3])]))
+            else:
+                tables.extend(tbl_fill[i][1] for i in g)
+        # second pass for shadows drawn before their table
+        def shadowed(b): return any(touch(b, t, 0) and (min(b[2], t[2]) - max(b[0], t[0])) * (min(b[3], t[3]) - max(b[1], t[1])) > 0.3 * (b[2] - b[0]) * (b[3] - b[1]) for t in tbl_boxes)
+        # --- navy outlines: chairs, tables, walls, doors ---
+        navy_k = [k for k, p in enumerate(kp) if k not in used and p['fill'] is None and classify(p['stroke']) == 'wall']
+        small = [k for k in navy_k if max(bbox_m(kp[k]['bbox'], s)) < 0.75]
+        groups = cluster([kp[k]['bbox'] for k in small], 0.04 / s)
+        chair_pts, chair_k = [], set()
+        for k in crescents:
+            b = kp[k]['bbox']; (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
+            chair_pts.append((x, z, True, bbox_m(b, s)))
+        for g in groups:
+            ks = [small[i] for i in g]
+            b = (min(kp[k]['bbox'][0] for k in ks), min(kp[k]['bbox'][1] for k in ks), max(kp[k]['bbox'][2] for k in ks), max(kp[k]['bbox'][3] for k in ks))
+            w, h = bbox_m(b, s); big_, sm_ = max(w, h), min(w, h)
+            arc = len(ks) <= 2 and all(any(c for _, c in kp[k]['polys']) for k in ks) and 0.25 <= big_ <= 0.75 and sm_ / big_ < 0.45
+            if (0.3 <= big_ <= 0.9 and sm_ >= 0.25 and len(ks) >= 2) or arc:
+                (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
+                chair_pts.append((x, z, arc, (w, h))); chair_k.update(ks)
+        # outline tables: closed outlines 0.7-4.5 m with chairs beside them
+        for k in navy_k:
+            if k in chair_k: continue
+            p = kp[k]; w, h = bbox_m(p['bbox'], s)
+            if not (0.6 <= max(w, h) <= 4.5 and min(w, h) >= 0.45) or len(p['polys']) != 1: continue
+            poly, curve = p['polys'][0]
+            if not p['close'] and math.dist(poly[0], poly[-1]) > 0.5: continue
+            P = xf(M, poly); c = P.mean(0); r = 0.5 * max(w, h) + 0.9
+            if sum(1 for x, z, _, _ in chair_pts if math.hypot(x - c[0], z - c[1]) < r) >= 1:
+                tables.append(P); chair_k.add(k)
+        # chairs face the nearest table
+        tcent = [(P.mean(0), P) for P in tables]
+        for x, z, arc, (w, h) in chair_pts:
+            best = None
+            for c, P in tcent:
+                d = np.hypot(*(P - [x, z]).T).min()
+                if d < 1.2 and (best is None or d < best[0]): best = (d, c, P)
+            if best:
+                P = best[2]; q = P[np.argmin(np.hypot(*(P - [x, z]).T))]
+                # direction to the closest point of the table's outline (edges, not just corners)
+                dmin, tgt = 1e9, best[1]
+                for a_, b_ in zip(P, np.roll(P, -1, 0)):
+                    ab = b_ - a_; t = np.clip(np.dot([x, z] - a_, ab) / max(np.dot(ab, ab), 1e-9), 0, 1); pt = a_ + ab * t
+                    d = math.hypot(pt[0] - x, pt[1] - z)
+                    if d < dmin: dmin, tgt = d, pt
+                ang = math.atan2(tgt[1] - z, tgt[0] - x)
+                if arc:     # the arc is the chair's back: move the seat towards the table
+                    x, z = x + 0.18 * math.cos(ang), z + 0.18 * math.sin(ang)
+            else:
+                ang = 0.0
+            chairs.append([r2(x), r2(z), round(ang, 2)])
+        # remaining navy outlines
+        for k in navy_k:
+            if k in chair_k: continue
+            for poly, curve in kp[k]['polys']:
+                P = xf(M, poly)
+                if curve: doors.append(P)
+                else:
+                    for a_, b_ in zip(P[:-1], P[1:]):
+                        if np.hypot(*(b_ - a_)) > 0.12: walls.append(np.array([a_, b_]))
+        for k, p in enumerate(kp):
+            if k in used or p['fill'] is not None or p['stroke'] is None: continue
+            scls = classify(p['stroke'])
             for poly, curve in p['polys']:
                 P = xf(M, poly)
-                if p['fill'] is not None and p['close'] and len(P) >= 3:
-                    A = area(P)
-                    b = p['bbox']; bw, bh = (b[2] - b[0]) * s, (b[3] - b[1]) * s
-                    if fcls == 'shelf' and min(bw, bh) > 1.2 and max(bw, bh) / max(min(bw, bh), 1e-6) < 1.6:
-                        areas['void'].append(P)                      # lift shafts and voids are drawn crossed on the plans
-                    elif fcls == 'shelf': R_shelf.fill(P)
-                    elif fcls == 'shelfG' or (fcls == 'areaG' and A < 20): R_shelfG.fill(P)
-                    elif fcls in areas and fcls != 'void': areas[fcls].append(P)
-                    elif fcls == 'wall': R_wallfill.fill(P)
-                    elif fcls == 'column': R_column.fill(P)
-                    elif fcls == 'table': R_table.fill(P)
-                    elif fcls == 'chair': R_chair.fill(P)
-                    elif fcls == 'seat': R_seat.fill(P)
-                    elif fcls == 'counter': R_counter.fill(P)
-                if p['stroke'] is not None and p['fill'] is None:
-                    if scls == 'wall':
-                        if curve: doors.append(P)
-                        else:
-                            for a_, b_ in zip(P[:-1], P[1:]):
-                                if np.hypot(*(b_ - a_)) > 0.25: walls.append(np.array([a_, b_]))
-                    elif scls == 'shelf': R_shelf.line(P, 0.05)
-                    elif scls == 'shelfG': R_shelfG.line(P, 0.05)
-                    elif scls == 'stairs': stairs.append(P)
-                    elif scls in ('thin', 'chair'): thin.append(P)
-                    elif scls == 'column': R_column.line(P, 0.05)
+                if scls == 'stairs': stairs.append(P)
+                elif scls in ('thin', 'chair'): thin.append(P)
         # labels
-        tk = [t for t in texts if in_plan(t['bbox']) and not any(inside(t['bbox'], lb, 4) for lb in legends) and not DROP_TEXT.match(t['t'])]
+        tk = [t for t in texts if in_plan(t['bbox']) and mine(t['bbox']) and not any(inside(t['bbox'], lb, 4) for lb in legends) and not DROP_TEXT.match(t['t'])]
         for t in merge_lines(tk):
             b = t['bbox']; (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
             first = t['t'].split('\n')[0]
@@ -333,27 +449,28 @@ for fl in CFG['floors']:
             big = sorted(areas[cls], key=area, reverse=True)
             if big:
                 P = big[0]; labels.append(dict(t=name, x=r2(P[:, 0].mean()), z=r2(P[:, 1].mean()), h=r2(0.9), k='zone'))
-    for P in areas['void']:
-        w_, h_ = np.ptp(P[:, 0]), np.ptp(P[:, 1])
+        claimed += new_claims
+    # extra floor areas from the model (e.g. the west building at 2/F, which the plans leave out)
+    for ex in fl.get('extra', []):
+        P = np.array(ex['poly']).reshape(-1, 2); R_slab.fill(P)
+        if ex.get('kind'): areas.setdefault(ex['kind'], []).append(P)
+        if ex.get('label'): labels.append(dict(t=ex['label'], x=r2(P[:, 0].mean()), z=r2(P[:, 1].mean()), h=0.9, k='zone'))
+    for P in voids:
         cx, cz = P[:, 0].mean(), P[:, 1].mean()
-        if max(w_, h_) < 4 and not any(k == 'lift' and math.hypot(x - cx, z - cz) < 4 for k, x, z in icons): icons.append(['lift', r2(cx), r2(cz)])
-    def lines_out(L, minlen=0.0): return [flat(P) for P in L if len(P) >= 2]
+        if not any(k == 'lift' and math.hypot(x - cx, z - cz) < 4 for k, x, z in icons): icons.append(['lift', r2(cx), r2(cz)])
+    for P in holes: cv2.fillPoly(R_slab.m, [R_slab.px(P)], 0)     # atria: open to the floor below
+    lines_out = lambda L: [flat(P) for P in L if len(P) >= 2]
     out = dict(id=fl['id'], name=fl['name'], y=fl['y'], h=fl.get('h', 4.0), sources=[p['file'] for p in fl['plans']], updated=fl.get('updated'),
-               slab=[[flat(r) for r in poly] for poly in R_slab.polygons(close=0.3, eps=0.08, min_area=5)],
+               slab=[[flat(r) for r in poly] for poly in R_slab.polygons(close=0.2, eps=0.05, min_area=2)],
+               holes=[flat(P) for P in holes], voids=[flat(P) for P in voids],
                areas={k: [flat(P) for P in v if area(P) > 0.3] for k, v in areas.items() if v},
-               blocks=dict(shelf=[[flat(r) for r in p] for p in R_shelf.polygons()],
-                           shelfG=[[flat(r) for r in p] for p in R_shelfG.polygons()],
-                           table=[[flat(r) for r in p] for p in R_table.polygons(close=0.05, min_area=0.05)],
-                           chair=[[flat(r) for r in p] for p in R_chair.polygons(close=0.0, eps=0.03, min_area=0.02)],
-                           seat=[[flat(r) for r in p] for p in R_seat.polygons(close=0.05)],
-                           counter=[[flat(r) for r in p] for p in R_counter.polygons(close=0.05)],
-                           column=[[flat(r) for r in p] for p in R_column.polygons(close=0.0, min_area=0.05)],
-                           wall=[[flat(r) for r in p] for p in R_wallfill.polygons(close=0.05, eps=0.03, min_area=0.02)]),
+               solids={k: [flat(P) for P in v] for k, v in solids.items() if v},
+               tables=[flat(P) for P in tables], chairs=chairs,
                walls=[flat(P) for P in walls], doors=lines_out(doors), stairs=lines_out(stairs), thin=lines_out(thin),
                labels=labels, icons=icons)
     floors_out.append(out)
-    print(fl['id'], {k: len(v) for k, v in out['blocks'].items()}, 'walls', len(walls), 'labels', len(labels), 'icons', len(icons))
-res = dict(place=place, source=CFG['source'], cut=CFG.get('cut'), floors=floors_out)
+    print(fl['id'], {k: len(v) for k, v in out['solids'].items()}, 'tables', len(tables), 'chairs', len(chairs), 'walls', len(walls), 'holes', len(holes), 'labels', len(labels), 'icons', len(icons))
+res = dict(place=place, source=CFG['source'], floors=floors_out)
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 json.dump(res, open(out_path, 'w'), ensure_ascii=False, separators=(',', ':'))
 print('->', out_path, round(os.path.getsize(out_path) / 1e6, 2), 'MB')

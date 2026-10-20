@@ -578,9 +578,14 @@ function buildUI() {
 
   const cats = S.places?.categories || {};
   S.hiddenCats = S.hiddenCats || new Set();
-  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join(''));
+  const zh = getLang() === 'zh', wm = S.indoor?.wallMode || 'cutaway';
+  const walls = [['cutaway', zh ? '跟角度變透明（好似 The Sims）' : 'See-through facing you (like The Sims)'], ['full', zh ? '完整牆身' : 'Full walls'], ['low', zh ? '矮牆' : 'Low walls']];
+  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join('') +
+    `<b class="legend-h">${zh ? '室內平面圖：牆' : 'Floor plans: walls'}</b>` +
+    walls.map(([k, t]) => `<label><input type="radio" name="walls" value="${k}" ${wm === k ? 'checked' : ''}>${t}</label>`).join(''));
   S.legend.hidden = true;
   S.legend.addEventListener('change', (e) => {
+    if (e.target.name === 'walls') { S.indoor?.setWallMode(e.target.value); return; }
     const k = e.target.dataset.cat; e.target.checked ? S.hiddenCats.delete(k) : S.hiddenCats.add(k); makePins(); });
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
