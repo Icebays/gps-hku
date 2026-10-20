@@ -16,6 +16,9 @@ for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimi
   simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio: +ratio, error: 0.0005 });   // UVs are planar: safe to simplify
   console.log(mesh.getName(), n0, '->', prim.getIndices().getCount() / 3, 'triangles');
 }
-await doc.transform(prune(), quantize({ quantizePosition: 16, quantizeTexcoord: 16 }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
+// the site maps the aerial photo from world position (same affine map as the terrain), so the UVs are
+// not shipped: no quantized texcoords for mobile GPUs to mis-handle
+for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) prim.setAttribute('TEXCOORD_0', null);
+await doc.transform(prune(), quantize({ quantizePosition: 16, pattern: /^POSITION$/ }), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
 await io.write(output, doc);
 console.log('written', output);
