@@ -3,5 +3,8 @@
  "main-library": "main-library.json",
  "centennial-campus": "centennial-podium.json",
  "chi-wah-learning-commons": "centennial-podium.json",
- "lee-shau-kee-lecture-centre": "centennial-podium.json"
+ "lee-shau-kee-lecture-centre": "centennial-podium.json",
+ "jockey-club-tower": "centennial-podium.json",
+ "cheng-yu-tung-tower": "centennial-podium.json",
+ "run-run-shaw-tower": "centennial-podium.json"
 }
