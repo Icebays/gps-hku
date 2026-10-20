@@ -1,5 +1,5 @@
 {
- "_readme": "Centennial Campus podium (CPD) floor plans: HKU Examinations Office's classroom plans (Feb 2017), scanned pages, one per floor. M registers each page, rendered at dpi, to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = rendered pixels). 2/F was fitted to the surveyed sections of the podium and towers (B31881..., B31817..., B31887..., B31911...); the other pages to 2/F through the column grid, cores and atria they share (LG/F through G/F). y = floor level in mPD: LG/F is +84.50 as marked on the plan, 4/F is the podium roof (107 m, where the towers stand) and the floors between are spread evenly (estimated). clip: the podium and towers' footprint from the model. holes: the atria (1/F to 3/F; on G/F their floors are gardens), from the model's sections, the east one (open to the courtyard side, so not a closed loop in the model) as the middle one moved to where the plans draw it.",
+ "_readme": "Centennial Campus podium (CPD) floor plans: HKU Examinations Office's classroom plans (Feb 2017), scanned pages, one per floor. M registers each page, rendered at dpi, to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = rendered pixels). 2/F was fitted to the surveyed sections of the podium and towers (B31881..., B31817..., B31887..., B31911...); the other pages to 2/F through the column grid, cores and atria they share (LG/F through G/F). y = floor level in mPD: LG/F is +84.50 as marked on the plan, 4/F is the podium roof (107 m, where the towers stand) and the floors between are spread evenly (estimated). clip: the podium and towers' footprint from the model. holes: the atria (1/F to 3/F; on G/F their floors are gardens), from the model's sections, the east one (open to the courtyard side, so not a closed loop in the model) as the middle one moved to where the plans draw it. rooms: classrooms traced by hand on the rendered page (pixels) where the scan doesn't close them off.",
  "place": "centennial-podium",
  "source": {
   "en": "Floor plans: HKU Examinations Office, CPD classroom plans (redrawn)",
@@ -495,7 +495,153 @@
     -447.0291604,
     -219.8996329
    ],
-   "slab": "clip"
+   "slab": "clip",
+   "rooms": {
+    "LG.10": [
+     [
+      650,
+      592
+     ],
+     [
+      803,
+      592
+     ],
+     [
+      803,
+      778
+     ],
+     [
+      650,
+      778
+     ]
+    ],
+    "LG.07": [
+     [
+      803,
+      592
+     ],
+     [
+      955,
+      592
+     ],
+     [
+      955,
+      778
+     ],
+     [
+      803,
+      778
+     ]
+    ],
+    "LG.09": [
+     [
+      650,
+      778
+     ],
+     [
+      803,
+      778
+     ],
+     [
+      803,
+      966
+     ],
+     [
+      650,
+      966
+     ]
+    ],
+    "LG.08": [
+     [
+      803,
+      778
+     ],
+     [
+      955,
+      778
+     ],
+     [
+      955,
+      966
+     ],
+     [
+      803,
+      966
+     ]
+    ],
+    "LG.63": [
+     [
+      2027,
+      700
+     ],
+     [
+      2147,
+      700
+     ],
+     [
+      2127,
+      783
+     ],
+     [
+      2027,
+      783
+     ]
+    ],
+    "LG.37": [
+     [
+      505,
+      643
+     ],
+     [
+      588,
+      658
+     ],
+     [
+      588,
+      722
+     ],
+     [
+      505,
+      722
+     ]
+    ],
+    "LG.16": [
+     [
+      859,
+      1066
+     ],
+     [
+      939,
+      1066
+     ],
+     [
+      939,
+      1141
+     ],
+     [
+      859,
+      1141
+     ]
+    ],
+    "LG.60": [
+     [
+      1853,
+      274
+     ],
+     [
+      1966,
+      274
+     ],
+     [
+      1966,
+      374
+     ],
+     [
+      1853,
+      374
+     ]
+    ]
+   }
   },
   {
    "id": "G",
@@ -512,7 +658,43 @@
     -448.3300768,
     -226.3661326
    ],
-   "slab": "clip"
+   "slab": "clip",
+   "rooms": {
+    "G.02": [
+     [
+      587,
+      1160
+     ],
+     [
+      702,
+      1187
+     ],
+     [
+      690,
+      1267
+     ],
+     [
+      670,
+      1312
+     ],
+     [
+      625,
+      1340
+     ],
+     [
+      580,
+      1322
+     ],
+     [
+      562,
+      1287
+     ],
+     [
+      562,
+      1227
+     ]
+    ]
+   }
   },
   {
    "id": "1",
@@ -613,7 +795,79 @@
      ]
     ]
    ],
-   "slab": "clip"
+   "slab": "clip",
+   "rooms": {
+    "1.21": [
+     [
+      698,
+      184
+     ],
+     [
+      748,
+      189
+     ],
+     [
+      798,
+      214
+     ],
+     [
+      838,
+      224
+     ],
+     [
+      838,
+      374
+     ],
+     [
+      698,
+      344
+     ]
+    ],
+    "1.24": [
+     [
+      959,
+      251
+     ],
+     [
+      1021,
+      276
+     ],
+     [
+      1126,
+      301
+     ],
+     [
+      1101,
+      416
+     ],
+     [
+      1091,
+      446
+     ],
+     [
+      951,
+      413
+     ]
+    ],
+    "1.42": [
+     [
+      1636,
+      1078
+     ],
+     [
+      1728,
+      1078
+     ],
+     [
+      1728,
+      1166
+     ],
+     [
+      1636,
+      1166
+     ]
+    ]
+   }
   },
   {
    "id": "2",
@@ -714,7 +968,151 @@
      ]
     ]
    ],
-   "slab": "clip"
+   "slab": "clip",
+   "rooms": {
+    "2.16": [
+     [
+      647,
+      187
+     ],
+     [
+      745,
+      205
+     ],
+     [
+      785,
+      227
+     ],
+     [
+      775,
+      362
+     ],
+     [
+      635,
+      342
+     ]
+    ],
+    "2.17": [
+     [
+      785,
+      227
+     ],
+     [
+      835,
+      235
+     ],
+     [
+      835,
+      302
+     ],
+     [
+      785,
+      302
+     ]
+    ],
+    "2.18": [
+     [
+      837,
+      235
+     ],
+     [
+      897,
+      255
+     ],
+     [
+      897,
+      302
+     ],
+     [
+      837,
+      302
+     ]
+    ],
+    "2.19": [
+     [
+      900,
+      262
+     ],
+     [
+      1022,
+      287
+     ],
+     [
+      1017,
+      427
+     ],
+     [
+      885,
+      392
+     ],
+     [
+      890,
+      307
+     ]
+    ],
+    "2.14": [
+     [
+      771,
+      426
+     ],
+     [
+      871,
+      444
+     ],
+     [
+      864,
+      511
+     ],
+     [
+      764,
+      496
+     ]
+    ],
+    "2.37": [
+     [
+      1605,
+      980
+     ],
+     [
+      1735,
+      980
+     ],
+     [
+      1735,
+      1082
+     ],
+     [
+      1605,
+      1082
+     ]
+    ],
+    "2.42": [
+     [
+      1985,
+      927
+     ],
+     [
+      2000,
+      922
+     ],
+     [
+      2045,
+      932
+     ],
+     [
+      2090,
+      925
+     ],
+     [
+      2097,
+      1082
+     ],
+     [
+      1985,
+      1082
+     ]
+    ]
+   }
   },
   {
    "id": "3",
@@ -815,7 +1213,63 @@
      ]
     ]
    ],
-   "slab": "clip"
+   "slab": "clip",
+   "rooms": {
+    "3.04": [
+     [
+      802,
+      233
+     ],
+     [
+      1022,
+      293
+     ],
+     [
+      990,
+      409
+     ],
+     [
+      772,
+      349
+     ]
+    ],
+    "3.28": [
+     [
+      1927,
+      1101
+     ],
+     [
+      2140,
+      1101
+     ],
+     [
+      2140,
+      1253
+     ],
+     [
+      1927,
+      1253
+     ]
+    ],
+    "3.29": [
+     [
+      1751,
+      1100
+     ],
+     [
+      1876,
+      1100
+     ],
+     [
+      1876,
+      1255
+     ],
+     [
+      1751,
+      1255
+     ]
+    ]
+   }
   },
   {
    "id": "4",
@@ -831,7 +1285,45 @@
     0.0024762,
     -458.2759934,
     -223.3526439
-   ]
+   ],
+   "rooms": {
+    "4.16": [
+     [
+      1395,
+      1002
+     ],
+     [
+      1497,
+      1002
+     ],
+     [
+      1497,
+      1107
+     ],
+     [
+      1395,
+      1107
+     ]
+    ],
+    "4.17": [
+     [
+      1497,
+      1002
+     ],
+     [
+      1597,
+      1002
+     ],
+     [
+      1597,
+      1107
+     ],
+     [
+      1497,
+      1107
+     ]
+    ]
+   }
   }
  ]
 }

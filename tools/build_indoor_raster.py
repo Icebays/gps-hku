@@ -19,7 +19,8 @@ Each page is rendered and read as ink:
 - a room with a red number is the space round it, closed off by the thick strokes (door openings bridged), shaded as
   a classroom (innovative classrooms in their own colour); of the ways to close it off (thick strokes or all the ink,
   doors bridged by 0.6-2 m) the one whose area best fits the room's seats (about 1.9 m2 a seat) and is most nearly a
-  rectangle is taken, and a room none of them fits is left as its label only.
+  rectangle is taken, and a room none of them fits is left as its label only, unless the config traces it by hand
+  (`rooms`: name -> outline in rendered page pixels; e.g. LG.07-LG.10, one hall split by movable partitions).
 Needs: pymupdf, opencv-python, numpy, scikit-image, shapely.
 """
 import json, math, re, sys
@@ -156,7 +157,8 @@ for fl in CFG['floors']:
         want = 1200 if name == 'Grand Hall' else max(15.0, 1.9 * seats) if seats else 60.0
         cx, cy = int((r.x0 + r.x1) / 2), int((r.y0 + r.y1) / 2)
         best = None
-        for (nm, m_), seal in bars.items():
+        traced = fl.get('rooms', {}).get(name)
+        for (nm, m_), seal in ([] if traced else bars.items()):
             R_ = px(1.5); win = seal[max(cy - R_, 0):cy + R_, max(cx - R_, 0):cx + R_]
             free = np.argwhere(win == 0)
             if not len(free): continue
@@ -174,7 +176,7 @@ for fl in CFG['floors']:
             score = abs(math.log(A / want)) + 2.0 * (1 - rect)
             if abs(math.log(A / want)) < math.log(2.8) and rect > 0.6 and (best is None or score < best[0]):
                 best = (score, c)
-        poly = xf(cv2.approxPolyDP(best[1], px(0.4), True)[:, 0, :]) if best else None
+        poly = xf(traced) if traced else xf(cv2.approxPolyDP(best[1], px(0.4), True)[:, 0, :]) if best else None
         (x, z), = xf([((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)])
         if poly is not None and len(poly) >= 3:
             areas['areaC' if name in innov else 'areaY'].append(poly); rooms.append(Polygon(poly).buffer(0))
