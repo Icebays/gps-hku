@@ -285,6 +285,71 @@ def is_glyph(p, s):
     if classify(p['fill']) not in ('wall', 'chair'): return False
     return (max(w, h) < 1.4 and (len(p['polys']) >= 2 or npts(p) > 14)) or (min(w, h) < 0.55 and len(p['polys']) >= 3)
 
+# ---------- stairs ----------
+def stair_steps(lines, floor_h):
+    """stair drawings (tread lines) -> flights of 3D steps. Parallel treads 0.6-3.2 m long, 0.15-0.45 m apart, make
+    a flight; side-by-side flights (dog-leg stairs) rise one after the other to the next floor.
+    Returns ([[x0, z0, x1, z1, x2, z2, x3, z3, top], ...], the lines that are not treads)."""
+    segs = []
+    for li, P in enumerate(lines):
+        for a, b in zip(P[:-1], P[1:]):
+            L = float(np.hypot(*(b - a)))
+            if 0.6 <= L <= 3.2:
+                u = (b - a) / L
+                if u[0] < -1e-6 or (abs(u[0]) < 1e-6 and u[1] < 0): u = -u
+                segs.append(dict(a=a, b=b, m=(a + b) / 2, u=u, L=L, li=li))
+    n = len(segs); par = list(range(n))
+    def f(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    for i in range(n):
+        for j in range(i + 1, n):
+            si, sj = segs[i], segs[j]
+            if abs(si['u'][0] * sj['u'][1] - si['u'][1] * sj['u'][0]) > 0.07: continue
+            d = sj['m'] - si['m']
+            along, across = abs(np.dot(d, si['u'])), abs(si['u'][0] * d[1] - si['u'][1] * d[0])
+            if along < 0.3 * min(si['L'], sj['L']) and 0.15 <= across <= 0.45 and abs(si['L'] - sj['L']) < 0.35 * max(si['L'], sj['L']): par[f(i)] = f(j)
+    groups = {}
+    for i in range(n): groups.setdefault(f(i), []).append(i)
+    flights, used_lines = [], set()
+    for g in groups.values():
+        if len(g) < 4: continue
+        u = segs[g[0]]['u']; nrm = np.array([-u[1], u[0]])
+        o = segs[g[0]]['m']
+        t = sorted(set(round(float(np.dot(segs[i]['m'] - o, nrm)), 3) for i in g))
+        # treads are evenly spaced: drop strays far from the median spacing
+        if len(t) < 4: continue
+        W = float(np.median([segs[i]['L'] for i in g])); cu = float(np.mean([np.dot(segs[i]['m'], u) for i in g]))
+        flights.append(dict(u=u, n=nrm, o=o, t=t, W=W, cu=cu, c=np.mean([segs[i]['m'] for i in g], 0)))
+        used_lines.update(segs[i]['li'] for i in g)
+    # dog-legs: pair parallel flights side by side; the second starts where the first ends
+    out = []; done = set()
+    for i, A in enumerate(flights):
+        if i in done: continue
+        pair = None
+        for j, B in enumerate(flights):
+            if j <= i or j in done: continue
+            if abs(A['u'][0] * B['u'][1] - A['u'][1] * B['u'][0]) > 0.07: continue
+            gap = abs(np.dot(B['c'] - A['c'], A['u']))
+            if gap < (A['W'] + B['W']) / 2 + 1.0 and abs(np.dot(B['c'] - A['c'], A['n'])) < 2.0: pair = j; break
+        seq = [(A, 1)] + ([(flights[pair], -1)] if pair is not None else [])
+        done.add(i)
+        if pair is not None: done.add(pair)
+        total = sum(len(F['t']) - 1 for F, _ in seq)
+        rise = min(0.18, floor_h / max(total, 1)); h = 0.0
+        for F, sgn in seq:
+            ts = F['t'] if sgn > 0 else F['t'][::-1]
+            for a, b in zip(ts[:-1], ts[1:]):
+                h += rise
+                lo, hi = min(a, b), max(a, b)
+                c0 = F['o'] + F['n'] * lo; c1 = F['o'] + F['n'] * hi
+                base = F['u'] * (F['cu'] - np.dot(F['o'], F['u']))
+                half = F['u'] * F['W'] / 2
+                q = [c0 + base - half, c0 + base + half, c1 + base + half, c1 + base - half]
+                out.append([r2(v) for pt in q for v in pt] + [r2(h)])
+    rest = [P for li, P in enumerate(lines) if li not in used_lines]
+    return out, rest
+
 # ---------- main ----------
 place = CFG['place']; ext = CFG['extent']
 floors_out = []
@@ -308,12 +373,17 @@ for fl in CFG['floors']:
         def in_plan(b):
             cx, cy = int((b[0] + b[2]) / 2 * sc), int((b[1] + b[3]) / 2 * sc)
             return 0 <= cy < sil_d.shape[0] and 0 <= cx < sil_d.shape[1] and sil_d[cy, cx] > 0
-        def on_seam(P, tol=0.9):    # every point within tol of an earlier plan's outline
-            return bool(claimed) and all(min(abs(cv2.pointPolygonTest(c, (float(x), float(z)), True)) for c in claimed) < tol for x, z in P)
+        def on_seam(P, tol=0.9):
+            """a line that lies (mostly) along or inside an earlier plan's outline: that plan already draws it"""
+            if not claimed: return False
+            pts = [P[0] + (P[-1] - P[0]) * t for t in np.linspace(0, 1, 9)] if len(P) == 2 else list(P)
+            near_ = [max(cv2.pointPolygonTest(c, (float(x), float(z)), True) for c in claimed) > -tol for x, z in pts]
+            return sum(near_) >= 0.8 * len(near_)
         def mine(b):    # not already drawn by an earlier plan of this floor
             (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
             return not any(cv2.pointPolygonTest(c, (float(x), float(z)), True) > 0.4 for c in claimed)
-        kp = [p for i, p in enumerate(paths) if i not in drop and in_plan(p['bbox']) and mine(p['bbox'])]
+        kp_idx = [i for i, p in enumerate(paths) if i not in drop and in_plan(p['bbox']) and mine(p['bbox'])]
+        kp = [paths[i] for i in kp_idx]
         ic, used = find_icons(kp, s)
         # arrows (direction signs, call-number ranges along the shelves): heads and shafts are not walls
         heads = []
@@ -349,7 +419,15 @@ for fl in CFG['floors']:
                     if p['fill'] is None and classify(p['stroke']) == 'wall' and max(q[2] - q[0], q[3] - q[1]) * s < 3 and abs((q[0] + q[2]) / 2 - cx) < r and abs((q[1] + q[3]) / 2 - cy) < r:
                         used.add(k)
         for kind, cx, cy, size in ic:
+            # the symbol's frame (and any box drawn round it) is not a wall
+            for k, p in enumerate(kp):
+                q = p['bbox']
+                if k not in used and p['fill'] is None and q[0] <= cx <= q[2] and q[1] <= cy <= q[3] and max(q[2] - q[0], q[3] - q[1]) * s < 1.6: used.add(k)
+            if kind == 'lift': continue      # lift signs stand beside the lifts: the markers go on the shafts themselves
             (x, z), = xf(M, [(cx, cy)]); icons.append([kind, r2(x), r2(z)])
+        # this plan's outline without symbols, lettering and arrows (they would bulge it past its real edge)
+        extra_drop = {kp_idx[k] for k in used} | {kp_idx[k] for k, p in enumerate(kp) if is_glyph(p, s)}
+        sil_o, _ = silhouette(W, H, paths, drop | extra_drop)
         # zone legend (3/F): coloured squares outside the plan with their names beside them
         zone_names = {}
         sq = sorted([p for p in paths if (classify(p['fill']) or '').startswith('area') and not in_plan(p['bbox']) and (p['bbox'][2] - p['bbox'][0]) < 40],
@@ -359,7 +437,7 @@ for fl in CFG['floors']:
             lines = sorted([t for t in texts if b[2] < t['bbox'][0] < b[2] + 20 and b[1] - 6 <= t['bbox'][1] < y1], key=lambda t: t['bbox'][1])
             if lines: zone_names[classify(p['fill'])] = ' '.join(t['t'] for t in lines)
         # silhouette -> floor slab (and this plan's claim on the floor)
-        cs, _ = cv2.findContours(sil, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cs, _ = cv2.findContours(sil_o, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         new_claims = []
         for c in cs:
             if cv2.contourArea(c) / sc / sc * s * s < 20: continue
@@ -367,6 +445,18 @@ for fl in CFG['floors']:
         # --- fills ---
         tbl_boxes = [p['bbox'] for k, p in enumerate(kp) if k not in used and p['fill'] is not None and classify(p['fill']) == 'table']
         crescents, tbl_fill = [], []
+        # diagonals drawn across squares (voids, glazing, shafts) are not walls
+        sqs = [p['bbox'] for p in kp if p['close'] and min(bbox_m(p['bbox'], s)) > 1.0 and max(bbox_m(p['bbox'], s)) / max(min(bbox_m(p['bbox'], s)), 1e-6) < 1.7]
+        for k, p in enumerate(kp):
+            if k in used or p['fill'] is not None or len(p['polys']) != 1: continue
+            Q = np.array(p['polys'][0][0])
+            if len(Q) != 2: continue
+            for b in sqs:
+                corners = np.array([(b[0], b[1]), (b[2], b[3]), (b[2], b[1]), (b[0], b[3])])
+                d0 = np.hypot(*(corners - Q[0]).T); d1 = np.hypot(*(corners - Q[1]).T)
+                tol = 0.12 * max(b[2] - b[0], b[3] - b[1])
+                if (d0.min() < tol and d1.min() < tol and d0.argmin() // 2 == d1.argmin() // 2 and d0.argmin() != d1.argmin()):
+                    used.add(k); break
         # crossed squares drawn as outlines (atria, lift shafts): pink rectangle + diagonals
         for k, p in enumerate(kp):
             if k in used or p['fill'] is not None or classify(p['stroke']) != 'shelf': continue
@@ -497,6 +587,20 @@ for fl in CFG['floors']:
             later = any(depth(outlines[j], m[0], m[1]) > 1.0 for j in range(src + 1, len(outlines)))
             keep.append(not (edge and later))
         walls = [P for P, k in zip(walls, keep) if k]
+    # walls are drawn as two faces; a long line with no parallel partner is a joint, edge or marking on the floor
+    if walls:
+        W = np.array([np.concatenate([P[0], P[-1]]) for P in walls]); A, B = W[:, :2], W[:, 2:]
+        L = np.hypot(*(B - A).T); U = (B - A) / np.maximum(L, 1e-9)[:, None]
+        keep = np.ones(len(W), bool)
+        for i in np.nonzero(L >= 2.0)[0]:
+            par = np.abs(U[:, 0] * U[i, 1] - U[:, 1] * U[i, 0]) < 0.06
+            across = np.abs(U[i, 0] * (A[:, 1] - A[i, 1]) - U[i, 1] * (A[:, 0] - A[i, 0]))
+            t0, t1 = (A - A[i]) @ U[i], (B - A[i]) @ U[i]
+            ov = (np.minimum(np.maximum(t0, t1), L[i]) - np.maximum(np.minimum(t0, t1), 0)) > 0.3 * L[i]
+            ok = par & (across > 0.06) & (across < 0.6) & ov; ok[i] = False
+            if not ok.any(): keep[i] = False
+        thin += [P for P, k in zip(walls, keep) if not k]
+        walls = [P for P, k in zip(walls, keep) if k]
     # extra floor areas from the model (e.g. the west building at 2/F, which the plans leave out)
     for ex in fl.get('extra', []):
         P = np.array(ex['poly']).reshape(-1, 2); R_slab.fill(P)
@@ -504,8 +608,9 @@ for fl in CFG['floors']:
         if ex.get('label'): labels.append(dict(t=ex['label'], x=r2(P[:, 0].mean()), z=r2(P[:, 1].mean()), h=0.9, k='zone'))
     for P in voids:
         cx, cz = P[:, 0].mean(), P[:, 1].mean()
-        if not any(k == 'lift' and math.hypot(x - cx, z - cz) < 4 for k, x, z in icons): icons.append(['lift', r2(cx), r2(cz)])
+        if not any(k == 'lift' and math.hypot(x - cx, z - cz) < 1.0 for k, x, z in icons): icons.append(['lift', r2(cx), r2(cz)])
     for P in holes: cv2.fillPoly(R_slab.m, [R_slab.px(P)], 0)     # atria: open to the floor below
+    steps, stairs = stair_steps(stairs, fl.get('h', 4.0))
     lines_out = lambda L: [flat(P) for P in L if len(P) >= 2]
     out = dict(id=fl['id'], name=fl['name'], y=fl['y'], h=fl.get('h', 4.0), sources=[p['file'] for p in fl['plans']], updated=fl.get('updated'),
                slab=[[flat(r) for r in poly] for poly in R_slab.polygons(close=0.2, eps=0.05, min_area=2)],
@@ -513,7 +618,7 @@ for fl in CFG['floors']:
                areas={k: [flat(P) for P in v if area(P) > 0.3] for k, v in areas.items() if v},
                solids={k: [flat(P) for P in v] for k, v in solids.items() if v},
                tables=[flat(P) for P in tables], chairs=chairs,
-               walls=[flat(P) for P in walls], doors=lines_out(doors), stairs=lines_out(stairs), thin=lines_out(thin),
+               walls=[flat(P) for P in walls], doors=lines_out(doors), stairs=lines_out(stairs), thin=lines_out(thin), steps=steps,
                labels=labels, icons=icons)
     floors_out.append(out)
     print(fl['id'], {k: len(v) for k, v in out['solids'].items()}, 'tables', len(tables), 'chairs', len(chairs), 'walls', len(walls), 'holes', len(holes), 'labels', len(labels), 'icons', len(icons))

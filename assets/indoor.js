@@ -43,11 +43,11 @@ const THEME = {
   light: { slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, void: 0x9aa39e,
     shelf: 0xd8c09f, shelfDark: 0xb08d68, shelfG: 0x9cc285, column: 0xc3cac6, wallFill: 0x9aa49f, counter: 0xefc98f,
     bench: 0x9aa4a0, stool: 0x9aa4a0, armchair: 0xf0a24a, seat: 0x9aa4a0, top: 0xd9e8f1, leg: 0x7d8783, chair: 0x6f8f86,
-    wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8 },
+    wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8, step: 0xc9d8d4 },
   dark: { slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, void: 0x141816,
     shelf: 0x7d6a54, shelfDark: 0x5e4c3a, shelfG: 0x4f6e43, column: 0x5f6863, wallFill: 0x8a958f, counter: 0x8a7350,
     bench: 0x5d6762, stool: 0x5d6762, armchair: 0xa86c34, seat: 0x5d6762, top: 0x47606e, leg: 0x8a948f, chair: 0x5f8077,
-    wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b },
+    wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b, step: 0x55625e },
 };
 // heights (m) of the drawn furniture and walls
 const HEIGHT = { shelf: 1.8, shelfDark: 1.83, shelfG: 1.4, column: 3.4, wallFill: 2.4, counter: 1.05, bench: 0.45, stool: 0.45, armchair: 0.7, seat: 0.45 };
@@ -149,6 +149,20 @@ function wallGeo(segs, fills, h) {   // wall lines as boxes WALL_T thick, plus t
   }
   return parts.length ? mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g))) : null;
 }
+// stairs: each step a block from the floor up to its tread ([x0, z0, ... x3, z3, top])
+function stepsGeo(steps) {
+  const v = [];
+  const quad = (a, b, c, d) => v.push(...a, ...b, ...c, ...a, ...c, ...d);
+  for (const s of steps) {
+    const h = s[8], p = [0, 1, 2, 3].map((i) => [s[2 * i], s[2 * i + 1]]);
+    const B = p.map(([x, z]) => [x, 0, z]), T = p.map(([x, z]) => [x, h, z]);
+    quad(T[0], T[3], T[2], T[1]);   // tread
+    for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; quad(B[i], B[j], T[j], T[i]); }
+  }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  g.computeVertexNormals();
+  return g;
+}
 // tables: a top on legs (round or odd shapes: one pedestal); chairs: seat, back and legs, facing the table
 let CHAIR = null;
 function chairGeo() {
@@ -233,6 +247,7 @@ export function createIndoor(S) {
     }
     const wg = wallGeo(fl.walls || [], fl.solids?.wallFill || [], WALL_H);
     if (wg) { add(wg, wallMat()); add(wg, ghostMat(), 0, 5); }
+    if (fl.steps?.length) add(stepsGeo(fl.steps), mat('step', true));
     if (fl.tables?.length) { const t = tableGeo(fl.tables); add(t.top, mat('top', true)); add(t.legs, mat('leg', true)); }
     if (fl.chairs?.length) {
       const im = new THREE.InstancedMesh(chairGeo(), mat('chair', true), fl.chairs.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
