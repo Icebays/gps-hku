@@ -1,1 +1,7 @@
-{ "_readme": "place id -> floor-plan file (tools/build_indoor.py); a place listed here gets the floor selector on the map", "main-library": "main-library.json" }
+{
+ "_readme": "place id -> floor-plan file (tools/build_indoor.py, or tools/build_indoor_raster.py for scanned plans); a place listed here gets the floor selector on the map",
+ "main-library": "main-library.json",
+ "centennial-campus": "centennial-podium.json",
+ "chi-wah-learning-commons": "centennial-podium.json",
+ "lee-shau-kee-lecture-centre": "centennial-podium.json"
+}

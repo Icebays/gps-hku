@@ -207,7 +207,7 @@ async function init() {
       const n = o.name || o.parent?.name || '';
       if (n.startsWith('terrain')) {
         const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
-        o.material = shadowify(terrainMaterial(map), TERRAIN_SHADOW);
+        o.material = cutify(shadowify(terrainMaterial(map), TERRAIN_SHADOW));   // cut too: floors below ground (CPD LG/F, G/F) show through
         o.material.polygonOffset = true; o.material.polygonOffsetFactor = 1; o.material.polygonOffsetUnits = 4; // roads draped on top win near-ties
         s.terrain = (s.terrain || []).concat(o);
       } else if (n.startsWith('buildings')) {

@@ -43,11 +43,11 @@ const THEME = {
   light: { slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, void: 0x9aa39e,
     shelf: 0xd8c09f, shelfDark: 0xb08d68, shelfG: 0x9cc285, column: 0xc3cac6, wallFill: 0x9aa49f, counter: 0xefc98f,
     bench: 0x9aa4a0, stool: 0x9aa4a0, armchair: 0xf0a24a, seat: 0x9aa4a0, top: 0xd9e8f1, leg: 0x7d8783, chair: 0x6f8f86,
-    wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8, step: 0xc9d8d4, screen: 0xa9c3cc },
+    wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8, step: 0xc9d8d4, screen: 0xa9c3cc, ink: 0x7d8783 },
   dark: { slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, void: 0x141816,
     shelf: 0x7d6a54, shelfDark: 0x5e4c3a, shelfG: 0x4f6e43, column: 0x5f6863, wallFill: 0x8a958f, counter: 0x8a7350,
     bench: 0x5d6762, stool: 0x5d6762, armchair: 0xa86c34, seat: 0x5d6762, top: 0x47606e, leg: 0x8a948f, chair: 0x5f8077,
-    wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b, step: 0x55625e, screen: 0x4f6670 },
+    wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b, step: 0x55625e, screen: 0x4f6670, ink: 0x8f9a94 },
 };
 // heights (m) of the drawn furniture and walls
 const HEIGHT = { shelf: 1.8, shelfDark: 1.83, shelfG: 1.4, column: 3.4, wallFill: 2.4, counter: 1.05, bench: 0.45, stool: 0.45, armchair: 0.7, seat: 0.45 };
@@ -260,7 +260,8 @@ export function createIndoor(S) {
       fl.chairs.forEach(([x, z, a], i) => im.setMatrixAt(i, m4.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(up, -a), new THREE.Vector3(1, 1, 1))));
       g.add(im);
     }
-    for (const k of ['thin', 'doors', 'stairs']) if (fl[k]?.length) {
+    // ink: the whole drawing of a scanned plan (tools/build_indoor_raster.py), darker than the minor lines
+    for (const k of ['thin', 'doors', 'stairs', 'ink']) if (fl[k]?.length) {
       const key = k === 'doors' ? 'door' : k;
       const ln = new THREE.LineSegments(lineGeo(fl[k], 0.08), lmat(key)); g.add(ln);
     }

@@ -130,3 +130,13 @@ these files. The map draws them with `assets/indoor.js`. Needs `pymupdf`, `openc
   become chairs and desk tops, and blocks of packed boxes with no seats become compact shelving. Long thin faces are
   floor arrows or railings, and the lines left over become low screens. Small marks free of the walls are dropped
   (e.g. the lift call arrows).
+
+```bash
+python3 tools/build_indoor_raster.py tools/indoor/centennial-podium.json <CPDFloorPlan.pdf> data/indoor/centennial-podium.json
+```
+
+Scanned plans (the Centennial Campus podium, CPD LG/F–4/F: the Examinations Office's classroom plans, one page a
+floor) go through `tools/build_indoor_raster.py`, which writes the same format. Each page is registered to the
+model: 2/F to the surveyed sections of the podium and towers, the others to 2/F through the columns, cores and atria
+they share. The ink is traced into floor lines. Walls stand only round the classrooms, found from their red numbers
+and matched to their seat counts. The atria and the footprint come from the model. Needs `scikit-image` as well.
