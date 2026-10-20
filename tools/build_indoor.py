@@ -235,7 +235,7 @@ def r2(v): return round(float(v), 2)
 def flat(P): return [r2(v) for xy in P for v in xy]
 
 # ---------- labels ----------
-DROP_TEXT = re.compile(r'^(YOU ARE HERE|You Are Here|N|Last update.*|.*\bPLAN\.?$|G/F\s+MAIN LIBRARY)$', re.I)
+DROP_TEXT = re.compile(r'^(YOU ARE HERE|You Are Here|N|Last update.*|.*\bPLAN\.?$|G/F\s+MAIN LIBRARY|(OLD|NEW)\s*WING\.?)$', re.I)
 def merge_lines(texts):
     """join the lines of multi-line labels"""
     T = sorted(texts, key=lambda t: (round(t['dir'][0], 2), round(t['dir'][1], 2), t['bbox'][1]))
@@ -282,7 +282,8 @@ def is_glyph(p, s):
     """outlined lettering (room numbers, OPAC, MALE ...): curved fills made of several small sub-paths"""
     if p['fill'] is None or not any(c for _, c in p['polys']) or is_crescent(p, s): return False
     w, h = bbox_m(p['bbox'], s)
-    return max(w, h) < 1.4 and (len(p['polys']) >= 2 or npts(p) > 14) and classify(p['fill']) in ('wall', 'chair')
+    if classify(p['fill']) not in ('wall', 'chair'): return False
+    return (max(w, h) < 1.4 and (len(p['polys']) >= 2 or npts(p) > 14)) or (min(w, h) < 0.55 and len(p['polys']) >= 3)
 
 # ---------- main ----------
 place = CFG['place']; ext = CFG['extent']
@@ -296,6 +297,7 @@ for fl in CFG['floors']:
     walls, doors, stairs, thin = [], [], [], []
     labels, icons = [], []
     claimed = []    # earlier plans' outlines on this floor (model frame): later plans don't redraw what is inside
+    outlines, wall_src = [], []
     for part in fl['plans']:
         W, H, paths, texts = read_pdf(os.path.join(pdf_dir, part['file']))
         M = part['M']; s = math.hypot(M[0], M[1])     # metres per PDF point
@@ -306,11 +308,46 @@ for fl in CFG['floors']:
         def in_plan(b):
             cx, cy = int((b[0] + b[2]) / 2 * sc), int((b[1] + b[3]) / 2 * sc)
             return 0 <= cy < sil_d.shape[0] and 0 <= cx < sil_d.shape[1] and sil_d[cy, cx] > 0
+        def on_seam(P, tol=0.9):    # every point within tol of an earlier plan's outline
+            return bool(claimed) and all(min(abs(cv2.pointPolygonTest(c, (float(x), float(z)), True)) for c in claimed) < tol for x, z in P)
         def mine(b):    # not already drawn by an earlier plan of this floor
             (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
             return not any(cv2.pointPolygonTest(c, (float(x), float(z)), True) > 0.4 for c in claimed)
         kp = [p for i, p in enumerate(paths) if i not in drop and in_plan(p['bbox']) and mine(p['bbox'])]
         ic, used = find_icons(kp, s)
+        # arrows (direction signs, call-number ranges along the shelves): heads and shafts are not walls
+        heads = []
+        for k, p in enumerate(kp):
+            if k in used: continue
+            for poly, curve in p['polys']:
+                if curve: continue
+                Q = np.array(poly)
+                if p['fill'] is None and len(Q) == 3:
+                    l1, l2 = np.hypot(*(Q[0] - Q[1])) * s, np.hypot(*(Q[2] - Q[1])) * s
+                    v1, v2 = Q[0] - Q[1], Q[2] - Q[1]
+                    ang = math.degrees(math.acos(np.clip(np.dot(v1, v2) / max(np.linalg.norm(v1) * np.linalg.norm(v2), 1e-9), -1, 1)))
+                    if 0.1 < l1 < 0.8 and 0.1 < l2 < 0.8 and 25 < ang < 110: heads.append((Q[1], k))
+                elif p['fill'] is not None and is_navy(p['fill']) and 3 <= len(Q) <= 5 and area(Q * s) < 0.2 and max(np.ptp(Q, 0)) * s < 0.8:
+                    heads.append((Q.mean(0), k))
+        arrow_k = {k for _, k in heads}
+        if heads:
+            hp = np.array([h for h, _ in heads])
+            for k, p in enumerate(kp):
+                if k in used or p['fill'] is not None or len(p['polys']) != 1 or p['polys'][0][1]: continue
+                Q = np.array(p['polys'][0][0])
+                if len(Q) == 2 and np.hypot(*(Q[1] - Q[0])) * s < 14 and min(np.hypot(*(hp - Q[0]).T).min(), np.hypot(*(hp - Q[1]).T).min()) * s < 0.35:
+                    arrow_k.add(k)
+        for k in arrow_k:
+            for poly, _ in kp[k]['polys']: thin.append(xf(M, poly))
+        used.update(arrow_k)
+        # direction arrows beside the OLD WING / NEW WING signs are not walls
+        for t in texts:
+            if re.search(r'WING', t['t']):
+                b = t['bbox']; cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2; r = 3.5 / s
+                for k, p in enumerate(kp):
+                    q = p['bbox']
+                    if p['fill'] is None and classify(p['stroke']) == 'wall' and max(q[2] - q[0], q[3] - q[1]) * s < 3 and abs((q[0] + q[2]) / 2 - cx) < r and abs((q[1] + q[3]) / 2 - cy) < r:
+                        used.add(k)
         for kind, cx, cy, size in ic:
             (x, z), = xf(M, [(cx, cy)]); icons.append([kind, r2(x), r2(z)])
         # zone legend (3/F): coloured squares outside the plan with their names beside them
@@ -427,10 +464,11 @@ for fl in CFG['floors']:
             if k in chair_k: continue
             for poly, curve in kp[k]['polys']:
                 P = xf(M, poly)
-                if curve: doors.append(P)
+                if curve:
+                    if not on_seam(P): doors.append(P)
                 else:
                     for a_, b_ in zip(P[:-1], P[1:]):
-                        if np.hypot(*(b_ - a_)) > 0.12: walls.append(np.array([a_, b_]))
+                        if np.hypot(*(b_ - a_)) > 0.12 and not on_seam(np.array([a_, b_])): walls.append(np.array([a_, b_])); wall_src.append(len(outlines))
         for k, p in enumerate(kp):
             if k in used or p['fill'] is not None or p['stroke'] is None: continue
             scls = classify(p['stroke'])
@@ -449,7 +487,16 @@ for fl in CFG['floors']:
             big = sorted(areas[cls], key=area, reverse=True)
             if big:
                 P = big[0]; labels.append(dict(t=name, x=r2(P[:, 0].mean()), z=r2(P[:, 1].mean()), h=r2(0.9), k='zone'))
-        claimed += new_claims
+        claimed += new_claims; outlines.append(new_claims)
+    if len(outlines) > 1:
+        def depth(cs, x, z): return max((cv2.pointPolygonTest(c, (float(x), float(z)), True) for c in cs), default=-1e9)
+        keep = []
+        for P, src in zip(walls, wall_src):
+            edge = all(abs(depth(outlines[src], x, z)) < 0.6 for x, z in P)
+            m = P.mean(0)
+            later = any(depth(outlines[j], m[0], m[1]) > 1.0 for j in range(src + 1, len(outlines)))
+            keep.append(not (edge and later))
+        walls = [P for P, k in zip(walls, keep) if k]
     # extra floor areas from the model (e.g. the west building at 2/F, which the plans leave out)
     for ex in fl.get('extra', []):
         P = np.array(ex['poly']).reshape(-1, 2); R_slab.fill(P)

@@ -1,5 +1,5 @@
 {
- "_readme": "Main Library floor plans: one entry per floor, its PDF(s) from HKU Libraries (https://lib.hku.hk/mainlib/floorplan.html) and each plan's registration to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = PDF points; fitted to the surveyed footprints of the Old Wing B32228..., New Wing B32234... and podium B32273... and to the plans' common column grid). y = floor level in mPD: G/F is Sun Yat-sen Place (81 m, the podium roof) and floors are 4 m apart (New Wing roof 101 m above 4/F, Old Wing roof 109 m above 6/F). \"extra\": floor areas taken from the model where the plans leave a connected part out (2/F west building).",
+ "_readme": "Main Library floor plans: one entry per floor, its PDF(s) from HKU Libraries (https://lib.hku.hk/mainlib/floorplan.html) and each plan's registration to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = PDF points; fitted to the surveyed footprints of the Old Wing B32228..., New Wing B32234... and podium B32273... and to the plans' common column grid). y = floor level in mPD: G/F is Sun Yat-sen Place (81 m, the podium roof) and floors are 4 m apart (New Wing roof 101 m above 4/F, Old Wing roof 109 m above 6/F). \"extra\": floor areas taken from the model where the plans leave a connected part out (2/F west building). New Wing plans that share a floor with an Old Wing plan are then shifted so the two lift shafts of the link block, drawn on both, coincide.",
  "place": "main-library",
  "source": {
   "en": "Floor plans: HKU Libraries (redrawn)",
@@ -59,8 +59,8 @@
      "M": [
       -0.0857115,
       -0.0038851,
-      31.4548223,
-      -121.1942674
+      32.7189,
+      -119.8445
      ]
     }
    ]
@@ -89,8 +89,8 @@
      "M": [
       -0.0709476,
       -0.0026277,
-      29.2960937,
-      -128.6820061
+      30.1304,
+      -127.6278
      ]
     }
    ],
@@ -265,8 +265,8 @@
      "M": [
       -0.0693416,
       -0.0028274,
-      29.0787426,
-      -129.0825681
+      30.4487,
+      -127.3859
      ]
     }
    ]
