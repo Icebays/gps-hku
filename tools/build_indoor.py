@@ -16,6 +16,7 @@ Needs: pymupdf, numpy, opencv-python-headless, scipy
 import itertools, json, math, os, re, sys
 import numpy as np
 import cv2
+from shapely.ops import unary_union
 import pymupdf
 from scipy import ndimage
 
@@ -615,6 +616,114 @@ def furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, 
         if sh is None or g.difference(sh).length > 0.1: screens.append(P)
     return keep_w, keep_d
 
+# ---------- rooms ----------
+SIGN = re.compile(r'OPAC|SELF[- ]?CHECK|KIOSK|GUARD|SCANNER|DROPBOX|PRINTING|CHARGING|SIGN IN|COUNTER|ENTRANCE|NEWSPAPER|'
+                  r'RESHELVING|HOLD BOOKS|SELF-SERVICE|PRINTERS|TERMINAL|SERIALS|待上架|新書', re.I)
+BIG_ROOM = re.compile(r'AREA|COLLECTION|CENTRE|ARCHIVES|LIBRARY|HALL|ZONE', re.I)
+def tidy_labels(labels):
+    """drop the scraps of signs drawn over the plan (lift numbers, floor areas) and send call-number and
+    shelf-sign fragments to the shelf labels"""
+    out = []
+    for l in labels:
+        lines = [x for x in l['t'].split('\n') if not re.fullmatch(r'\s*(\d+(\.\d+)?\s*)?m²\s*', x)]
+        if not lines: continue
+        l = dict(l, t='\n'.join(lines)); t = ' '.join(l['t'].split())
+        if l['k'] == 'room':
+            if re.fullmatch(r'\d+\.\d+|LI|F|T\s*\d\.?|LIFT\s*\d\.?', t): continue
+            if re.search(r'[\[\]]', t) or re.fullmatch(r'[\u3400-\u9fff]{1,5}', t) or re.fullmatch(r'[A-Z][A-Z-]{0,2}', t) or \
+                    re.fullmatch(r'([A-Z]{1,2}\s*\d{2,}\s*-?\s*)+|(PL\s*)+', t):
+                l = dict(l, k='shelf')
+        out.append(l)
+    return out
+
+def find_rooms(fl, walls, solids, voids, holes, R_slab, labels, areas, res=0.1):
+    """a named room is the space round its name closed off by walls (with screens and door swings, which close the
+    doorways), columns and the floor's edge; other openings are bridged by growing the walls (0-0.55 m), the least
+    that closes the room. Found rooms are shaded (areaR) and their
+    names marked (r) so the map shows them as rooms, not as words on the floor"""
+    k = int(round(res / R_slab.res))
+    floor = cv2.resize(R_slab.m, (R_slab.m.shape[1] // k, R_slab.m.shape[0] // k), interpolation=cv2.INTER_AREA) > 0
+    H, W = floor.shape
+    def px(P): return np.round((np.asarray(P, float) - [R_slab.x0, R_slab.z0]) / res).astype(np.int32)
+    bar = np.zeros((H, W), np.uint8)
+    for P in walls: cv2.polylines(bar, [px(P)], False, 1, 2)
+    for key in ('wallFill', 'column'):
+        for P in solids.get(key, []): cv2.fillPoly(bar, [px(P)], 1)
+    for P in list(voids) + list(holes): cv2.fillPoly(bar, [px(P)], 1)
+    if os.environ.get('DBG_RIMG') == fl['id']:
+        im = np.dstack([np.where(floor, 235, 255)] * 3).astype(np.uint8); im[bar > 0] = (0, 0, 200)
+        for l in labels:
+            q = px([[l['x'], l['z']]])[0]; cv2.putText(im, ' '.join(l['t'].split())[:12], (int(q[0]), int(q[1])), 0, 0.35, (200, 0, 0), 1)
+        cv2.imwrite(os.environ['DBG_OUT'], im)
+    names = [l for l in labels if l['k'] == 'room' and not SIGN.search(l['t'])]
+    found = []
+    for l in names:
+        if l.get('r'): continue
+        given = fl.get('rooms', {}).get(' '.join(l['t'].split()))
+        if given:
+            found.append(np.array(given, float).reshape(-1, 2)); l['r'] = 1; continue
+        t1 = ' '.join(l['t'].split())
+        # how big a room of this name can be: numbered study rooms are small, named rooms and offices middling, and
+        # open zones (… AREA, … COLLECTION) are marked only when a wall closes them off small
+        amax = 40 if re.fullmatch(r'\d{1,2}', t1) else 250 if ROOM_NAME.search(t1) or re.search(r'TOILET|LAB\b', t1, re.I) else \
+            150 if BIG_ROOM.search(t1) else 120
+        c = px([[l['x'], l['z']]])[0]
+        if not (0 <= c[0] < W and 0 <= c[1] < H): continue
+        why = []
+        for d in (0.0, 0.25, 0.4, 0.55) + ((0.7, 0.85) if amax <= 40 else ()):
+            r = int(round(d / res))
+            b = cv2.dilate(bar, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))) if r else bar.copy()
+            b[~floor] = 1
+            win = 6
+            y0, x0 = max(c[1] - win, 0), max(c[0] - win, 0)
+            free = np.argwhere(b[y0:c[1] + win + 1, x0:c[0] + win + 1] == 0)
+            if not len(free): continue
+            fy, fx = free[np.argmin(((free + [y0, x0] - [c[1], c[0]]) ** 2).sum(1))]
+            ff = b.copy(); mask = np.zeros((H + 2, W + 2), np.uint8)
+            n = cv2.floodFill(ff, mask, (int(x0 + fx), int(y0 + fy)), 2)[0]
+            A = n * res * res
+            cap = amax if amax <= 40 or d > 0 else 600        # closed off by the walls as drawn: a room however big
+            if A > cap * 1.3: why.append((d, round(A))); continue
+            reg = (ff == 2).astype(np.uint8)
+            if r: reg = cv2.dilate(reg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+            reg &= floor.astype(np.uint8)
+            A = reg.sum() * res * res
+            if not 4.0 <= A <= cap: why.append((d, round(A))); continue
+            if d > 0.4 and A > 60: why.append((d, 'leaky', round(A))); continue    # closed only by growing the walls a lot: an open area
+            inside = [m for m in names if m is not l and 0 <= px([[m['x'], m['z']]])[0][1] < H and 0 <= px([[m['x'], m['z']]])[0][0] < W
+                      and reg[px([[m['x'], m['z']]])[0][1], px([[m['x'], m['z']]])[0][0]]]
+            if len(inside) > 2: why.append((d, 'names', len(inside))); continue     # an open area with several names in it
+            cs, _ = cv2.findContours(reg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cc = max(cs, key=cv2.contourArea)
+            P = cv2.approxPolyDP(cc, 0.12 / res, True)[:, 0, :] * res + [R_slab.x0, R_slab.z0]
+            if any(np.allclose(P.mean(0), q.mean(0), atol=0.3) and abs(area(P) - area(q)) < 1 for q in found):
+                l['r'] = 1; break
+            found.append(P); l['r'] = 1
+            if os.environ.get('DBG_R'): print('  room+', fl['id'], ' '.join(l['t'].split())[:40], round(area(P)), 'd', d)
+            break
+        if not l.get('r'):
+            # the name sits on a wall or in a pocket: try round it (0.8-1.5 m away) and take the smallest room found
+            best = None
+            for r, rad in ((int(round(dd / res)), rr) for dd in (0.25, 0.4) for rr in (0.8, 1.5)):
+                b = cv2.dilate(bar, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))); b[~floor] = 1
+                for ang in np.linspace(0, 2 * np.pi, 12, endpoint=False):
+                    q = (c + np.round([rad / res * np.cos(ang), rad / res * np.sin(ang)])).astype(int)
+                    if not (0 <= q[0] < W and 0 <= q[1] < H) or b[q[1], q[0]]: continue
+                    ff = b.copy(); mask = np.zeros((H + 2, W + 2), np.uint8)
+                    n = cv2.floodFill(ff, mask, (int(q[0]), int(q[1])), 2)[0]
+                    if not 4 <= n * res * res <= amax: continue
+                    if best is None or n < best[0]: best = (n, (ff == 2).astype(np.uint8), r)
+                if best: break
+            if best:
+                r = best[2]
+                reg = cv2.dilate(best[1], cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))) & floor.astype(np.uint8)
+                cs, _ = cv2.findContours(reg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                P = cv2.approxPolyDP(max(cs, key=cv2.contourArea), 0.12 / res, True)[:, 0, :] * res + [R_slab.x0, R_slab.z0]
+                found.append(P); l['r'] = 1
+        if os.environ.get('DBG_R') and not l.get('r'): print('  room?', fl['id'], ' '.join(l['t'].split()), why)
+    areas.setdefault('areaR', []).extend(found)
+    return found
+
 # ---------- main ----------
 place = CFG['place']; ext = CFG['extent']
 floors_out = []
@@ -816,7 +925,7 @@ for fl in CFG['floors']:
         for t in merge_lines(tk):
             b = t['bbox']; (x, z), = xf(M, [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)])
             first = t['t'].split('\n')[0]
-            kind = 'shelf' if CALLNO.match(first) and t['size'] < 7 else 'room'
+            kind = 'shelf' if CALLNO.match(first) and t['size'] < 7 and not ROOM_NAME.search(t['t']) else 'room'
             labels.append(dict(t=t['t'], x=r2(x), z=r2(z), h=r2(t['size'] * s), k=kind))
         for cls, name in zone_names.items():
             big = sorted(areas[cls], key=area, reverse=True)
@@ -845,7 +954,45 @@ for fl in CFG['floors']:
     voids[:] = real
     for k in ('shelf', 'shelfDark'): solids[k] = [P for i, P in enumerate(solids[k]) if (k, i) not in drop_sh]
     rooms = [(l['x'], l['z']) for l in labels if l['k'] != 'zone' and ROOM_NAME.search(l['t'])]
+    pre = walls + doors
     walls, doors = furniture(walls, doors, outlines, solids, chair_all, tables, screens, thin, voids, holes, rooms)
+    # movable partitions are drawn dashed, as rows of short separate strokes: furniture() takes each for a scrap;
+    # strokes in line with another (gap under 0.8 m) are partitions, shown as screens and closing rooms off
+    kept = {id(P) for P in walls + doors + screens}
+    short = [P for P in pre if id(P) not in kept and len(P) == 2 and 0.25 < np.hypot(*(P[1] - P[0])) < 1.6]
+    # loose strokes only: a stroke whose end meets another line (a desk's or shelf's outline turning a corner) is not a dash
+    ends = np.array([e for P in pre for e in (P[0], P[-1])]) if pre else np.zeros((0, 2))
+    def loose(P):
+        for e in (P[0], P[-1]):
+            d = np.hypot(*(ends - e).T)
+            if ((d < 0.06).sum()) > 1: return False
+        return True
+    short = [P for P in short if loose(P)]
+    par = list(range(len(short)))
+    def fd(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    for i, P in enumerate(short):
+        u = (P[1] - P[0]) / np.hypot(*(P[1] - P[0]))
+        for j in range(i + 1, len(short)):
+            Q = short[j]; v = (Q[1] - Q[0]) / np.hypot(*(Q[1] - Q[0]))
+            if abs(u[0] * v[1] - u[1] * v[0]) > 0.08: continue
+            off = abs(u[0] * (Q[0][1] - P[0][1]) - u[1] * (Q[0][0] - P[0][0]))
+            gap = min(np.hypot(*(a_ - b_)) for a_ in P for b_ in Q)
+            if off < 0.08 and 0.05 < gap < 0.8: par[fd(i)] = fd(j)
+    chains = {}
+    for i in range(len(short)): chains.setdefault(fd(i), []).append(i)
+    dash = set()
+    for g in chains.values():
+        if len(g) < 3: continue
+        pts = np.concatenate([short[i] for i in g])
+        span = np.hypot(*(pts[:, None] - pts[None]).T).max()
+        if span >= 2.5: dash.update(g)
+    partitions = [short[i] for i in sorted(dash)]
+    if partitions:
+        pid = {id(P) for P in partitions}
+        thin[:] = [P for P in thin if id(P) not in pid]
+        screens += partitions
     # small dark marks standing free of the walls (lift call arrows, signs) are not walls
     if solids['wallFill'] and walls:
         from shapely.geometry import LineString, Polygon
@@ -892,13 +1039,29 @@ for fl in CFG['floors']:
             ov = (np.minimum(np.maximum(t0, t1), L[i]) - np.maximum(np.minimum(t0, t1), 0)) > 0.3 * L[i]
             ok = par & (across > 0.06) & (across < 0.6) & ov; ok[i] = False
             if not ok.any(): keep[i] = False
-        thin += [P for P, k in zip(walls, keep) if not k]
+        singles = [P for P, k in zip(walls, keep) if not k]
         walls = [P for P, k in zip(walls, keep) if k]
+    else:
+        singles = []
     # extra floor areas from the model (e.g. the west building at 2/F, which the plans leave out)
     for ex in fl.get('extra', []):
         P = np.array(ex['poly']).reshape(-1, 2); R_slab.fill(P)
         if ex.get('kind'): areas.setdefault(ex['kind'], []).append(P)
         if ex.get('label'): labels.append(dict(t=ex['label'], x=r2(P[:, 0].mean()), z=r2(P[:, 1].mean()), h=0.9, k='zone'))
+    labels = tidy_labels(labels)
+    found = find_rooms(fl, walls + screens + doors + singles, solids, voids, holes, R_slab, labels, areas)
+    # a second try for the rest without the short screens (desk partitions inside a small room cut it up)
+    pid = {id(P) for P in partitions}
+    found += find_rooms(fl, walls + [P for P in screens if id(P) in pid or np.hypot(*(P[-1] - P[0])) >= 2.0] + doors + singles,
+                        solids, voids, holes, R_slab, labels, areas)
+    # single lines along a room's edge are its partitions (glazed fronts drawn as one line): walls; the rest were
+    # joints and markings on the floor
+    if found and singles:
+        from shapely.geometry import LineString, Polygon
+        edge = unary_union([Polygon(P).buffer(0).exterior for P in found]).buffer(0.35)
+        part = [edge.contains(LineString(P)) or LineString(P).intersection(edge).length > 0.8 * LineString(P).length for P in singles]
+        walls += [P for P, k in zip(singles, part) if k]; singles = [P for P, k in zip(singles, part) if not k]
+    thin += singles
     for P in voids:
         cx, cz = P[:, 0].mean(), P[:, 1].mean()
         if not any(k == 'lift' and math.hypot(x - cx, z - cz) < 1.0 for k, x, z in icons): icons.append(['lift', r2(cx), r2(cz)])

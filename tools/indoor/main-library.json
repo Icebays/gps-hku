@@ -1,5 +1,5 @@
 {
- "_readme": "Main Library floor plans: one entry per floor, its PDF(s) from HKU Libraries (https://lib.hku.hk/mainlib/floorplan.html) and each plan's registration to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = PDF points; fitted to the surveyed footprints of the Old Wing B32228..., New Wing B32234... and podium B32273... and to the plans' common column grid). y = floor level in mPD: G/F is Sun Yat-sen Place (81 m, the podium roof) and floors are 4 m apart (New Wing roof 101 m above 4/F, Old Wing roof 109 m above 6/F). New Wing plans that share a floor with an Old Wing plan are then shifted so the two lift shafts of the link block, drawn on both, coincide.",
+ "_readme": "Main Library floor plans: one entry per floor, its PDF(s) from HKU Libraries (https://lib.hku.hk/mainlib/floorplan.html) and each plan's registration to the model frame: x = a*u - b*v + tx, z = b*u + a*v + tz (u, v = PDF points; fitted to the surveyed footprints of the Old Wing B32228..., New Wing B32234... and podium B32273... and to the plans' common column grid). y = floor level in mPD: G/F is Sun Yat-sen Place (81 m, the podium roof) and floors are 4 m apart (New Wing roof 101 m above 4/F, Old Wing roof 109 m above 6/F). New Wing plans that share a floor with an Old Wing plan are then shifted so the two lift shafts of the link block, drawn on both, coincide. rooms: room outlines given by hand (model frame, flat x,z) for named rooms the walls don't close off, by the name on the plan.",
  "place": "main-library",
  "source": {
   "en": "Floor plans: HKU Libraries (redrawn)",
@@ -114,7 +114,47 @@
       -106.3327096
      ]
     }
-   ]
+   ],
+   "rooms": {
+    "16": [
+     -18.34,
+     -129.34,
+     -18.44,
+     -127.64,
+     -17.84,
+     -127.24,
+     -17.64,
+     -126.74,
+     -16.44,
+     -126.64,
+     -16.34,
+     -129.24
+    ],
+    "3": [
+     -16.82,
+     -132.57,
+     -17.12,
+     -132.47,
+     -17.52,
+     -132.07,
+     -17.52,
+     -131.77,
+     -18.22,
+     -131.17,
+     -18.22,
+     -130.47,
+     -17.82,
+     -129.87,
+     -17.22,
+     -129.47,
+     -16.62,
+     -129.57,
+     -16.32,
+     -129.87,
+     -16.22,
+     -132.17
+    ]
+   }
   },
   {
    "id": "4",

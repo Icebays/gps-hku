@@ -181,7 +181,7 @@ for fl in CFG['floors']:
         if poly is not None and len(poly) >= 3:
             areas['areaC' if name in innov else 'areaY'].append(poly); rooms.append(Polygon(poly).buffer(0))
             x, z = poly.mean(0)
-        labels.append(dict(t=name + (f'\n{seats} seats' if seats else ''), x=r2(x), z=r2(z), h=0.9, k='room'))
+        labels.append(dict(t=name + (f'\n{seats} seats' if seats else ''), x=r2(x), z=r2(z), h=0.9, k='room', **({'r': 1} if poly is not None else {})))
     # --- walls: only where the plan is sure of them, the classrooms' outlines (at this scan's resolution the other
     # walls can't be told from rows of desks and seats, so they stay lines on the floor) ---
     walls = []
