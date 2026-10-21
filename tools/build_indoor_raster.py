@@ -12,8 +12,10 @@ Each page is rendered and read as ink:
   numbers become the room labels, with their capacity from the page's list ("2.14 (50)");
 - all the ink is traced into lines drawn on the floor (`ink`: walls, desks, seats, stairs, fittings), darker than
   the vector plans' minor lines since here they carry the whole plan;
-- walls stand only where the plan is sure of them, round the numbered rooms (at this resolution other walls can't be
-  told from rows of desks and seats); solid squares of about 1 m are columns;
+- walls: at this resolution (about 0.2 m a pixel in the scans) a wall can't be told from a row of desks or seats, so
+  they are traced by hand on each page (`walls` in the config, snapped to the ink) and stand with the outlines of
+  the hand-traced rooms; small-print room names are read off the page too (`notes`); solid squares of about 1 m are
+  columns;
 - the floor is the drawing's closed outline inside the footprint, or the whole footprint for a floor that fills it
   (`"slab": "clip"`), with the atria (`holes` in the config) cut out;
 - a room with a red number is the space round it, closed off by the thick strokes (door openings bridged), shaded as
@@ -179,7 +181,8 @@ for fl in CFG['floors']:
         poly = xf(traced) if traced else xf(cv2.approxPolyDP(best[1], px(0.4), True)[:, 0, :]) if best else None
         (x, z), = xf([((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)])
         if poly is not None and len(poly) >= 3:
-            areas['areaC' if name in innov else 'areaY'].append(poly); rooms.append(Polygon(poly).buffer(0))
+            areas['areaC' if name in innov else 'areaY'].append(poly)
+            if traced or not fl.get('walls'): rooms.append(Polygon(poly).buffer(0))
             x, z = poly.mean(0)
         labels.append(dict(t=name + (f'\n{seats} seats' if seats else ''), x=r2(x), z=r2(z), h=0.9, k='room', **({'r': 1} if poly is not None else {})))
     # --- walls: only where the plan is sure of them, the classrooms' outlines (at this scan's resolution the other
@@ -188,6 +191,13 @@ for fl in CFG['floors']:
     for R_ in rooms:
         for g in getattr(R_, 'geoms', [R_]):
             P = np.array(g.exterior.simplify(0.3).coords); walls += [P[k:k + 2] for k in range(len(P) - 1)]
+    # walls traced by hand on the page (`walls` in the config: polylines in rendered page pixels, snapped to the ink)
+    for P in fl.get('walls', []):
+        P = xf(P); walls += [P[k:k + 2] for k in range(len(P) - 1)]
+    # rooms named on the plan in small print (not in the PDF's text layer), read off the page: signs
+    for name, u, v in fl.get('notes', []):
+        (x, z), = xf([(u, v)])
+        labels.append(dict(t=name, x=r2(x), z=r2(z), h=0.7, k='room', r=1))
     # --- all the ink, as lines on the floor ---
     thin = []
     for line in trace(skeletonize(dark)):
