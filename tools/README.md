@@ -140,3 +140,15 @@ floor) go through `tools/build_indoor_raster.py`, which writes the same format. 
 model: 2/F to the surveyed sections of the podium and towers, the others to 2/F through the columns, cores and atria
 they share. The ink is traced into floor lines. Walls stand only round the classrooms, found from their red numbers
 and matched to their seat counts. The atria and the footprint come from the model. Needs `scikit-image` as well.
+
+### Many tiles: fit the terrain photos to the GPU
+
+Every terrain tile brings a 4096 px photo. Twenty-six of them need about 1.9 GB of GPU memory once decoded, more than
+a phone or most laptops have, and the map then never opens. After building `hku.glb` from many tiles, run:
+
+```bash
+node tools/shrink_terrain.mjs assets/model/hku.glb assets/model/hku.glb
+```
+
+It keeps the main campus tiles (11-SW-7C, 7D) at 4096 px, Sassoon Road and the slope above it (11-SW-16B, 11D) at
+2048 px and the rest at 1024 px (set in `SIZE` in the script), about 0.35 GB in all. Geometry is left as it is.
