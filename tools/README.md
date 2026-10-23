@@ -1,6 +1,7 @@
 # Rebuilding the 3D model
 
-`assets/model/hku.glb` is generated from the original 3dmap.gov.hk tiles in `model/`.
+The site streams the campus model in tiles (`assets/tiles/`, see below), cut from one merged model built from the
+original 3dmap.gov.hk tiles in `model/`.
 
 ```bash
 # 1. unzip each tile into its own folder, e.g. work/7C, work/7D
@@ -13,11 +14,29 @@ python3 tools/build_raw.py work out 7C,7D
 
 # 3. weld, simplify terrain, WebP textures, meshopt compression
 #    (needs: npm i @gltf-transform/core@4 @gltf-transform/functions@4 @gltf-transform/extensions@4 meshoptimizer@0.22 sharp)
-node tools/optimize.mjs out/raw.glb assets/model/hku.glb 0.4 4096 80
+node tools/optimize.mjs out/raw.glb out/hku.glb 0.4 4096 80
 
 # 4. convert buildings.json to the compact form used by the site
 python3 -c "import json;B=json.load(open('out/buildings.json'));json.dump([[b['id'],b['x'],b['z'],b['base'],b['top']] for b in B],open('assets/model/buildings.json','w'),separators=(',',':'))"
+
+# 5. cut it into the streamed tiles (add each tile's extent to data/tiles.json first)
+node tools/build_tiles.mjs out/hku.glb [<older hku.glb> <its buildings.json>]
 ```
+
+`optimize.mjs` stores positions as 16-bit integers over the bounding box of all the buildings, so one building far
+outside the tiles coarsens every building (the 26-tile build of Oct 2026 had one 16 km away: 0.28 m steps). Leave such
+buildings out of `raw.glb`. Given an older model, `build_tiles.mjs` keeps its buildings (and the bridges in its terrain
+tiles) as they were: the live tiles keep the main campus (11-SW-7C, 7D) from the 2-tile model, at 2.4 cm steps.
+
+### Streaming (assets/tiles.js)
+
+`build_tiles.mjs` writes, per tile, `terrain.glb` (the terrain, plus a simplified copy with its edges locked),
+`objects.glb` (buildings and bridges, exactly as in the input) and the aerial photo as a quadtree of WebP pieces
+(512 px for the whole tile down to 8 x 8 pieces at the full 4096 px), with `index.json` and a 10 m height grid
+(`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera, their buildings within 1.7 km
+(1.4 km on phones), and only the photo pieces that are in view and drawn larger than their own resolution, within a
+memory budget. Tiles further than 700 m use the simplified terrain. The tiles the drawn roads cover (11-SW-7C, 7D)
+always stay loaded.
 
 Model frame: `x = Easting − 832250`, `z = −(Northing − 815900)` (HK1980 Grid), `y = height in mPD`.
 If you add tiles, building index numbers change but building IDs (`B3…`) stay the same, so `data/places.json` keeps working.
@@ -140,15 +159,3 @@ floor) go through `tools/build_indoor_raster.py`, which writes the same format. 
 model: 2/F to the surveyed sections of the podium and towers, the others to 2/F through the columns, cores and atria
 they share. The ink is traced into floor lines. Walls stand only round the classrooms, found from their red numbers
 and matched to their seat counts. The atria and the footprint come from the model. Needs `scikit-image` as well.
-
-### Many tiles: fit the terrain photos to the GPU
-
-Every terrain tile brings a 4096 px photo. Twenty-six of them need about 1.9 GB of GPU memory once decoded, more than
-a phone or most laptops have, and the map then never opens. After building `hku.glb` from many tiles, run:
-
-```bash
-node tools/shrink_terrain.mjs assets/model/hku.glb assets/model/hku.glb
-```
-
-It keeps the main campus tiles (11-SW-7C, 7D) at 4096 px, Sassoon Road and the slope above it (11-SW-16B, 11D) at
-2048 px and the rest at 1024 px (set in `SIZE` in the script), about 0.35 GB in all. Geometry is left as it is.

@@ -7,10 +7,12 @@ import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from '.
 import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
 import { createIndoor, cutify } from './indoor.js';
+import { createTiles } from './tiles.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.18;
+const DECO_NEAR = 1100;   // m
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
@@ -124,12 +126,16 @@ gl_FragColor.rgb = mix(fogColor, gl_FragColor.rgb, smoothstep(0.0, ${f(fade)}, e
 #endif`;
 }
 
+// the drawn roads, land cover and street furniture cover these tiles: they are always loaded (tiles.js 'core')
+const CORE_EXT = [-750, 750, -305, 305];
 async function init() {
-  installEdgeFade(await fetch('data/tiles.json').then((r) => r.json()).catch(() => null));
+  const tilesCfg = await fetch('data/tiles.json').then((r) => r.json()).catch(() => null);
+  installEdgeFade(tilesCfg);
+  const core = (tilesCfg?.tiles || []).filter(({ extent: e }) => e[0] < CORE_EXT[1] && e[1] > CORE_EXT[0] && e[2] < CORE_EXT[3] && e[3] > CORE_EXT[2]).map((t) => t.id);
   const wrap = document.createElement('div');
   wrap.className = 'map-wrap';
   wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels area-labels"></div><div class="labels pin-labels"></div>`;
-  const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, highlightCache: new Map() };
+  const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, terrain: [], pickables: [], bparts: [], infraMeshes: [], hl: [] };
 
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
@@ -176,8 +182,8 @@ async function init() {
   s.indoor = createIndoor(s);
   s.onIndoor = (fl) => {
     setParam('floor', fl ? fl.id : null);
-    if (s.hl) s.hl.visible = !fl;   // the gold highlight would hide the plan
-    (s.hlx || []).forEach((m) => (m.visible = !fl));
+    s.hlHidden = !!fl;   // the gold highlight would hide the plan
+    s.hl.forEach((m) => (m.visible = !fl)); (s.hlx || []).forEach((m) => (m.visible = !fl));
     // bring the floor into view (closer than the building overview), keeping the heading
     if (fl && fl._c) {
       const span = fl._c.size * (innerWidth < innerHeight ? 1.6 : 1), d = s.camera.position.distanceTo(s.controls.target);
@@ -185,58 +191,64 @@ async function init() {
     }
   };
 
+  // the campus model streams in by tiles around the view (assets/tiles.js)
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const bar = wrap.querySelector('.bar i'), pct = wrap.querySelector('.pct');
+  const drop = (arr, o) => { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); };
+  s.coreTiles = core;
+  s.tiles = createTiles({
+    camera, renderer, loader, core,
+    terrainMaterial: (tex) => {
+      const m = cutify(shadowify(terrainMaterial(tex), TERRAIN_SHADOW));   // cut too: floors below ground (CPD LG/F, G/F) show through
+      m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 4;   // roads draped on top win near-ties
+      return m;
+    },
+    onTerrain: (t, full, far, root) => {
+      full.userData.tile = far.userData.tile = t.info.id;
+      scene.add(root); s.terrain.push(full); s.pickables.push(full); s.shadowKey = null;
+    },
+    onTerrainDrop: (t, full, far, root) => { scene.remove(root); drop(s.terrain, full); drop(s.pickables, full); },
+    onObjects: (t, root) => {
+      const meshes = []; root.traverse((o) => o.isMesh && meshes.push(o));   // (addPart adds children)
+      meshes.forEach((o) => {
+        if ((o.name || o.parent?.name || '').startsWith('buildings')) addPart(s, o, t.info.id);
+        else {
+          o.material = INFRA_MAT; o.userData.core = core.includes(t.info.id);
+          o.visible = !(s.roads3d && o.userData.core);
+          s.infraMeshes.push(o); s.pickables.push(o);
+        }
+      });
+      scene.add(root); s.shadowKey = null;
+    },
+    onObjectsDrop: (t, root) => {
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        const part = o.userData.part;
+        if (part && part.mesh === o) dropPart(s, part);
+        else if (!part) { drop(s.infraMeshes, o); drop(s.pickables, o); }
+      });
+      scene.remove(root); s.shadowKey = null;
+    },
+  });
+  const tick = setInterval(() => { const p = Math.round(s.tiles.progress() * 100); bar.style.width = p + '%'; pct.textContent = p + '%'; }, 150);
   s.ready = Promise.all([
-    new Promise((res, rej) => loader.load('assets/model/hku.glb', res, (e) => {
-      if (e.total) { const p = Math.min(100, Math.round((e.loaded / e.total) * 100)); bar.style.width = p + '%'; pct.textContent = p + '%'; }
-      else pct.textContent = (e.loaded / 1e6).toFixed(1) + ' MB';
-    }, rej)),
+    s.tiles.ready,
     fetch('assets/model/buildings.json').then((r) => r.json()),
     fetch('data/campus.json').then((r) => r.json()).catch(() => null),
     loadOverlay(),
-  ]).then(([gltf, bjson, campus]) => {
+  ]).then(([, bjson, campus]) => {
+    clearInterval(tick);
     s.campus = campus;
     setHills(campus?.hills);
-    s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top }));
+    s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top, tile: s.tiles.tileAt(x, z, 50)?.info.id }));
+    s.bparts.forEach((p) => splitPart(s, p));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
-    const root = gltf.scene;
-    s.pickables = [];
-    root.traverse((o) => {
-      if (!o.isMesh) return;
-      const n = o.name || o.parent?.name || '';
-      if (n.startsWith('terrain')) {
-        const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = renderer.capabilities.getMaxAnisotropy(); }
-        o.material = cutify(shadowify(terrainMaterial(map), TERRAIN_SHADOW));   // cut too: floors below ground (CPD LG/F, G/F) show through
-        o.material.polygonOffset = true; o.material.polygonOffsetFactor = 1; o.material.polygonOffsetUnits = 4; // roads draped on top win near-ties
-        s.terrain = (s.terrain || []).concat(o);
-      } else if (n.startsWith('buildings')) {
-        o.material = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
-        o.castShadow = o.receiveShadow = true;
-        s.buildings = o;
-        s.bIndexAll = o.geometry.index.array;
-      } else {
-        o.material = infraMaterial();
-        s.infra = o;
-      }
-      s.pickables.push(o);
-    });
-    // non-HKU buildings: see-through decoration, not clickable.
-    // Child of the buildings mesh so it shares its (dequantizing) transform.
-    const bg = s.buildings.geometry;
-    s.deco = new THREE.Mesh(new THREE.BufferGeometry(), cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false })));
-    for (const k of ['position', 'normal', '_bid']) if (bg.attributes[k]) s.deco.geometry.setAttribute(k, bg.attributes[k]);
-    s.deco.renderOrder = 1; s.deco.castShadow = true;
-    s.buildings.add(s.deco);
-    s.pickables.push(s.deco);
-    scene.add(root);
-    root.updateMatrixWorld(true);
     makeExtraBuildings(s, campus?.extraBuildings || []);
     s.shadowKey = null;   // redraw the shadow map with the buildings in it
     setTimeout(() => makeRoads(s), 0);
     const ld = wrap.querySelector('.map-loading');
     ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
-  }).catch((e) => { console.error(e); pct.textContent = 'Error: ' + e.message; });
+  }).catch((e) => { clearInterval(tick); console.error(e); pct.textContent = 'Error: ' + e.message; });
 
   // picking
   s.ray = new THREE.Raycaster();
@@ -714,6 +726,7 @@ function infraMaterial() {
   };
   return m;
 }
+const INFRA_MAT = infraMaterial();   // bridges of the 3D data (where the drawn roads don't cover them)
 
 /* One-finger zoom (phones), as in Google / Apple Maps: double-tap and hold, then drag up to zoom in
    and down to zoom out; a plain double-tap zooms in. Runs in the capture phase so the map controls
@@ -892,7 +905,7 @@ async function loadSurfaces(s) {
   });
   s.roads3d = roads.scene;
   s.scene.add(s.roads3d);
-  if (s.infra) s.infra.visible = false;
+  s.infraMeshes.forEach((m) => (m.visible = !m.userData.core));
   s.scene.updateMatrixWorld(true);
 }
 
@@ -960,12 +973,16 @@ async function setBasemap(s, mode) {
   })));
   // canopy: surveyed tree canopy as a height field wearing the terrain's own aerial photo
   if (real) jobs.push(once(s, 'canopyP', () => loader.loadAsync(`assets/model/satellite-trees.glb?v=${ASSET_V}`).then((g) => {
+    g.scene.updateMatrixWorld(true);
     g.scene.traverse((o) => {
       if (!o.isMesh) return;
-      const id = (o.name || o.parent?.name || '').replace('canopy_', '');
-      const tile = (s.terrain || []).find((t) => (t.name || t.parent?.name || '').endsWith(id));
-      const fit = tile && terrainUVMap(tile);
-      o.material = new THREE.MeshBasicMaterial({ map: fit ? tile.material.map : null, color: fit ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      // the terrain tile under it: its photo (canopy.webp, the whole tile) and UV mapping
+      o.geometry.computeBoundingBox(); const c = o.geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(o.matrixWorld);
+      const t = s.tiles.tileAt(c.x, c.z), tile = t?.terrain?.full;
+      const fit = tile && t.info.canopy && terrainUVMap(tile);
+      let map = null;
+      if (fit) { map = new THREE.TextureLoader().load('assets/tiles/' + t.info.canopy); map.flipY = false; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+      o.material = new THREE.MeshBasicMaterial({ map, color: fit ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
       if (fit) o.material.onBeforeCompile = (sh) => {
         // photo position from world x / z, with the terrain tile's own (affine) UV mapping
         sh.uniforms.uUVMap = { value: fit };
@@ -980,7 +997,7 @@ async function setBasemap(s, mode) {
   const showPhotoB = photoBuildings && !!s.satBuildings;
   if (s.satBuildings) s.satBuildings.visible = showPhotoB;
   // the white HKU buildings stay for picking / highlight, just not drawn; other buildings stay white
-  if (s.buildings) s.buildings.material.visible = !showPhotoB;
+  BUILD_MAT.visible = !showPhotoB;
   if (s.canopy) s.canopy.visible = real;
   if (s.trees) s.trees.visible = !(real && s.canopy);
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
@@ -1028,7 +1045,8 @@ async function makeRoads(s) {
     const bridges = (s.roadMeshes || []).filter((m) => m.material === BRIDGE_MAT);
     // a bridge that carries at least 20 m of a measured road centre line is a vehicle flyover:
     // tarmac deck + markings; the rest (footbridges) stay concrete
-    const g0 = heightIndex(s.terrain);
+    const coreTerrain = s.terrain.filter((m) => s.coreTiles.includes(m.userData.tile));
+    const g0 = heightIndex(coreTerrain);
     for (const m of NET ? bridges : []) {
       const hb = heightIndex([m], { upOnly: true });
       let carried = 0;
@@ -1045,9 +1063,10 @@ async function makeRoads(s) {
       }
       if (carried >= 20) { m.material = FLYOVER_MAT || (FLYOVER_MAT = infraMaterial()); m.userData.flyover = true; }
     }
-    const deckMeshes = bridges.length ? bridges : s.infra ? [s.infra] : [];
-    const ground = heightIndex(s.terrain), deck = deckMeshes.length ? heightIndex(deckMeshes, { upOnly: true }) : () => NaN;
-    const bIdx = heightIndex([s.buildings]);
+    const deckMeshes = bridges.length ? bridges : s.infraMeshes.filter((m) => m.userData.core);
+    const ground = g0, deck = deckMeshes.length ? heightIndex(deckMeshes, { upOnly: true }) : () => NaN;
+    const coreB = s.bparts.filter((p) => s.coreTiles.includes(p.tile)).flatMap((p) => [p.mesh, ...p.decos]);
+    const bIdx = heightIndex(coreB);
     const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
     const root = document.documentElement;
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1097,7 +1116,7 @@ function groundHeightIn(s, x, z) {
   s.ray = s.ray || new THREE.Raycaster();
   s.ray.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
   const hit = s.ray.intersectObjects(s.terrain || [], false)[0];
-  return hit ? hit.point.y : null;
+  return hit ? hit.point.y : s.tiles?.heightAt(x, z) ?? null;
 }
 
 /* ---------------- selection ---------------- */
@@ -1110,41 +1129,101 @@ function insidePoly(x, z, poly) {
   }
   return r;
 }
+/* Buildings come in parts: one mesh per tile (and per source model) as the tiles stream in (assets/tiles.js). Each
+   part's HKU buildings stay in the solid mesh; the rest go to see-through child meshes sharing its vertices, one per
+   DECO_CELL block (by building centre) so the renderer skips the blocks out of view, and beyond DECO_NEAR. */
+const DECO_CELL = 150;
+const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
+function addPart(s, mesh, tile) {
+  mesh.material = BUILD_MAT; mesh.castShadow = mesh.receiveShadow = true;
+  const part = { mesh, tile, all: mesh.geometry.index, hl: new Map(), decos: [] };
+  mesh.userData.part = part;
+  s.bparts.push(part); s.pickables.push(mesh);
+  splitPart(s, part);
+  addHighlight(s, part);
+}
+function dropPart(s, part) {
+  for (const arr of [s.bparts, s.pickables]) for (const o of [part, part.mesh, ...part.decos]) { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); }
+  s.hl = s.hl.filter((m) => m.parent !== part.mesh);
+  part.decos.forEach((d) => d.geometry.dispose()); part.hl.forEach((g) => g.dispose());
+}
+// bounds of the triangles a geometry draws (three.js would take every vertex of the shared position buffer)
+function indexBounds(g) {
+  const pos = g.attributes.position, idx = g.index.array, b = new THREE.Box3(), v = new THREE.Vector3();
+  for (let i = 0; i < idx.length; i++) b.expandByPoint(v.fromBufferAttribute(pos, idx[i]));
+  g.boundingBox = b; g.boundingSphere = b.getBoundingSphere(new THREE.Sphere());
+}
+function splitPart(s, part) {
+  const set = s.hkuSet; if (!set || !s.bmeta || part.split === set) return;
+  part.split = set;
+  const g = part.mesh.geometry, bid = g.attributes._bid, idx = part.all.array;
+  const cellOf = (b) => { const m = s.bmeta[b]; return m ? `${Math.floor(m.x / DECO_CELL)},${Math.floor(m.z / DECO_CELL)}` : '?'; };
+  const counts = new Map(); let n = 0;
+  for (let i = 0; i < idx.length; i += 3) {
+    const b = bid.getX(idx[i]);
+    if (set.has(b)) n++; else { const c = cellOf(b); counts.set(c, (counts.get(c) || 0) + 1); }
+  }
+  const A = new idx.constructor(n * 3), cells = new Map();
+  for (const [c, k] of counts) cells.set(c, { arr: new idx.constructor(k * 3), o: 0 });
+  for (let i = 0, a = 0; i < idx.length; i += 3) {
+    const b = bid.getX(idx[i]);
+    let dst, o;
+    if (set.has(b)) { dst = A; o = a; a += 3; } else { const c = cells.get(cellOf(b)); dst = c.arr; o = c.o; c.o += 3; }
+    dst[o] = idx[i]; dst[o + 1] = idx[i + 1]; dst[o + 2] = idx[i + 2];
+  }
+  g.setIndex(new THREE.BufferAttribute(A, 1)); indexBounds(g);
+  for (const d of part.decos) { part.mesh.remove(d); d.geometry.dispose(); const i = s.pickables.indexOf(d); if (i >= 0) s.pickables.splice(i, 1); }
+  part.decos = [];
+  for (const { arr } of cells.values()) {
+    const d = new THREE.Mesh(new THREE.BufferGeometry(), DECO_MAT);
+    for (const k of ['position', '_bid']) d.geometry.setAttribute(k, g.attributes[k]);
+    d.geometry.setIndex(new THREE.BufferAttribute(arr, 1)); indexBounds(d.geometry);
+    d.renderOrder = 1; d.castShadow = true; d.userData.deco = true; d.userData.part = part;
+    d.userData.center = d.geometry.boundingSphere.center.clone().applyMatrix4(part.mesh.matrixWorld);
+    part.mesh.add(d); part.decos.push(d); s.pickables.push(d);
+  }
+}
 function splitBuildings() {
-  if (!S.buildings) return;
-  const bidAttr = S.buildings.geometry.attributes._bid, idx = S.bIndexAll, hku = [], deco = [];
+  if (!S.bmeta) return;
   const c = S.campus || {}, polys = (c.areas || []).map((a) => a.boundary), exclude = new Set(c.exclude || []);
   const codes = new Set([...(c.include || []), ...S.places.places.filter((p) => p.hku !== false).flatMap((p) => p.buildings)]);
   const set = new Set();
   S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && polys.some((poly) => insidePoly(b.x, b.z, poly)))) set.add(i); });
-  for (let i = 0; i < idx.length; i += 3) (set.has(bidAttr.getX(idx[i])) ? hku : deco).push(idx[i], idx[i + 1], idx[i + 2]);
-  S.buildings.geometry.setIndex(hku);
-  S.deco.geometry.setIndex(deco);
-  S.deco.geometry.computeBoundingSphere(); S.deco.geometry.computeBoundingBox();
+  const key = [...set].join(',');
+  if (S.hkuKey === key) return;
+  S.hkuKey = key; S.hkuSet = set;
+  S.bparts.forEach((p) => splitPart(S, p));
 }
 const HL_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
 function highlight(bids) {
-  if (S.hl) { S.hl.parent?.remove(S.hl); S.hl = null; }
+  S.hl.forEach((m) => m.parent?.remove(m)); S.hl = [];
   (S.hlx || []).forEach((m) => S.scene.remove(m)); S.hlx = [];
   for (const b of bids || []) {
     const ex = S.bmeta[b]?.extra;
-    if (ex) { const m = new THREE.Mesh(ex.geometry, HL_MAT); S.scene.add(m); S.hlx.push(m); }
+    if (ex) { const m = new THREE.Mesh(ex.geometry, HL_MAT); m.visible = !S.hlHidden; S.scene.add(m); S.hlx.push(m); }
   }
-  bids = (bids || []).filter((b) => !S.bmeta[b]?.extra);
-  if (!bids.length || !S.buildings) return;
-  const g = S.buildings.geometry;
+  S.hlBids = (bids || []).filter((b) => !S.bmeta[b]?.extra);
+  S.bparts.forEach((p) => addHighlight(S, p));
+}
+// the highlighted buildings within one part (again when its tile streams back in)
+function addHighlight(s, part) {
+  const bids = s.hlBids; if (!bids?.length || !bids.some((b) => s.bmeta?.[b]?.tile === part.tile)) return;
   const key = bids.join(',');
-  let geo = S.highlightCache.get(key);
+  let geo = part.hl.get(key);
   if (!geo) {
-    const bidAttr = g.attributes._bid, idx = S.bIndexAll, set = new Set(bids), out = [];
-    for (let i = 0; i < idx.length; i += 3) if (set.has(bidAttr.getX(idx[i]))) out.push(idx[i], idx[i + 1], idx[i + 2]);
+    const bidAttr = part.mesh.geometry.attributes._bid, idx = part.all.array, set = new Set(bids);
+    let n = 0; for (let i = 0; i < idx.length; i += 3) if (set.has(bidAttr.getX(idx[i]))) n++;
+    const out = new idx.constructor(n * 3);
+    for (let i = 0, k = 0; i < idx.length; i += 3) if (set.has(bidAttr.getX(idx[i]))) { out[k++] = idx[i]; out[k++] = idx[i + 1]; out[k++] = idx[i + 2]; }
     geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', g.attributes.position);
-    geo.setIndex(out);
-    S.highlightCache.set(key, geo);
+    geo.setAttribute('position', part.mesh.geometry.attributes.position);
+    geo.setIndex(new THREE.BufferAttribute(out, 1)); if (out.length) indexBounds(geo);
+    part.hl.set(key, geo);
   }
-  S.hl = new THREE.Mesh(geo, HL_MAT);
-  S.buildings.add(S.hl);
+  if (!geo.index.count) return;
+  const m = new THREE.Mesh(geo, HL_MAT); m.visible = !s.hlHidden;
+  part.mesh.add(m); s.hl.push(m);
 }
 function selectPlace(p, fly) {
   const bids = p.buildings.map((c) => S.bidByCode.get(c)).filter((x) => x != null);
@@ -1221,11 +1300,12 @@ function onClick(e) {
   S.ray.setFromCamera(_ndc, S.camera);
   const hits = S.ray.intersectObjects(S.pickables, false);
   // decorative (non-HKU) buildings don't react, and clicks pass through them
-  const hit = hits.find((h) => h.object !== S.deco);
-  if (hits[0]?.object === S.deco && hit?.object !== S.buildings) return;
+  const hit = hits.find((h) => !h.object.userData.deco);
+  const isB = (o) => o?.userData.part && !o.userData.deco;
+  if (hits[0]?.object.userData.deco && !isB(hit?.object)) return;
   if (!hit) return clearSelection();
-  if (hit.object === S.buildings) {
-    const bid = S.buildings.geometry.attributes._bid.getX(hit.face.a);
+  if (isB(hit.object)) {
+    const bid = hit.object.geometry.attributes._bid.getX(hit.face.a);
     selectBuilding(bid);
   } else if (hit.object.userData.bid != null) selectBuilding(hit.object.userData.bid);
   else clearSelection();
@@ -1297,7 +1377,7 @@ function groundHeight(x, z, targets = S.pickables) {
   if (!targets) return null;
   S.ray.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
   const hit = S.ray.intersectObjects(targets, false)[0];
-  return hit ? hit.point.y : null;
+  return hit ? hit.point.y : S.tiles?.heightAt(x, z) ?? null;   // tiles not loaded: the 10 m height grid
 }
 
 /* ---------------- routes ---------------- */
@@ -1373,6 +1453,10 @@ function frame(now) {
   if (!S.running) return;
   if (S.anim) S.anim(now);
   S.controls.update();
+  S.tiles?.update();
+  // the see-through other buildings fade into the haze: drawn within DECO_NEAR only (their tiles stay loaded)
+  const cam = S.camera.position;
+  for (const p of S.bparts || []) for (const d of p.decos) d.visible = cam.distanceTo(d.userData.center) < DECO_NEAR + d.geometry.boundingSphere.radius * p.mesh.scale.x;
   fitShadow(S);
   S.indoor?.update();
   S.renderer.render(S.scene, S.camera);
