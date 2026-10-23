@@ -244,13 +244,15 @@ async function init() {
     fetch('assets/model/buildings.json').then((r) => r.json()),
     fetch('data/campus.json').then((r) => r.json()).catch(() => null),
     loadOverlay(),
-  ]).then(([, bjson, campus]) => {
+    fetch('assets/model/satellite-buildings.json').then((r) => r.json()).catch(() => []),
+  ]).then(([, bjson, campus, , photoIds]) => {
     clearInterval(tick);
     s.campus = campus;
     setHills(campus?.hills);
     s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top, tile: s.tiles.tileAt(x, z, 50)?.info.id }));
     s.bparts.forEach((p) => splitPart(s, p));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
+    s.photoSet = new Set(photoIds.map((c) => s.bidByCode.get(c)).filter((b) => b != null));
     makeExtraBuildings(s, campus?.extraBuildings || []);
     s.shadowKey = null;   // redraw the shadow map with the buildings in it
     // the drawn roads lie on the main campus tiles: built once those are in (the map is open already)
@@ -1344,6 +1346,16 @@ function insidePoly(x, z, poly) {
    tile, and before its full models are in, its simplified buildings (lod.glb) stand in for them. */
 const DECO_CELL = 150;
 const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+// HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
+// in the photo base maps
+const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
+function setSolid(s, g, A) {
+  const photo = s.photoSet || new Set(), bid = g.attributes._bid, a = [], b = [];
+  for (let i = 0; i < A.length; i += 3) (photo.has(bid.getX(A[i])) ? a : b).push(A[i], A[i + 1], A[i + 2]);
+  g.setIndex(new THREE.BufferAttribute(new A.constructor(a.concat(b)), 1));
+  g.clearGroups(); g.addGroup(0, a.length, 0); g.addGroup(a.length, b.length, 1);
+}
 const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
 function addPart(s, mesh, tile) {
   mesh.material = BUILD_MAT; mesh.castShadow = mesh.receiveShadow = true;
@@ -1375,7 +1387,7 @@ function splitLod(s, t) {
     const idx = o.userData.all.array, bid = o.geometry.attributes._bid, a = [], b = [];
     for (let k = 0; k < idx.length; k += 3) (set.has(bid.getX(idx[k])) ? a : b).push(idx[k], idx[k + 1], idx[k + 2]);
     o.geometry.setIndex(new THREE.BufferAttribute(new idx.constructor(b), 1)); indexBounds(o.geometry);
-    const h = L.hku[i].geometry; h.setIndex(new THREE.BufferAttribute(new idx.constructor(a), 1));
+    const h = L.hku[i].geometry; setSolid(s, h, new idx.constructor(a)); L.hku[i].material = SOLID_MATS;
     if (a.length) indexBounds(h);
   });
 }
@@ -1418,7 +1430,7 @@ function splitPart(s, part) {
     if (set.has(b)) { dst = A; o = a; a += 3; } else { const c = cells.get(cellOf(b)); dst = c.arr; o = c.o; c.o += 3; }
     dst[o] = idx[i]; dst[o + 1] = idx[i + 1]; dst[o + 2] = idx[i + 2];
   }
-  g.setIndex(new THREE.BufferAttribute(A, 1)); indexBounds(g);
+  setSolid(s, g, A); part.mesh.material = SOLID_MATS; indexBounds(g);
   for (const d of part.decos) { part.mesh.remove(d); d.geometry.dispose(); const i = s.pickables.indexOf(d); if (i >= 0) s.pickables.splice(i, 1); }
   part.decos = [];
   for (const { arr } of cells.values()) {
