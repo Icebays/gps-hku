@@ -131,7 +131,8 @@ const CORE_EXT = [-750, 750, -305, 305];
 async function init() {
   const tilesCfg = await fetch('data/tiles.json').then((r) => r.json()).catch(() => null);
   installEdgeFade(tilesCfg);
-  const core = (tilesCfg?.tiles || []).filter(({ extent: e }) => e[0] < CORE_EXT[1] && e[1] > CORE_EXT[0] && e[2] < CORE_EXT[3] && e[3] > CORE_EXT[2]).map((t) => t.id);
+  // (by the tile's centre: neighbours share a few metres of edge with it)
+  const core = (tilesCfg?.tiles || []).filter(({ extent: e }) => { const x = (e[0] + e[1]) / 2, z = (e[2] + e[3]) / 2; return x > CORE_EXT[0] && x < CORE_EXT[1] && z > CORE_EXT[2] && z < CORE_EXT[3]; }).map((t) => t.id);
   const wrap = document.createElement('div');
   wrap.className = 'map-wrap';
   wrap.innerHTML = `<div class="map-loading"><div class="box"><b data-t="loading"></b><div class="bar"><i></i></div><small class="pct">0%</small></div></div><div class="labels area-labels"></div><div class="labels pin-labels"></div>`;
@@ -198,29 +199,33 @@ async function init() {
   s.coreTiles = core;
   s.tiles = createTiles({
     camera, renderer, loader, core,
-    terrainMaterial: (tex) => {
-      const m = cutify(shadowify(terrainMaterial(tex), TERRAIN_SHADOW));   // cut too: floors below ground (CPD LG/F, G/F) show through
+    terrainMaterial: (tex, t) => {
+      // the main campus tiles share the land cover overlay of data/landcover.json; other tiles have their own
+      const m = cutify(shadowify(terrainMaterial(tex, core.includes(t.info.id) ? null : tileOverlay(t)), TERRAIN_SHADOW));   // cut too: floors below ground (CPD LG/F, G/F) show through
       m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 4;   // roads draped on top win near-ties
       return m;
     },
     onTerrain: (t, full, far, root) => {
       full.userData.tile = far.userData.tile = t.info.id;
       scene.add(root); s.terrain.push(full); s.pickables.push(full); s.shadowKey = null;
+      if (t.info.land && !core.includes(t.info.id)) loadLand(t);
     },
-    onTerrainDrop: (t, full, far, root) => { scene.remove(root); drop(s.terrain, full); drop(s.pickables, full); },
+    onTerrainDrop: (t, full, far, root) => { scene.remove(root); drop(s.terrain, full); drop(s.pickables, full); dropLand(t); },
     onObjects: (t, root) => {
       const meshes = []; root.traverse((o) => o.isMesh && meshes.push(o));   // (addPart adds children)
       meshes.forEach((o) => {
         if ((o.name || o.parent?.name || '').startsWith('buildings')) addPart(s, o, t.info.id);
         else {
-          o.material = INFRA_MAT; o.userData.core = core.includes(t.info.id);
+          o.material = INFRA_MAT; o.userData.core = core.includes(t.info.id); o.userData.tile = t.info.id;
           o.visible = !(s.roads3d && o.userData.core);
           s.infraMeshes.push(o); s.pickables.push(o);
         }
       });
       scene.add(root); s.shadowKey = null;
+      if ((t.info.land || t.info.roads) && !core.includes(t.info.id)) queueTileFeatures(s, t);
     },
     onObjectsDrop: (t, root) => {
+      dropTileFeatures(s, t);
       root.traverse((o) => {
         if (!o.isMesh) return;
         const part = o.userData.part;
@@ -276,6 +281,7 @@ const TERRAIN_U = {
   uLine: { value: new THREE.Color(0x5d7a63) },
   uMist: { value: new THREE.Color(0xcfe0e8) },
   uPaved: { value: new THREE.Color(0xf6f3ec) },
+  uSea: { value: new THREE.Color(0xb9d3e0) },   // the sea (flat terrain at 1.3 mPD in the coastal tiles), as the ground plane beyond
   uPhoto: { value: 0 },
   uSunDir: { value: new THREE.Vector3(-0.5, 0.8, -0.35).normalize() },   // relief shading follows the sun
   uReal: { value: 0 },   // real-imagery base map: photo everywhere, no drawn overlays
@@ -309,11 +315,14 @@ function offsetLine(pts, d) {
   });
 }
 function drawMapFeatures(dark) {
-  if (!LAND) return;
-  const [x0, x1, z0, z1] = LAND.ext;
-  const RES = 0.75, RB = 1;   // kept small: large canvases crash mobile Safari
+  if (LAND) drawLand(LAND, TERRAIN_U, dark, 0.75, 1);   // kept small: large canvases crash mobile Safari
+  for (const t of S?.tiles?.tiles.values() || []) if (t.land && t.overlay?.uOvOn.value && t.terrain) drawLand(t.land, t.overlay, dark, TILE_LAND_RES, TILE_LAND_RES);
+}
+// land cover L ({ext, green, water}) into its two canvases, and they into the overlay uniforms U
+function drawLand(L, U, dark, RES, RB) {
+  const [x0, x1, z0, z1] = L.ext;
   const mk = (r) => Object.assign(document.createElement('canvas'), { width: Math.ceil((x1 - x0) / r), height: Math.ceil((z1 - z0) / r) });
-  const A = LAND.canvasA || (LAND.canvasA = mk(RES)), B = LAND.canvasB || (LAND.canvasB = mk(RB));
+  const A = L.canvasA || (L.canvasA = mk(RES)), B = L.canvasB || (L.canvasB = mk(RB));
   const a = A.getContext('2d'), b = B.getContext('2d'), st = MAP_STYLE[dark ? 'dark' : 'light'];
   a.setTransform(1, 0, 0, 1, 0, 0); b.setTransform(1, 0, 0, 1, 0, 0);
   a.clearRect(0, 0, A.width, A.height); b.clearRect(0, 0, B.width, B.height);
@@ -323,26 +332,26 @@ function drawMapFeatures(dark) {
   const poly = (ctx, ar) => { ctx.beginPath(); for (const ring of [ar.outer, ...ar.holes]) { path(ctx, ring); ctx.closePath(); } };
   // vegetation feeds the green base (relief + contours); water is filled on top
   b.fillStyle = '#ff0000';
-  for (const ar of LAND.green) { poly(b, ar); b.fill('evenodd'); }
-  for (const ar of LAND.water) {
+  for (const ar of L.green) { poly(b, ar); b.fill('evenodd'); }
+  for (const ar of L.water) {
     poly(a, ar); a.fillStyle = st.water; a.fill('evenodd');
     a.strokeStyle = st.waterEdge; a.lineWidth = 0.5; a.stroke();
   }
   for (const [k, c] of [['uOvA', A], ['uOvB', B]]) {
-    const t = TERRAIN_U[k].value || (TERRAIN_U[k].value = new THREE.CanvasTexture(c));
+    const t = U[k].value || (U[k].value = new THREE.CanvasTexture(c));
     t.flipY = false; t.colorSpace = k === 'uOvA' ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 8; t.needsUpdate = true;
   }
-  TERRAIN_U.uOvExt.value.set(x0, x1, z0, z1); TERRAIN_U.uOvOn.value = 1;
+  U.uOvExt.value.set(x0, x1, z0, z1); U.uOvOn.value = 1;
 }
 function setHills(pts) {
   pts = (pts || []).slice(0, MAX_HILL_PTS);
   pts.forEach(([x, z], i) => TERRAIN_U.uHill.value[i].set(x, z));
   TERRAIN_U.uHillN.value = pts.length;
 }
-function terrainMaterial(map) {
+function terrainMaterial(map, overlay = null) {
   const m = new THREE.MeshBasicMaterial({ map });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, TERRAIN_U);
+    Object.assign(sh.uniforms, TERRAIN_U, overlay);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWorld;')
       .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -351,7 +360,7 @@ function terrainMaterial(map) {
 varying vec3 vWorld;
 uniform vec2 uHill[${MAX_HILL_PTS}];
 uniform int uHillN;
-uniform vec3 uBase, uLine, uMist, uPaved, uSunDir;
+uniform vec3 uBase, uLine, uMist, uPaved, uSea, uSunDir;
 uniform float uPhoto, uOvOn, uReal;
 uniform sampler2D uOvA, uOvB;
 uniform vec4 uOvExt;
@@ -396,6 +405,8 @@ float contour(float h, float step) {
     vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
     col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
     col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55 * green);
+    // the sea: flat at 1.3 mPD (its photo would read as noisy vegetation and its flatness as contour lines)
+    col = mix(col, uSea, (1.0 - smoothstep(1.4, 1.8, vWorld.y)) * step(0.998, n.y));
     // drawn map features: gardens, water, roads, footpaths
     col = mix(col, oa.rgb * (0.93 + 0.1 * shade), oa.a);
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
@@ -416,11 +427,13 @@ function setSky(s) {
   const photo = TERRAIN_U.uPhoto.value;
   s.ground?.material.color.set(photo ? (dark ? 0x26302a : 0x6d7a62) : (dark ? 0x1d2b35 : 0xb9d3e0));
   TERRAIN_U.uBase.value.set(dark ? 0x2c3d30 : 0xcfe0bf);
+  TERRAIN_U.uSea.value.set(dark ? 0x1d2b35 : 0xb9d3e0);
   TERRAIN_U.uLine.value.set(dark ? 0x8fb39a : 0x5d7a63);
   TERRAIN_U.uMist.value.copy(c);
   TERRAIN_U.uPaved.value.set(dark ? 0x3a3f3c : 0xf6f3ec);
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
+  for (const t of s.tiles?.tiles.values() || []) t.feat?.marks?.userData.setTheme(dark);
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
@@ -982,13 +995,7 @@ async function setBasemap(s, mode) {
       const fit = tile && t.info.canopy && terrainUVMap(tile);
       let map = null;
       if (fit) { map = new THREE.TextureLoader().load('assets/tiles/' + t.info.canopy); map.flipY = false; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-      o.material = new THREE.MeshBasicMaterial({ map, color: fit ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-      if (fit) o.material.onBeforeCompile = (sh) => {
-        // photo position from world x / z, with the terrain tile's own (affine) UV mapping
-        sh.uniforms.uUVMap = { value: fit };
-        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec4 uUVMap;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\n{ vec4 cw = modelMatrix * vec4(position, 1.0); vMapUv = vec2(uUVMap.x * cw.x + uUVMap.y, uUVMap.z * cw.z + uUVMap.w); }');
-      };
+      o.material = canopyMaterial(map, fit);
     });
     s.canopy = g.scene; s.scene.add(g.scene);
   })));
@@ -1000,6 +1007,7 @@ async function setBasemap(s, mode) {
   BUILD_MAT.visible = !showPhotoB;
   if (s.canopy) s.canopy.visible = real;
   if (s.trees) s.trees.visible = !(real && s.canopy);
+  for (const t of s.tiles.tiles.values()) tileBasemap(s, t);
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
   if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
   s.shadowKey = null;
@@ -1007,18 +1015,37 @@ async function setBasemap(s, mode) {
   s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !(real && s.roadsPhoto); });
 }
 
+// the canopy wears the terrain's aerial photo: its position in the photo from world x / z with the terrain
+// tile's own (affine) UV mapping fit, then the texture's own transform (a crop of the photo)
+function canopyMaterial(map, fit) {
+  const m = new THREE.MeshBasicMaterial({ map: fit ? map : null, color: fit ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  if (fit && map) m.onBeforeCompile = (sh) => {
+    sh.uniforms.uUVMap = { value: fit };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec4 uUVMap;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n{ vec4 cw = modelMatrix * vec4(position, 1.0); vMapUv = (mapTransform * vec3(uUVMap.x * cw.x + uUVMap.y, uUVMap.z * cw.z + uUVMap.w, 1.0)).xy; }');
+  };
+  return m;
+}
+
 // per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler)
 function setTreeTheme(s, dark) {
-  if (!s.trees) return;
-  const [crown, trunk] = s.trees.children;
-  crown.material.color.set(dark ? 0x5d7c6a : 0xffffff);
-  trunk.material.color.set(dark ? 0x4a4038 : 0x8a7462);
+  for (const g of [s.trees, ...[...(s.tiles?.tiles.values() || [])].map((t) => t.feat?.trees)]) {
+    if (!g) continue;
+    const [crown, trunk] = g.children;
+    crown.material.color.set(dark ? 0x5d7c6a : 0xffffff);
+    trunk.material.color.set(dark ? 0x4a4038 : 0x8a7462);
+  }
 }
-/* Trees from the surveyed canopy (data/landcover.json): one instanced trunk + crown per tree. */
+/* Trees from the surveyed canopy (data/landcover.json, a tile's land.json): one instanced trunk + crown per tree. */
+const CROWN_GEO = new THREE.IcosahedronGeometry(1, 0), TRUNK_GEO = new THREE.CylinderGeometry(0.12, 0.18, 1, 5).translate(0, 0.5, 0);
 function makeTrees(s) {
   if (!LAND?.trees?.length) return;
-  const trees = LAND.trees.filter((t) => t[3] >= 3);
-  const crownGeo = new THREE.IcosahedronGeometry(1, 0), trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1, 5).translate(0, 0.5, 0);
+  s.trees = treeGroup(LAND.trees); s.scene.add(s.trees);
+  setTreeTheme(s, isDark());
+}
+function treeGroup(list) {
+  const trees = list.filter((t) => t[3] >= 3);
+  const crownGeo = CROWN_GEO, trunkGeo = TRUNK_GEO;
   const crown = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), trees.length);
   const trunk = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x8a7462 }), trees.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color(), e = new THREE.Euler();
@@ -1032,8 +1059,8 @@ function makeTrees(s) {
   });
   crown.name = 'trees'; trunk.name = 'trunks';
   crown.castShadow = trunk.castShadow = true;
-  s.trees = new THREE.Group(); s.trees.add(crown, trunk); s.scene.add(s.trees);
-  setTreeTheme(s, isDark());
+  const g = new THREE.Group(); g.add(crown, trunk);
+  return g;
 }
 
 async function makeRoads(s) {
@@ -1089,6 +1116,112 @@ async function makeRoads(s) {
     s.shadowKey = null;
     console.info(`roads built in ${Math.round(performance.now() - t0)} ms, ${s.roads.userData.lampCount} street lamps`);
   } catch (e) { console.warn('roads not built', e); }
+}
+
+/* ---------------- features of the other tiles ----------------
+   Tiles with a high-quality release have what the main campus has (tools/build_tile_features.py): their land cover
+   drawn into the terrain (land.json: vegetation, water), from as far as the terrain loads; and from as near as their
+   buildings load, the surveyed road surfaces (roads.glb) with markings and street lamps from the measured centre
+   lines, the trees, and in the satellite map the 3D canopy (canopy.glb) wearing the tile's own photo. */
+const TILE_LAND_RES = 1.25;   // m per canvas pixel
+// a tile's trees, markings and lamps are drawn within this distance (m) - further out they are specks in the haze
+const FEATURE_NEAR = matchMedia('(pointer: coarse)').matches ? 650 : 950;
+function tileOverlay(t) {
+  return t.overlay || (t.overlay = { uOvA: { value: null }, uOvB: { value: null }, uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) }, uOvOn: { value: 0 } });
+}
+const landOf = (t) => t.landP || (t.landP = fetch('assets/tiles/' + t.info.land).then((r) => r.json()).then((j) => (t.land = j)).catch((e) => (console.warn(t.info.land, e), (t.landP = null))));
+async function loadLand(t) {
+  const land = await landOf(t);
+  if (land && t.terrain && !t.overlay?.uOvOn.value) drawLand(land, tileOverlay(t), isDark(), TILE_LAND_RES, TILE_LAND_RES);
+}
+function dropLand(t) {
+  const U = t.overlay; if (!U) return;
+  for (const k of ['uOvA', 'uOvB']) { U[k].value?.dispose(); U[k].value = null; }
+  U.uOvOn.value = 0;
+  if (t.land) t.land.canvasA = t.land.canvasB = null;
+}
+// one tile at a time, so moving across the map never stalls on several at once
+function queueTileFeatures(s, t) {
+  const root = t.objects.root;
+  s.featQ = (s.featQ || Promise.resolve()).then(() => tileFeatures(s, t, root)).catch((e) => console.warn('tile features', t.info.id, e));
+}
+async function tileFeatures(s, t, root) {
+  const alive = () => t.objects?.root === root;
+  for (let i = 0; i < 300 && alive() && !t.terrain; i++) await new Promise((r) => setTimeout(r, 100));
+  if (!alive() || !t.terrain || t.feat) return;
+  const land = t.info.land ? await landOf(t) : null;
+  const f = { group: new THREE.Group(), roadMeshes: [], trees: null, marks: null, canopy: null };
+  f.group.name = 'tile-features';
+  if (t.info.roads) {
+    const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/tiles/' + t.info.roads).catch((e) => (console.warn(t.info.roads, e), null));
+    g?.scene.traverse((o) => { if (o.isMesh) { o.material = ROAD_MAT; o.renderOrder = 2; f.roadMeshes.push(o); } });
+    if (g) f.group.add(g.scene);
+  }
+  if (!alive()) return disposeFeatures(f);
+  if (land?.trees?.length) { f.trees = treeGroup(land.trees); f.group.add(f.trees); }
+  if (land?.roads?.length && f.roadMeshes.length) {
+    const lampGeo = await (s.lampGeoP || (s.lampGeoP = loadLampGeometry('assets/model/streetlamp.json').catch(() => null)));
+    if (!alive() || !t.terrain) return disposeFeatures(f);
+    f.group.updateMatrixWorld(true);
+    const infra = s.infraMeshes.filter((m) => m.userData.tile === t.info.id);
+    const parts = s.bparts.filter((p) => p.tile === t.info.id).flatMap((p) => [p.mesh, ...p.decos]);
+    f.marks = buildRoads({
+      FEAT: { roads: land.roads, marks: {}, paths: [] },
+      ground: heightIndex([t.terrain.full]),
+      deck: infra.length ? heightIndex(infra, { upOnly: true }) : () => NaN,
+      building: parts.length ? heightIndex(parts) : () => NaN,
+      surface: heightIndex(f.roadMeshes, { upOnly: true }),
+      lampGeo, dark: isDark(),
+    });
+    f.marks.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.material.isMeshBasicMaterial && o.name !== 'lanterns') shadowify(o.material);
+      if (o.name === 'streetlamps') o.castShadow = true;
+    });
+    f.group.add(f.marks);
+  }
+  t.feat = f; s.scene.add(f.group);
+  setTreeTheme(s, isDark()); tileBasemap(s, t);
+  s.shadowKey = null;
+}
+// satellite map: the photo shows the roads (no drawn surface or markings; lamps stay) and the 3D canopy replaces the trees
+function tileBasemap(s, t) {
+  const f = t.feat; if (!f) return;
+  const real = s.basemap === 'real';
+  if (real && t.info.canopyMesh && !f.canopyP) f.canopyP = loadTileCanopy(s, t, f);
+  f.roadMeshes.forEach((m) => (m.visible = !real));
+  f.marks?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !real; });
+  if (f.canopy) f.canopy.visible = real;
+  f.treesOn = !(real && f.canopy);
+  showTileFeatures(s, t);
+}
+function showTileFeatures(s, t) {
+  const f = t.feat, near = s.tiles.distTo(t.info.id) < FEATURE_NEAR;
+  if (f.trees) f.trees.visible = near && f.treesOn;
+  if (f.marks) f.marks.visible = near;
+}
+async function loadTileCanopy(s, t, f) {
+  const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/tiles/' + t.info.canopyMesh).catch((e) => (console.warn(t.info.canopyMesh, e), null));
+  if (!g || t.feat !== f || !t.terrain) return;
+  // the tile's whole-photo piece (always held while its terrain is) and the terrain's UV mapping
+  const map = t.pieces.get('0_0_0')?.tex, fit = terrainUVMap(t.terrain.full);
+  g.scene.traverse((o) => { if (o.isMesh) o.material = canopyMaterial(map, fit); });
+  f.canopy = g.scene; f.group.add(g.scene);
+  tileBasemap(s, t); s.shadowKey = null;
+}
+function dropTileFeatures(s, t) {
+  const f = t.feat; t.feat = null;
+  if (!f) return;
+  s.scene.remove(f.group); disposeFeatures(f);
+  s.shadowKey = null;
+}
+function disposeFeatures(f) {
+  f.group.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.geometry !== CROWN_GEO && o.geometry !== TRUNK_GEO && o.name !== 'streetlamps') o.geometry.dispose();   // (shared)
+    if (o.material !== ROAD_MAT) { if (f.marks && o.material.map && o.parent === f.marks) o.material.map.dispose(); o.material.dispose(); }
+    o.isInstancedMesh && o.dispose();
+  });
 }
 
 /* ---------------- extra buildings ----------------
@@ -1457,6 +1590,7 @@ function frame(now) {
   // the see-through other buildings fade into the haze: drawn within DECO_NEAR only (their tiles stay loaded)
   const cam = S.camera.position;
   for (const p of S.bparts || []) for (const d of p.decos) d.visible = cam.distanceTo(d.userData.center) < DECO_NEAR + d.geometry.boundingSphere.radius * p.mesh.scale.x;
+  for (const t of S.tiles?.tiles.values() || []) if (t.feat) showTileFeatures(S, t);
   fitShadow(S);
   S.indoor?.update();
   S.renderer.render(S.scene, S.camera);

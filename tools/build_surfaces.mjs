@@ -8,6 +8,8 @@
 // textures and UVs are dropped, each layer is joined into one primitive and meshopt-compressed.
 //
 //   node tools/build_surfaces.mjs work/7C work/7D
+//   node tools/build_surfaces.mjs --roads assets/tiles/11-SW-7A/roads.glb work/7A
+//     (another tile: its road surfaces only - its bridges are already in the tile's objects.glb)
 // needs: npm i @gltf-transform/core@4 @gltf-transform/functions@4 @gltf-transform/extensions@4 meshoptimizer@0.22 gl-matrix
 import { NodeIO, Document } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
@@ -17,7 +19,8 @@ import { mat4 } from 'gl-matrix';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const tiles = process.argv.slice(2);
+const roadsOnly = process.argv[2] === '--roads';
+const tiles = process.argv.slice(roadsOnly ? 4 : 2);
 await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
 const ORIGIN = [-832250, 0, 815900];
@@ -65,5 +68,5 @@ async function build(layers, out) {
 }
 
 const pick = (sub) => tiles.flatMap((t) => gltfs(path.join(t, sub)));
-const layers = [['roads', pick('INFRASTRUCTURE(TB)')], ['bridges', pick('INFRASTRUCTURE')]];
-await build(layers, 'assets/model/roads.glb');
+if (roadsOnly) await build([['roads', pick('INFRASTRUCTURE(TB)')]], process.argv[3]);
+else await build([['roads', pick('INFRASTRUCTURE(TB)')], ['bridges', pick('INFRASTRUCTURE')]], 'assets/model/roads.glb');

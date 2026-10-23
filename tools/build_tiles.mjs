@@ -2,8 +2,9 @@
 // the map then loads only the tiles around the view, and each tile's aerial photo as a quadtree of small pictures
 // that sharpen as you zoom in.
 //
-//   node tools/build_tiles.mjs <hku.glb at full photo resolution> [<older hku.glb> <its buildings.json>]
+//   node tools/build_tiles.mjs <raw.glb from tools/build_raw.py, or hku.glb> [<older hku.glb> <its buildings.json>]
 //     -> assets/tiles/index.json, assets/tiles/heights.bin, assets/tiles/<tile id>/...
+//   node tools/build_tiles.mjs --index     (only list each tile's feature files in index.json again)
 //
 // Per tile (data/tiles.json; a mesh belongs to the tile its centre lies in):
 // - terrain.glb: the terrain mesh, positions and photo UVs exactly as in the input (same quantized values and node
@@ -14,10 +15,13 @@
 // - t<level>_<i>_<j>.webp: the photo of each quadtree node, cut to the UV box of its triangles, at 512 px for the whole
 //   tile (level 0) up to the full 4096 px resolution (level 3); index.json gives each node's
 //   [first triangle, count, u0, v0, u1, v1, first simplified triangle, count].
-// - objects.glb: the tile's buildings and bridges, bit for bit as in the input (the same quantized positions, building
-//   ids and node transforms; only the triangles of the tile are kept). A building belongs to the tile its centre
+// - objects.glb: the tile's buildings and bridges, never simplified: from a raw (float) model quantized to 16 bits over
+//   the tile's own box (about 1.2 cm steps), from a quantized one bit for bit as in the input; only the triangles of
+//   the tile are kept, in the order that compresses best. A building belongs to the tile its centre
 //   (assets/model/buildings.json) lies in; one far outside every tile is left out.
 // - canopy.webp (tiles with a surveyed tree canopy): the whole photo at 2048 px for the satellite trees.
+// - land.json, roads.glb, canopy.glb (tiles with a high-quality release, tools/build_tile_features.py): listed in
+//   index.json when they are in the tile's folder.
 // heights.bin: ground height every 10 m over all tiles (int16, decimetres), for pins and labels on tiles not loaded.
 // With an older model: buildings it has keep its geometry (e.g. the main campus, quantized finer before the far tiles
 // stretched the model's bounding box), and so do its bridges within its terrain tiles.
@@ -26,11 +30,28 @@ import fs from 'fs';
 import path from 'path';
 import { NodeIO, Document } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions';
+import { weld, reorder } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
 const [, , input, oldInput, oldBjson] = process.argv;
-const OUT = 'assets/tiles', DEPTH = 3, NODE_PX = 512, CANOPY = ['11-SW-7C', '11-SW-7D'];
+const OUT = process.env.OUT || 'assets/tiles', DEPTH = 3, NODE_PX = 512;
+// a tile's feature files (tools/build_tile_features.py), when present
+function features(item) {
+  for (const [k, f] of [['land', 'land.json'], ['roads', 'roads.glb'], ['canopyMesh', 'canopy.glb']]) {
+    if (fs.existsSync(path.join(OUT, item.id, f))) item[k] = `${item.id}/${f}`; else delete item[k];
+  }
+  return item;
+}
+if (input === '--index') {
+  const index = JSON.parse(fs.readFileSync(path.join(OUT, 'index.json'), 'utf8'));
+  index.tiles.forEach(features);
+  fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(index));
+  console.log(index.tiles.filter((t) => t.land).map((t) => t.id).join(' ') || 'no tile features');
+  process.exit(0);
+}
+// tiles with a surveyed tree canopy (high-quality release): their whole photo at 2048 px for the satellite trees
+const CANOPY = ['7A', '7B', '7C', '7D', '6A', '6C', '6D', '11B', '11C', '11D', '12A', '12C', '16B', '16D', '17A'].map((k) => '11-SW-' + k);
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready]);
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
 const TILES = JSON.parse(fs.readFileSync('data/tiles.json', 'utf8')).tiles;
@@ -89,15 +110,49 @@ function subset(doc, src, tris, attrs) {
   }
   return prim;
 }
+// float positions (a raw build): 16-bit integers over this primitive's own box (about 1 cm in a tile) -> node transform
+function quantizePrim(doc, prim) {
+  const a = prim.getAttribute('POSITION'), f = a.getArray();
+  if (!(f instanceof Float32Array)) return null;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < f.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], f[i + k]); hi[k] = Math.max(hi[k], f[i + k]); }
+  const t = lo.map((v, k) => (v + hi[k]) / 2), sc = Math.max(...hi.map((v, k) => (v - lo[k]) / 2), 1e-3);
+  const q = new Int16Array(f.length);
+  for (let i = 0; i < f.length; i += 3) for (let k = 0; k < 3; k++) q[i + k] = Math.round(((f[i + k] - t[k]) / sc) * 32767);
+  prim.setAttribute('POSITION', acc(doc, q, 'VEC3', true));
+  return { getTranslation: () => t, getScale: () => [sc, sc, sc] };
+}
 function place(doc, name, src, prims) {
   const mesh = doc.createMesh(name); prims.forEach((p) => mesh.addPrimitive(p));
   doc.getRoot().listScenes()[0] || doc.createScene();
-  const node = doc.createNode(name).setMesh(mesh).setTranslation(src.node.getTranslation()).setScale(src.node.getScale());
+  const qn = prims.length === 1 ? quantizePrim(doc, prims[0]) : null, n0 = qn || src.node;
+  const node = doc.createNode(name).setMesh(mesh).setTranslation(n0.getTranslation()).setScale(n0.getScale());
   (doc.getRoot().listScenes()[0] || doc.createScene()).addChild(node);
 }
 
 // ---- read ----
 const src = await io.read(input);
+// a raw build (tools/build_raw.py: float positions, full terrain): drop normals, weld, simplify the terrain (as
+// tools/optimize.mjs did, edges locked) and quantize it per tile; buildings are quantized per tile when written
+if (meshNodes(src).some((p) => p.prim.getAttribute('POSITION').getArray() instanceof Float32Array)) {
+  for (const m of src.getRoot().listMeshes()) for (const p of m.listPrimitives()) p.setAttribute('NORMAL', null);
+  await src.transform(weld());
+  for (const p of meshNodes(src)) {
+    if (!p.name.startsWith('terrain')) continue;
+    const P = p.prim.getAttribute('POSITION').getArray(), I = Uint32Array.from(p.prim.getIndices().getArray());
+    const [S] = MeshoptSimplifier.simplify(I, P, 3, Math.floor(I.length * 0.4 / 3) * 3, 0.0006, ['LockBorder']);
+    const remap = new Map(), keep = [], idx = new Uint32Array(S.length);
+    S.forEach((v, n) => { let r = remap.get(v); if (r === undefined) { r = keep.length; remap.set(v, r); keep.push(v); } idx[n] = r; });
+    const uv = p.prim.getAttribute('TEXCOORD_0').getArray(), np = new Float32Array(keep.length * 3), nu = new Uint16Array(keep.length * 2);
+    keep.forEach((v, i) => { for (let k = 0; k < 3; k++) np[i * 3 + k] = P[v * 3 + k]; for (let k = 0; k < 2; k++) nu[i * 2 + k] = Math.round(Math.min(1, Math.max(0, uv[v * 2 + k])) * 65535); });
+    const prim = p.prim;
+    prim.setIndices(src.createAccessor().setArray(idx).setType('SCALAR'));
+    prim.setAttribute('POSITION', src.createAccessor().setArray(np).setType('VEC3'));
+    prim.setAttribute('TEXCOORD_0', src.createAccessor().setArray(nu).setType('VEC2').setNormalized(true));
+    const qn = quantizePrim(src, prim); p.node.setTranslation(qn.getTranslation()).setScale(qn.getScale());
+    console.log(p.name, I.length / 3, '->', S.length / 3, 'triangles');
+  }
+}
 const parts = meshNodes(src);
 const old = oldInput ? meshNodes(await io.read(oldInput)) : [];
 const OB = oldBjson ? JSON.parse(fs.readFileSync(oldBjson, 'utf8')) : [];
@@ -263,10 +318,11 @@ for (const rec of perTile.values()) {
       if (o.isB) nb += o.tris.length;
       place(doc, (o.isB ? 'buildings' : 'infrastructure') + (o.isOld ? '_old' : ''), o.p, [prim]);
     }
+    await doc.transform(reorder({ encoder: MeshoptEncoder, target: 'size' }));   // triangle order is free here (not in the terrain)
     write(`${t.id}/objects.glb`, await io.writeBinary(doc));
     item.objects = `${t.id}/objects.glb`; item.buildingTris = nb;
   }
-  index.tiles.push(item);
+  index.tiles.push(features(item));
 }
 index.heights = { file: 'heights.bin', x0: H.x0, z0: H.z0, cell: H.cell, cols: H.cols, rows: H.rows, scale: 0.1, none: -32768 };
 write('heights.bin', Buffer.from(HG.buffer));

@@ -6,7 +6,8 @@
    pieces you look at are held. Until a piece arrives its parent stays in its place. A tile further than FULL_NEAR
    uses a simplified copy of its terrain (its edges match its neighbours, so tiles never crack apart). Photo pieces are kept within a memory budget
    (smaller on phones), the least recently seen going first. Building geometry is never simplified.
-   createTiles() takes callbacks for what map.js does with the meshes (materials, picking, roads). */
+   createTiles() takes callbacks for what map.js does with the meshes (materials, picking, roads, and the land cover,
+   roads and trees of tiles with a high-quality release). */
 import * as THREE from 'three';
 
 const BASE = 'assets/tiles/';
@@ -56,7 +57,7 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     tex.onUpdate = () => { img.close?.(); };      // keep only the GPU copy
     tex.needsUpdate = true;
     const p = t.pieces.get(key); if (!p) { tex.dispose(); return; }
-    p.mat = terrainMaterial(tex); p.tex = tex; p.ready = true;
+    p.mat = terrainMaterial(tex, t); p.tex = tex; p.ready = true;
     st.last = '';     // redraw the cut
   }
   async function loadTerrain(t) {

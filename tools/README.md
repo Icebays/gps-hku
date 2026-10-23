@@ -4,7 +4,8 @@ The site streams the campus model in tiles (`assets/tiles/`, see below), cut fro
 original 3dmap.gov.hk tiles in `model/`.
 
 ```bash
-# 1. unzip each tile into its own folder, e.g. work/7C, work/7D
+# 1. unzip each tile into its own folder, e.g. work/7C, work/7D (the standard release: TERRAIN(TB), BUILDING,
+#    INFRASTRUCTURE)
 mkdir -p work/7C work/7D
 unzip model/11-SW-7C.1.zip -d work/7C
 unzip model/11-SW-7D.1.zip -d work/7D
@@ -12,31 +13,28 @@ unzip model/11-SW-7D.1.zip -d work/7D
 # 2. merge tiles -> raw.glb + buildings.json  (needs: pip install numpy pillow)
 python3 tools/build_raw.py work out 7C,7D
 
-# 3. weld, simplify terrain, WebP textures, meshopt compression
-#    (needs: npm i @gltf-transform/core@4 @gltf-transform/functions@4 @gltf-transform/extensions@4 meshoptimizer@0.22 sharp)
-node tools/optimize.mjs out/raw.glb out/hku.glb 0.4 4096 80
-
-# 4. convert buildings.json to the compact form used by the site
+# 3. convert buildings.json to the compact form used by the site
 python3 -c "import json;B=json.load(open('out/buildings.json'));json.dump([[b['id'],b['x'],b['z'],b['base'],b['top']] for b in B],open('assets/model/buildings.json','w'),separators=(',',':'))"
 
-# 5. cut it into the streamed tiles (add each tile's extent to data/tiles.json first)
-node tools/build_tiles.mjs out/hku.glb [<older hku.glb> <its buildings.json>]
+# 4. cut it into the streamed tiles (add each tile's extent to data/tiles.json first)
+#    (needs: npm i @gltf-transform/core@4 @gltf-transform/functions@4 @gltf-transform/extensions@4 meshoptimizer@0.22 sharp)
+node tools/build_tiles.mjs out/raw.glb
 ```
 
-`optimize.mjs` stores positions as 16-bit integers over the bounding box of all the buildings, so one building far
-outside the tiles coarsens every building (the 26-tile build of Oct 2026 had one 16 km away: 0.28 m steps). Leave such
-buildings out of `raw.glb`. Given an older model, `build_tiles.mjs` keeps its buildings (and the bridges in its terrain
-tiles) as they were: the live tiles keep the main campus (11-SW-7C, 7D) from the 2-tile model, at 2.4 cm steps.
+`build_tiles.mjs` welds the raw model, simplifies the terrain (edges locked) and stores every tile's terrain, and
+every tile's buildings and bridges, as 16-bit integers over that tile's own box: about 1.2 cm steps, however many tiles
+the map has. Building geometry is never simplified. (`tools/optimize.mjs` made the single-file `hku.glb` the site
+used before it streamed tiles; `build_tiles.mjs` still takes such a file.)
 
 ### Streaming (assets/tiles.js)
 
 `build_tiles.mjs` writes, per tile, `terrain.glb` (the terrain, plus a simplified copy with its edges locked),
-`objects.glb` (buildings and bridges, exactly as in the input) and the aerial photo as a quadtree of WebP pieces
+`objects.glb` (buildings and bridges, never simplified) and the aerial photo as a quadtree of WebP pieces
 (512 px for the whole tile down to 8 x 8 pieces at the full 4096 px), with `index.json` and a 10 m height grid
 (`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera, their buildings within 1.7 km
 (1.4 km on phones), and only the photo pieces that are in view and drawn larger than their own resolution, within a
-memory budget. Tiles further than 700 m use the simplified terrain. The tiles the drawn roads cover (11-SW-7C, 7D)
-always stay loaded.
+memory budget. Tiles further than 700 m use the simplified terrain. The main campus tiles (11-SW-7C, 7D, whose centres
+lie in the campus extent) always stay loaded.
 
 Model frame: `x = Easting − 832250`, `z = −(Northing − 815900)` (HK1980 Grid), `y = height in mPD`.
 If you add tiles, building index numbers change but building IDs (`B3…`) stay the same, so `data/places.json` keeps working.
@@ -89,6 +87,30 @@ lines, double yellow kerb lines on main roads, edge lines, parking bays where th
 zebra crossings with 望右 LOOK RIGHT, 慢駛 before crossings on campus roads, bus bays with 巴士站
 (crossings and bus stops from OpenStreetMap, snapped onto the surveyed roads), and street lamps.
 Trees are instanced from `data/landcover.json` (canopy tops: position, height, crown radius).
+
+# Features of the other tiles
+
+Tiles with a high-quality release get the same land cover, trees, surveyed roads with markings and lamps, and
+satellite canopy as the main campus, each in the tile's own folder, streamed with the tile:
+
+```bash
+mkdir -p work/7A && cd work/7A && unzip ../../11-SW-7A.zip 'TERRAIN(TB)/*' 'VEGETATION(TB)/*' 'WATERBODY/*' 'INFRASTRUCTURE(TB)/*' 'INFRASTRUCTURE/*'; cd ../..
+python3 tools/build_tile_features.py work/7A 11-SW-7A assets/tiles/11-SW-7A        # land.json, canopy-raw.glb
+node tools/optimize_canopy.mjs assets/tiles/11-SW-7A/canopy-raw.glb assets/tiles/11-SW-7A/canopy.glb
+rm assets/tiles/11-SW-7A/canopy-raw.glb
+node tools/build_surfaces.mjs --roads assets/tiles/11-SW-7A/roads.glb work/7A        # surveyed road surfaces
+node tools/build_tiles.mjs --index                                                   # list them in index.json
+```
+
+`land.json` holds the vegetation and water polygons and the trees (as `data/landcover.json`) and the road centre
+lines (as `data/roadnet.json`, here found from the road surfaces drawn straight into a mask: INFRASTRUCTURE(TB)
+roads plus the dark, upward faces of INFRASTRUCTURE flyover decks). There are no crossings or bus stops outside the
+main campus (those come from OpenStreetMap there). The map draws a tile's land cover into its terrain as soon as the
+terrain loads, and builds its road surface, markings, street lamps and trees when its buildings load (one tile at a
+time). In the satellite map the tile's photo shows its roads, and its canopy (`canopy.glb`, a 1.5 m height field)
+wears the tile's whole-photo piece, so it costs no extra pictures.
+
+The sea (flat terrain at 1.3 mPD in the coastal tiles) is drawn in the colour of the ground plane beyond the map.
 
 # Map extent and adding tiles
 
