@@ -20,7 +20,9 @@
 //   the tile are kept, in the order that compresses best. A building belongs to the tile its centre
 //   (assets/model/buildings.json) lies in; one far outside every tile is left out.
 // - canopy.webp (tiles with a surveyed tree canopy): the whole photo at 2048 px for the satellite trees.
-// - land.json, roads.glb, canopy.glb (tiles with a high-quality release, tools/build_tile_features.py): listed in
+// - lod.glb (tools/build_lod.mjs: the buildings and bridges simplified, for the distance), bridges.json + .webp
+//   (tools/build_bridge_photo.mjs: the photo for the bridges in the satellite map), and land.json, roads.glb,
+//   canopy.glb (tiles with a high-quality release, tools/build_tile_features.py): listed in
 //   index.json when they are in the tile's folder.
 // heights.bin: ground height every 10 m over all tiles (int16, decimetres), for pins and labels on tiles not loaded.
 // With an older model: buildings it has keep its geometry (e.g. the main campus, quantized finer before the far tiles
@@ -38,7 +40,7 @@ const [, , input, oldInput, oldBjson] = process.argv;
 const OUT = process.env.OUT || 'assets/tiles', DEPTH = 3, NODE_PX = 512;
 // a tile's feature files (tools/build_tile_features.py), when present
 function features(item) {
-  for (const [k, f] of [['land', 'land.json'], ['roads', 'roads.glb'], ['canopyMesh', 'canopy.glb']]) {
+  for (const [k, f] of [['lod', 'lod.glb'], ['bridges', 'bridges.json'], ['land', 'land.json'], ['roads', 'roads.glb'], ['canopyMesh', 'canopy.glb']]) {
     if (fs.existsSync(path.join(OUT, item.id, f))) item[k] = `${item.id}/${f}`; else delete item[k];
   }
   return item;

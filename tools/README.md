@@ -31,10 +31,22 @@ used before it streamed tiles; `build_tiles.mjs` still takes such a file.)
 `build_tiles.mjs` writes, per tile, `terrain.glb` (the terrain, plus a simplified copy with its edges locked),
 `objects.glb` (buildings and bridges, never simplified) and the aerial photo as a quadtree of WebP pieces
 (512 px for the whole tile down to 8 x 8 pieces at the full 4096 px), with `index.json` and a 10 m height grid
-(`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera, their buildings within 1.7 km
+(`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera, their full buildings within 1.7 km
 (1.4 km on phones), and only the photo pieces that are in view and drawn larger than their own resolution, within a
 memory budget. Tiles further than 700 m use the simplified terrain. The main campus tiles (11-SW-7C, 7D, whose centres
 lie in the campus extent) always stay loaded.
+
+```bash
+node tools/build_lod.mjs               # lod.glb per tile: buildings and bridges simplified to about 1.5 m
+node tools/build_bridge_photo.mjs      # bridges.webp + .json per tile: the photo under the bridges (satellite map)
+node tools/build_tiles.mjs --index     # list them in index.json
+```
+
+The map opens as soon as `index.json` and `heights.bin` are in. Every tile within the terrain range shows its
+simplified buildings (`lod.glb`, about 1 MB for all 35 tiles), so the skyline is there from afar and at once; within
+1.1 km of a tile, once its full `objects.glb` is in, the exact models replace them (HKU buildings are solid in both).
+In the satellite map the bridges (the standard release has no photos on them) wear the tile's own orthophoto, looked
+up by position: `build_bridge_photo.mjs` packs the 32 px photo blocks under the bridges into one small atlas per tile.
 
 Model frame: `x = Easting − 832250`, `z = −(Northing − 815900)` (HK1980 Grid), `y = height in mPD`.
 If you add tiles, building index numbers change but building IDs (`B3…`) stay the same, so `data/places.json` keeps working.

@@ -210,7 +210,7 @@ async function init() {
       scene.add(root); s.terrain.push(full); s.pickables.push(full); s.shadowKey = null;
       if (t.info.land && !core.includes(t.info.id)) loadLand(t);
     },
-    onTerrainDrop: (t, full, far, root) => { scene.remove(root); drop(s.terrain, full); drop(s.pickables, full); dropLand(t); },
+    onTerrainDrop: (t, full, far, root) => { scene.remove(root); drop(s.terrain, full); drop(s.pickables, full); dropLand(t); dropBridges(t); },
     onObjects: (t, root) => {
       const meshes = []; root.traverse((o) => o.isMesh && meshes.push(o));   // (addPart adds children)
       meshes.forEach((o) => {
@@ -221,9 +221,12 @@ async function init() {
           s.infraMeshes.push(o); s.pickables.push(o);
         }
       });
+      tileBridges(s, t);
       scene.add(root); s.shadowKey = null;
       if ((t.info.land || t.info.roads) && !core.includes(t.info.id)) queueTileFeatures(s, t);
     },
+    onLod: (t, root) => { addLod(s, t, root); tileBridges(s, t); scene.add(root); },
+    onLodDrop: (t, root) => { scene.remove(root); t.lodParts = null; },
     onObjectsDrop: (t, root) => {
       dropTileFeatures(s, t);
       root.traverse((o) => {
@@ -250,7 +253,8 @@ async function init() {
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
     makeExtraBuildings(s, campus?.extraBuildings || []);
     s.shadowKey = null;   // redraw the shadow map with the buildings in it
-    setTimeout(() => makeRoads(s), 0);
+    // the drawn roads lie on the main campus tiles: built once those are in (the map is open already)
+    s.tiles.coreReady.then(() => setTimeout(() => makeRoads(s), 0));
     const ld = wrap.querySelector('.map-loading');
     ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
   }).catch((e) => { clearInterval(tick); console.error(e); pct.textContent = 'Error: ' + e.message; });
@@ -405,8 +409,9 @@ float contour(float h, float step) {
     vec3 col = mix(uPaved, uBase, green) * (0.86 + 0.18 * shade) * (0.94 + 0.12 * smoothstep(40.0, 300.0, vWorld.y));
     col = mix(col, uLine, (contour(vWorld.y, 10.0) * 0.4 + contour(vWorld.y, 50.0) * 0.75) * mix(0.35, 1.0, green));
     col = mix(col, uMist, smoothstep(140.0, 420.0, vWorld.y) * 0.55 * green);
-    // the sea: flat at 1.3 mPD (its photo would read as noisy vegetation and its flatness as contour lines)
-    col = mix(col, uSea, (1.0 - smoothstep(1.4, 1.8, vWorld.y)) * step(0.998, n.y));
+    // the sea: flat at 1.3 mPD (its photo would read as noisy vegetation and its flatness as contour lines). By
+    // height alone: the screen-space normal of its long thin triangles is too noisy on phone GPUs (white streaks)
+    col = mix(col, uSea, 1.0 - smoothstep(0.08, 0.25, abs(vWorld.y - 1.3)));
     // drawn map features: gardens, water, roads, footpaths
     col = mix(col, oa.rgb * (0.93 + 0.1 * shade), oa.a);
     diffuseColor.rgb = mix(diffuseColor.rgb, col, k);
@@ -1007,7 +1012,7 @@ async function setBasemap(s, mode) {
   BUILD_MAT.visible = !showPhotoB;
   if (s.canopy) s.canopy.visible = real;
   if (s.trees) s.trees.visible = !(real && s.canopy);
-  for (const t of s.tiles.tiles.values()) tileBasemap(s, t);
+  for (const t of s.tiles.tiles.values()) { tileBasemap(s, t); tileBridges(s, t); }
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
   if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
   s.shadowKey = null;
@@ -1031,35 +1036,46 @@ function canopyMaterial(map, fit) {
 function setTreeTheme(s, dark) {
   for (const g of [s.trees, ...[...(s.tiles?.tiles.values() || [])].map((t) => t.feat?.trees)]) {
     if (!g) continue;
-    const [crown, trunk] = g.children;
-    crown.material.color.set(dark ? 0x5d7c6a : 0xffffff);
-    trunk.material.color.set(dark ? 0x4a4038 : 0x8a7462);
+    g.userData.mats.crown.color.set(dark ? 0x5d7c6a : 0xffffff);
+    g.userData.mats.trunk.color.set(dark ? 0x4a4038 : 0x8a7462);
   }
 }
 /* Trees from the surveyed canopy (data/landcover.json, a tile's land.json): one instanced trunk + crown per tree. */
-const CROWN_GEO = new THREE.IcosahedronGeometry(1, 0), TRUNK_GEO = new THREE.CylinderGeometry(0.12, 0.18, 1, 5).translate(0, 0.5, 0);
+const CROWN_GEO = new THREE.IcosahedronGeometry(1, 0), TRUNK_GEO = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1, true).translate(0, 0.5, 0);   // (ends hidden: in the ground and the crown)
 function makeTrees(s) {
   if (!LAND?.trees?.length) return;
   s.trees = treeGroup(LAND.trees); s.scene.add(s.trees);
   setTreeTheme(s, isDark());
 }
+// in TREE_CELL blocks, so the renderer skips the blocks out of view (and the tiles' blocks further than FEATURE_NEAR)
+const TREE_CELL = 250;
 function treeGroup(list) {
-  const trees = list.filter((t) => t[3] >= 3);
-  const crownGeo = CROWN_GEO, trunkGeo = TRUNK_GEO;
-  const crown = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), trees.length);
-  const trunk = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x8a7462 }), trees.length);
+  const cells = new Map();
+  for (const t of list) {
+    if (t[3] < 3) continue;
+    const k = `${Math.floor(t[0] / TREE_CELL)},${Math.floor(t[1] / TREE_CELL)}`;
+    if (!cells.has(k)) cells.set(k, []); cells.get(k).push(t);
+  }
+  const mats = { crown: new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), trunk: new THREE.MeshLambertMaterial({ color: 0x8a7462 }) };
+  const g = new THREE.Group(); g.userData.mats = mats;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color(), e = new THREE.Euler();
-  trees.forEach(([x, z, y, h, r], i) => {
-    const ch = Math.min(h * 0.55, r * 1.6), cy = y + h - ch / 2;
-    const k = ((x * 73.1 + z * 31.7) % 1 + 1) % 1;               // stable per-tree variation
-    q.setFromEuler(e.set(0, k * 6.28, 0));
-    crown.setMatrixAt(i, m.compose(new THREE.Vector3(x, cy, z), q, new THREE.Vector3(r, ch / 2, r)));
-    trunk.setMatrixAt(i, m.compose(new THREE.Vector3(x, y - 0.3, z), q, new THREE.Vector3(1, Math.max(0.5, h - ch + 0.6), 1)));
-    crown.setColorAt(i, c.setHSL(0.27 + k * 0.06, 0.32 + k * 0.12, 0.36 + k * 0.08));
-  });
-  crown.name = 'trees'; trunk.name = 'trunks';
-  crown.castShadow = trunk.castShadow = true;
-  const g = new THREE.Group(); g.add(crown, trunk);
+  for (const trees of cells.values()) {
+    const crown = new THREE.InstancedMesh(CROWN_GEO, mats.crown, trees.length), trunk = new THREE.InstancedMesh(TRUNK_GEO, mats.trunk, trees.length);
+    trees.forEach(([x, z, y, h, r], i) => {
+      const ch = Math.min(h * 0.55, r * 1.6), cy = y + h - ch / 2;
+      const k = ((x * 73.1 + z * 31.7) % 1 + 1) % 1;               // stable per-tree variation
+      q.setFromEuler(e.set(0, k * 6.28, 0));
+      crown.setMatrixAt(i, m.compose(new THREE.Vector3(x, cy, z), q, new THREE.Vector3(r, ch / 2, r)));
+      trunk.setMatrixAt(i, m.compose(new THREE.Vector3(x, y - 0.3, z), q, new THREE.Vector3(1, Math.max(0.5, h - ch + 0.6), 1)));
+      crown.setColorAt(i, c.setHSL(0.27 + k * 0.06, 0.32 + k * 0.12, 0.36 + k * 0.08));
+    });
+    crown.name = 'trees'; trunk.name = 'trunks';
+    crown.castShadow = trunk.castShadow = true;
+    crown.computeBoundingSphere(); trunk.computeBoundingSphere();
+    const cell = new THREE.Group(); cell.add(crown, trunk);
+    cell.userData.center = crown.boundingSphere.center.clone(); cell.userData.radius = crown.boundingSphere.radius;
+    g.add(cell);
+  }
   return g;
 }
 
@@ -1197,7 +1213,11 @@ function tileBasemap(s, t) {
 }
 function showTileFeatures(s, t) {
   const f = t.feat, near = s.tiles.distTo(t.info.id) < FEATURE_NEAR;
-  if (f.trees) f.trees.visible = near && f.treesOn;
+  if (f.trees) {
+    f.trees.visible = near && f.treesOn;
+    const cam = s.camera.position;
+    if (near) for (const c of f.trees.children) c.visible = cam.distanceTo(c.userData.center) < FEATURE_NEAR + c.userData.radius;
+  }
   if (f.marks) f.marks.visible = near;
 }
 async function loadTileCanopy(s, t, f) {
@@ -1222,6 +1242,62 @@ function disposeFeatures(f) {
     if (o.material !== ROAD_MAT) { if (f.marks && o.material.map && o.parent === f.marks) o.material.map.dispose(); o.material.dispose(); }
     o.isInstancedMesh && o.dispose();
   });
+}
+
+/* Satellite map: bridges wear the tile's own orthophoto, looked up by world x / z (tools/build_bridge_photo.mjs: the
+   32 px photo blocks under the bridges, packed into an atlas; an index texture gives each block's place in it).
+   Everything else about the bridges stays: the full models close by, the simplified ones further out. */
+function tileBridges(s, t) {
+  const meshes = [...s.infraMeshes.filter((m) => m.userData.tile === t.info.id), ...(t.lodParts?.infra || [])];
+  const want = s.basemap === 'real' && t.info.bridges;
+  if (want && !t.bridgeMat && !t.bridgeP) t.bridgeP = loadBridges(t).then((m) => { if (!t.terrain) return m?.dispose(); t.bridgeMat = m; tileBridges(s, t); }).catch((e) => console.warn(t.info.bridges, e));
+  const mat = want && t.bridgeMat ? t.bridgeMat : INFRA_MAT;
+  meshes.forEach((m) => (m.material = mat));
+}
+async function loadBridges(t) {
+  const base = 'assets/tiles/' + t.info.bridges.replace(/\.json$/, '');
+  const [J, atlas] = await Promise.all([fetch(base + '.json').then((r) => r.json()), new THREE.TextureLoader().loadAsync(base + '.webp')]);
+  atlas.flipY = false; atlas.colorSpace = THREE.SRGBColorSpace; atlas.anisotropy = 4; atlas.needsUpdate = true;
+  const BW = Math.ceil(J.photo[0] / J.src), BH = Math.ceil(J.photo[1] / J.src), data = new Uint8Array(BW * BH * 4);
+  J.blocks.forEach(([bx, by], i) => { const o = (by * BW + bx) * 4; data[o] = (i + 1) & 255; data[o + 1] = (i + 1) >> 8; });
+  const idx = new THREE.DataTexture(data, BW, BH); idx.needsUpdate = true;   // (nearest, no mipmaps)
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const U = {
+    uAtlas: { value: atlas }, uIdx: { value: idx }, uFit: { value: new THREE.Vector4(...J.fit) }, uPhotoPx: { value: new THREE.Vector2(...J.photo) },
+    uAtlasSize: { value: new THREE.Vector2(...J.size) }, uSrc: { value: J.src }, uDst: { value: J.dst }, uPad: { value: J.pad }, uCols: { value: J.cols },
+  };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWorld;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vWorld;
+uniform sampler2D uAtlas, uIdx;
+uniform vec4 uFit;
+uniform vec2 uPhotoPx, uAtlasSize;
+uniform float uSrc, uDst, uPad, uCols;`).replace('#include <map_fragment>', `#include <map_fragment>
+{
+  vec2 p = vec2(uFit.x * vWorld.x + uFit.y, uFit.z * vWorld.z + uFit.w) * uPhotoPx;   // photo pixel
+  vec2 bq = p / uSrc; ivec2 blk = ivec2(floor(bq)), n = textureSize(uIdx, 0);
+  vec3 col = vec3(0.32);
+  if (blk.x >= 0 && blk.y >= 0 && blk.x < n.x && blk.y < n.y) {
+    vec4 e = texelFetch(uIdx, blk, 0);
+    float sl = floor(e.r * 255.0 + 0.5) + floor(e.g * 255.0 + 0.5) * 256.0 - 1.0;
+    if (sl >= 0.0) {
+      vec2 ap = vec2(mod(sl, uCols), floor(sl / uCols)) * (uDst + 2.0 * uPad) + uPad + fract(bq) * uDst;
+      vec2 g = vec2(uDst / uSrc) / uAtlasSize;   // gradients of the continuous photo position: no seams at block edges
+      col = textureGrad(uAtlas, ap / uAtlasSize, dFdx(p) * g, dFdy(p) * g).rgb;
+    }
+  }
+  diffuseColor.rgb *= col;
+}`);
+  };
+  m.userData.textures = [atlas, idx];
+  return m;
+}
+function dropBridges(t) {
+  t.bridgeMat?.userData.textures.forEach((x) => x.dispose()); t.bridgeMat?.dispose();
+  t.bridgeMat = null; t.bridgeP = null;
 }
 
 /* ---------------- extra buildings ----------------
@@ -1264,7 +1340,8 @@ function insidePoly(x, z, poly) {
 }
 /* Buildings come in parts: one mesh per tile (and per source model) as the tiles stream in (assets/tiles.js). Each
    part's HKU buildings stay in the solid mesh; the rest go to see-through child meshes sharing its vertices, one per
-   DECO_CELL block (by building centre) so the renderer skips the blocks out of view, and beyond DECO_NEAR. */
+   DECO_CELL block (by building centre) so the renderer skips the blocks out of view. Further than DECO_NEAR from a
+   tile, and before its full models are in, its simplified buildings (lod.glb) stand in for them. */
 const DECO_CELL = 150;
 const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
 const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
@@ -1275,6 +1352,42 @@ function addPart(s, mesh, tile) {
   s.bparts.push(part); s.pickables.push(mesh);
   splitPart(s, part);
   addHighlight(s, part);
+}
+// a tile's simplified buildings: HKU ones solid, the rest see-through (as the full models); bridges as the full ones
+function addLod(s, t, root) {
+  const meshes = []; root.traverse((o) => o.isMesh && meshes.push(o));
+  t.lodParts = { hku: [], deco: [], infra: [] };
+  for (const o of meshes) {
+    if ((o.name || o.parent?.name || '').startsWith('buildings')) {
+      o.material = DECO_MAT; o.renderOrder = 1; o.userData.all = o.geometry.index;
+      const h = new THREE.Mesh(new THREE.BufferGeometry(), BUILD_MAT);
+      for (const k of ['position', '_bid']) h.geometry.setAttribute(k, o.geometry.attributes[k]);
+      h.geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(0), 1));
+      o.add(h); t.lodParts.deco.push(o); t.lodParts.hku.push(h);
+    } else { o.material = INFRA_MAT; t.lodParts.infra.push(o); }
+  }
+  splitLod(s, t);
+}
+function splitLod(s, t) {
+  const set = s.hkuSet, L = t.lodParts; if (!L || !set || L.split === set) return;
+  L.split = set;
+  L.deco.forEach((o, i) => {
+    const idx = o.userData.all.array, bid = o.geometry.attributes._bid, a = [], b = [];
+    for (let k = 0; k < idx.length; k += 3) (set.has(bid.getX(idx[k])) ? a : b).push(idx[k], idx[k + 1], idx[k + 2]);
+    o.geometry.setIndex(new THREE.BufferAttribute(new idx.constructor(b), 1)); indexBounds(o.geometry);
+    const h = L.hku[i].geometry; h.setIndex(new THREE.BufferAttribute(new idx.constructor(a), 1));
+    if (a.length) indexBounds(h);
+  });
+}
+// full models or simplified ones, per tile (see DECO_NEAR)
+function showLod(s, t) {
+  const full = !!t.objects, near = full && s.tiles.distTo(t.info.id) < DECO_NEAR, L = t.lodParts;
+  if (L) {
+    L.deco.forEach((o) => (o.visible = !near));
+    L.hku.forEach((o) => (o.visible = !full));
+    L.infra.forEach((o) => (o.visible = !full));
+  }
+  if (full) for (const p of s.bparts) if (p.tile === t.info.id) p.decos.forEach((d) => (d.visible = near));
 }
 function dropPart(s, part) {
   for (const arr of [s.bparts, s.pickables]) for (const o of [part, part.mesh, ...part.decos]) { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); }
@@ -1327,6 +1440,7 @@ function splitBuildings() {
   if (S.hkuKey === key) return;
   S.hkuKey = key; S.hkuSet = set;
   S.bparts.forEach((p) => splitPart(S, p));
+  for (const t of S.tiles?.tiles.values() || []) splitLod(S, t);
 }
 const HL_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf5b82e, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
 function highlight(bids) {
@@ -1587,10 +1701,8 @@ function frame(now) {
   if (S.anim) S.anim(now);
   S.controls.update();
   S.tiles?.update();
-  // the see-through other buildings fade into the haze: drawn within DECO_NEAR only (their tiles stay loaded)
-  const cam = S.camera.position;
-  for (const p of S.bparts || []) for (const d of p.decos) d.visible = cam.distanceTo(d.userData.center) < DECO_NEAR + d.geometry.boundingSphere.radius * p.mesh.scale.x;
-  for (const t of S.tiles?.tiles.values() || []) if (t.feat) showTileFeatures(S, t);
+  // full or simplified buildings per tile; trees, markings and lamps close by
+  for (const t of S.tiles?.tiles.values() || []) { showLod(S, t); if (t.feat) showTileFeatures(S, t); }
   fitShadow(S);
   S.indoor?.update();
   S.renderer.render(S.scene, S.camera);

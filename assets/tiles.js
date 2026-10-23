@@ -5,7 +5,9 @@
    in view and drawn larger on screen than its own resolution, so the photo sharpens as you zoom in and only the
    pieces you look at are held. Until a piece arrives its parent stays in its place. A tile further than FULL_NEAR
    uses a simplified copy of its terrain (its edges match its neighbours, so tiles never crack apart). Photo pieces are kept within a memory budget
-   (smaller on phones), the least recently seen going first. Building geometry is never simplified.
+   (smaller on phones), the least recently seen going first. Buildings and bridges come twice: simplified (lod.glb,
+   about 1.5 m, a few tens of kB a tile) wherever the terrain is loaded, so they are seen from afar and at once, and
+   in full (objects.glb, never simplified) close by, which then replace them. The map opens as soon as the index is in.
    createTiles() takes callbacks for what map.js does with the meshes (materials, picking, roads, and the land cover,
    roads and trees of tiles with a high-quality release). */
 import * as THREE from 'three';
@@ -19,7 +21,7 @@ const REFINE = 1.15;      // refine a piece when it covers more than REFINE x it
 const BUDGET = MOBILE ? 70 : 170;   // photo pieces held (about 1.1 MB of GPU memory each)
 const PARALLEL = 6;
 
-export function createTiles({ camera, renderer, loader, core = [], terrainMaterial, onTerrain, onTerrainDrop, onObjects, onObjectsDrop }) {
+export function createTiles({ camera, renderer, loader, core = [], terrainMaterial, onTerrain, onTerrainDrop, onObjects, onObjectsDrop, onLod, onLodDrop }) {
   const st = { index: null, tiles: new Map(), queue: [], active: 0, tick: 0, last: '', heights: null };
   const box = new THREE.Box3(), frustum = new THREE.Frustum(), pm = new THREE.Matrix4(), v = new THREE.Vector2();
   const dist = (x0, x1, y0, y1, z0, z1) => {
@@ -78,12 +80,24 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     t.objects = { root: g.scene };
     onObjects?.(t, g.scene);
   }
+  async function loadLod(t) {
+    const g = await loader.loadAsync(BASE + t.info.lod);
+    if (!t.wantTerrain) { dispose(g.scene); return; }
+    g.scene.updateMatrixWorld(true);
+    t.lod = { root: g.scene };
+    onLod?.(t, g.scene);
+  }
+  function dropLod(t) {
+    if (t.lod) { onLodDrop?.(t, t.lod.root); dispose(t.lod.root); }
+    t.lod = null; t.loadingLod = false;
+  }
   function dispose(root) { root.traverse((o) => { o.geometry?.dispose(); }); }
   function dropPiece(t, key) {
     const p = t.pieces.get(key); if (!p) return;
     p.mat?.dispose(); p.tex?.dispose(); t.pieces.delete(key);
   }
   function dropTerrain(t) {
+    dropLod(t);
     if (t.terrain) { onTerrainDrop?.(t, t.terrain.full, t.terrain.far, t.terrain.root); dispose(t.terrain.root); }
     for (const k of [...t.pieces.keys()]) dropPiece(t, k);
     t.terrain = null; t.loadingTerrain = false;
@@ -182,7 +196,8 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
       t.wantTerrain = pinned || d < (t.terrain || t.loadingTerrain ? TERRAIN_FAR : TERRAIN_NEAR);
       t.wantObjects = !!t.info.objects && (pinned || d < (t.objects || t.loadingObjects ? OBJECTS_FAR : OBJECTS_NEAR));
       if (t.wantTerrain && !t.terrain && !t.loadingTerrain) { t.loadingTerrain = true; enqueue({ pri: -2e9 + d, run: () => loadTerrain(t).finally(() => (t.loadingTerrain = false)) }); }
-      if (!t.wantTerrain && t.terrain) dropTerrain(t);
+      if (t.wantTerrain && t.info.lod && !t.lod && !t.loadingLod) { t.loadingLod = true; enqueue({ pri: -1.8e9 + d, run: () => loadLod(t).finally(() => (t.loadingLod = false)) }); }
+      if (!t.wantTerrain && (t.terrain || t.lod)) dropTerrain(t);
       if (t.wantObjects && !t.objects && !t.loadingObjects) { t.loadingObjects = true; enqueue({ pri: -1.5e9 + d, run: () => loadObjects(t).finally(() => (t.loadingObjects = false)) }); }
       if (!t.wantObjects && t.objects) dropObjects(t);
       if (t.terrain) draw(t, pxPerRad);
@@ -215,14 +230,15 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     return bd <= slack ? best : null;
   }
 
-  // ---- start: index, heights, then the core tiles before the map is shown ----
+  // ---- start: index and heights (the map opens), then the core tiles (coreReady) ----
   const ready = (async () => {
     st.index = await fetch(BASE + 'index.json').then((r) => r.json());
     for (const info of st.index.tiles) st.tiles.set(info.id, { info, pieces: new Map(), terrain: null, objects: null });
     const H = st.index.heights;
     st.heights = { ...H, data: new Int16Array(await fetch(BASE + H.file).then((r) => r.arrayBuffer())) };
     update();
-    // the map opens once the core tiles stand, with their whole-tile pictures
+  })();
+  const coreReady = ready.then(async () => {
     await new Promise((res) => {
       const check = () => {
         const ok = core.every((id) => { const t = st.tiles.get(id); return !t || (t.terrain && (!t.info.objects || t.objects) && t.pieces.get('0_0_0')?.ready); });
@@ -230,7 +246,7 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
       };
       check();
     });
-  })();
+  });
   const progress = () => {
     let want = 0, have = 0;
     for (const id of core) { const t = st.tiles.get(id); if (!t) continue; want += t.info.objects ? 3 : 2; have += !!t.terrain + !!t.objects + !!t.pieces.get('0_0_0')?.ready; }
@@ -238,5 +254,5 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
   };
   // distance from the camera to a tile (m)
   const distTo = (id) => { const t = st.tiles.get(id); if (!t) return Infinity; const e = t.info.extent, [y0, y1] = t.info.y; return dist(e[0], e[1], y0, y1 + 150, e[2], e[3]); };
-  return { ready, update, heightAt, tileAt, distTo, progress, tiles: st.tiles, get index() { return st.index; } };
+  return { ready, coreReady, update, heightAt, tileAt, distTo, progress, tiles: st.tiles, get index() { return st.index; } };
 }
