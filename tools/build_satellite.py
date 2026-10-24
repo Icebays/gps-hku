@@ -129,7 +129,7 @@ found = {os.path.basename(d)[:-2] for d in bdirs}
 json.dump(sorted(b[0] for b in B if b[0][:-2] in found), open(os.path.splitext(out)[0] + '-ids.json', 'w'))
 if not bitems:
     sys.exit(0)
-bpages, (bres,) = pack([(bitems, 1.0)], 4 * PAGE * PAGE * 0.8)
+bpages, (bres,) = pack([(bitems, 1.0)], 2 * len(tiles) * PAGE * PAGE * 0.8)   # 2 atlas pages a tile
 
 
 # ---------- GLB writer ----------
