@@ -15,7 +15,7 @@ import { createTiles } from './tiles.js';
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.45;       // buildings that are not HKU's: drawn map
-const SAT_DECO_OPACITY = 0.5;    // and satellite map (in their own colours / photos)
+const SAT_DECO_OPACITY = 0.5;    // and satellite map
 const MOBILE_MAP = matchMedia('(pointer: coarse)').matches;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
@@ -1005,10 +1005,10 @@ function coreRoadsShown(s) {
 }
 const nearCore = (s, extra = 0) => Math.min(...s.coreTiles.map((id) => s.tiles.distTo(id))) < PHOTO_NEAR + extra;
 /* Photo models hold a lot of GPU memory (a KTX2 page is about 3 MB): only the nearest tiles keep them (phones: 2 with
-   photo roads, 2 with the photo city, 3 with photo HKU buildings), and they are dropped as soon as the view moves on,
+   photo roads, 3 with photo HKU buildings), and they are dropped as soon as the view moves on,
    so a long walk across the map never piles them up (iOS Safari reloads the page when it runs out of memory).
    Checked a few times a second. A tile's photo models live in t.ph, from its buildings' loading to their dropping. */
-const PHOTO_ROADS_MAX = MOBILE_MAP ? 2 : 4, CITY_PHOTO_MAX = MOBILE_MAP ? 2 : 4, HKU_PHOTO_MAX = MOBILE_MAP ? 3 : 6, HKU_PHOTO_NEAR = MOBILE_MAP ? 1100 : 1500;
+const PHOTO_ROADS_MAX = MOBILE_MAP ? 2 : 4, HKU_PHOTO_MAX = MOBILE_MAP ? 3 : 6, HKU_PHOTO_NEAR = MOBILE_MAP ? 1100 : 1500;
 function managePhotos(s) {
   const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
   // the main campus's photo roads (14 pages): only near the campus
@@ -1019,14 +1019,12 @@ function managePhotos(s) {
   }).catch((e) => console.warn('roads-photo', e));
   // the other tiles, nearest first (loaded ones a little ahead, so they do not flap at the edge)
   const order = [...s.tiles.tiles.values()].filter((t) => t.objects).map((t) => [s.tiles.distTo(t.info.id) - (t.ph ? 150 : 0), t]).sort((a, b) => a[0] - b[0]);
-  let nr = 0, nc = 0, nh = 0;
+  let nr = 0, nh = 0;
   for (const [d, t] of order) {
     const wantR = real && !!t.info.photoRoads && d < PHOTO_NEAR && nr < PHOTO_ROADS_MAX;
-    const wantC = real && !!t.info.cityPhoto && d < PHOTO_NEAR && nc < CITY_PHOTO_MAX;
     const wantH = photoB && !!t.info.hkuPhoto && d < HKU_PHOTO_NEAR && nh < HKU_PHOTO_MAX;
-    nr += wantR; nc += wantC; nh += wantH;
+    nr += wantR; nh += wantH;
     tilePhoto(s, t, 'photoRoads', wantR, loadPhotoRoads);
-    tilePhoto(s, t, 'cityPhoto', wantC, (s, url) => loadPhotoBuildings(s, url, SAT_DECO_OPACITY));
     tilePhoto(s, t, 'hkuPhoto', wantH, loadPhotoBuildings);
   }
 }
@@ -1070,13 +1068,12 @@ async function loadPhotoRoads(s, url) {
   });
   return g.scene;
 }
-async function loadPhotoBuildings(s, url, opacity = 1) {
+async function loadPhotoBuildings(s, url) {
   const g = await photoLoader(s).loadAsync(url);
   g.scene.traverse((o) => {
     if (!o.isMesh) return;
-    const see = opacity < 1;   // see-through (the buildings that are not HKU's)
-    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o), transparent: see, opacity, depthWrite: !see }));   // photo is already lit
-    o.castShadow = true; o.renderOrder = see ? 1 : 0;
+    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) }));   // photo is already lit
+    o.castShadow = true;
   });
   return g.scene;
 }
@@ -1268,7 +1265,6 @@ async function tileFeatures(s, t, root) {
 function tileBasemap(s, t) {
   const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic', ph = t.ph || {};
   if (ph.photoRoads) ph.photoRoads.visible = real;
-  if (ph.cityPhoto) ph.cityPhoto.visible = real;
   if (ph.hkuPhoto) ph.hkuPhoto.visible = photoB;
   const f = t.feat; if (!f) return;
   const photoRoads = real && !!ph.photoRoads;
@@ -1414,14 +1410,13 @@ const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatSh
 // in the photo base maps
 const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
 const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
-// per tile: [HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
-// other tiles: their hku-photo.glb); the others, hidden while the tile's photo city is shown (city-photo.glb has every
-// building without an HKU photo copy)]
-const tileSolidMats = (t) => t.solidMats || (t.solidMats = [0, 1].map(() => cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' }))));
-// satellite map: buildings without photo textures in their own colours (the photo under them: tools/build_lod.mjs);
-// the ones that are not HKU's half see-through, as their photo copies
+// per tile: HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
+// other tiles: their hku-photo.glb)
+const tileSolidMats = (t) => t.solidMats || (t.solidMats = [cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })), BUILD_MAT_PLAIN]);
+// satellite map: HKU buildings without a photo copy in their own colours (the photo under them: tools/build_lod.mjs);
+// the buildings that are not HKU's stay plain (no photo, no colour), half see-through
 function setBuildingColours(s, real) {
-  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, DECO_MAT, ...[...s.tiles.tiles.values()].flatMap((t) => t.solidMats || [])];
+  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, ...[...s.tiles.tiles.values()].map((t) => t.solidMats?.[0]).filter(Boolean)];
   for (const m of mats) { if (m.vertexColors !== real) { m.vertexColors = real; m.needsUpdate = true; } }
   DECO_MAT.opacity = real ? SAT_DECO_OPACITY : DECO_OPACITY;
   s.shadowKey = null;
@@ -1497,23 +1492,19 @@ const partMeshes = (p) => (p.cells.length ? p.cells.flatMap((c) => [c.solid, c.d
 function showLod(s, t) {
   const full = !!t.objects, L = t.lodParts, cam = s.camera.position, R = LOD_NEAR + DECO_CELL * 0.71;
   const photoB = !!s.basemap && s.basemap !== 'classic';
-  const cityPhoto = s.basemap === 'real' && !!t.ph?.cityPhoto;   // its other buildings in their own photos
-  if (t.solidMats) {
-    t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
-    t.solidMats[1].visible = !cityPhoto;
-  }
+  if (t.solidMats) t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
   const near = new Set();
   if (full) for (const p of s.bparts) {
     if (p.tile !== t.info.id) continue;
     for (const c of p.cells) {
       const v = cam.distanceTo(c.center) < R;
       if (c.solid) c.solid.visible = v;
-      if (c.deco) c.deco.visible = v && !cityPhoto;
+      if (c.deco) c.deco.visible = v;
       if (v) near.add(c.key);
     }
   }
   if (L) {
-    for (const c of L.cells) { const v = !full || !near.has(c.key); if (c.solid) c.solid.visible = v; if (c.deco) c.deco.visible = v && !cityPhoto; }
+    for (const c of L.cells) { const v = !full || !near.has(c.key); if (c.solid) c.solid.visible = v; if (c.deco) c.deco.visible = v; }
     L.infra.forEach((o) => (o.visible = !full));
   }
 }

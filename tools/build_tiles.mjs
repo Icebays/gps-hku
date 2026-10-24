@@ -21,9 +21,9 @@
 //   (assets/model/buildings.json) lies in; one far outside every tile is left out.
 // - lod.glb (tools/build_lod.mjs: the buildings and bridges simplified, for the distance), bridges.json + .webp
 //   (tools/build_bridge_photo.mjs: the photo for the bridges in the satellite map), land.json, roads.glb (tiles with a
-//   high-quality release, tools/build_tile_features.py), photo-roads.glb, hku-photo.glb + .json, city-photo.glb (their
-//   surveyed photo roads and bridges, HKU buildings and other buildings, tools/README.md): listed in index.json when
-//   they are in the tile's folder (with the ids of the photo HKU buildings).
+//   high-quality release, tools/build_tile_features.py), photo-roads.glb, hku-photo.glb + .json (their surveyed photo
+//   roads and bridges, and HKU buildings, tools/README.md): listed in index.json when they are in the tile's folder
+//   (with the ids of the photo HKU buildings).
 // heights.bin: ground height every 10 m over all tiles (int16, decimetres), for pins and labels on tiles not loaded.
 // With an older model: buildings it has keep its geometry (e.g. the main campus, quantized finer before the far tiles
 // stretched the model's bounding box), and so do its bridges within its terrain tiles.
@@ -40,11 +40,11 @@ const [, , input, oldInput, oldBjson] = process.argv;
 const OUT = process.env.OUT || 'assets/tiles', DEPTH = 3, NODE_PX = 512;
 // a tile's feature files (tools/build_tile_features.py), when present
 function features(item) {
-  for (const [k, f] of [['lod', 'lod.glb'], ['bridges', 'bridges.json'], ['land', 'land.json'], ['roads', 'roads.glb'], ['photoRoads', 'photo-roads.glb'], ['cityPhoto', 'city-photo.glb'], ['hkuPhoto', 'hku-photo.glb']]) {
+  for (const [k, f] of [['lod', 'lod.glb'], ['bridges', 'bridges.json'], ['land', 'land.json'], ['roads', 'roads.glb'], ['photoRoads', 'photo-roads.glb'], ['hkuPhoto', 'hku-photo.glb']]) {
     if (fs.existsSync(path.join(OUT, item.id, f))) item[k] = `${item.id}/${f}`; else delete item[k];
   }
   if (item.hkuPhoto) item.hkuPhotoIds = JSON.parse(fs.readFileSync(path.join(OUT, item.id, 'hku-photo.json'), 'utf8')); else delete item.hkuPhotoIds;
-  delete item.canopy; delete item.canopyMesh;   // (the 3D photo canopy is gone: tools/build_tree_colours.mjs)
+  delete item.canopy; delete item.canopyMesh; delete item.cityPhoto;   // (gone: 3D photo canopy, photo city)
   return item;
 }
 if (input === '--index') {

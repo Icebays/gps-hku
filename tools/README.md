@@ -46,9 +46,9 @@ The map opens as soon as `index.json` and `heights.bin` are in. Every tile withi
 simplified buildings (`lod.glb`, about 1 MB for all 35 tiles), so the skyline is there from afar and at once. Close
 by, block by block (150 m blocks within 700 m, 500 m on phones), the full models replace them once `objects.glb` is in:
 HKU's buildings exact, the others simplified to about 0.3 m (`build_lod.mjs`: about half the triangles; close by they
-look the same). Buildings that are not HKU's are drawn 45 % opaque (50 % in the satellite map). Every building also carries a colour, the mean of
-the aerial photo under it, so the satellite map draws the city solid in its own colours; near the tiles with a
-high-quality release, their buildings in their own photos (`city-photo.glb`, see "Features of the other tiles").
+look the same). Buildings that are not HKU's are drawn plain and 45 % opaque (50 % in the satellite map). Every
+building also carries a colour, the mean of the aerial photo under it: the satellite map draws HKU's buildings that
+have no photo copy in it.
 In the satellite map the bridges (the standard release has no photos on them) wear the tile's own orthophoto, looked
 up by position: `build_bridge_photo.mjs` packs the 32 px photo blocks under the bridges into one small atlas per tile.
 
@@ -118,8 +118,6 @@ node tools/optimize_roads_photo.mjs out/rp.glb assets/tiles/11-SW-7A/photo-roads
 python3 tools/build_satellite.py work/7A out/hb.glb                                  # photo HKU buildings (+ out/hb-ids.json)
 EXACT=1 node tools/optimize_roads_photo.mjs out/hb.glb assets/tiles/11-SW-7A/hku-photo.glb
 cp out/hb-ids.json assets/tiles/11-SW-7A/hku-photo.json
-OTHERS=1 BPAGES=4 python3 tools/build_satellite.py work/7A out/cp.glb                # the other buildings' photos
-node tools/optimize_roads_photo.mjs out/cp.glb assets/tiles/11-SW-7A/city-photo.glb
 node tools/build_tree_colours.mjs                                                    # trees' photo colours (all tiles)
 node tools/build_tiles.mjs --index                                                   # list them in index.json
 ```
@@ -131,9 +129,8 @@ main campus (those come from OpenStreetMap there). The map draws a tile's land c
 terrain loads, and builds its road surface, markings, street lamps and trees when its buildings load (one tile at a
 time). In the satellite map its surveyed photo roads and bridges (`photo-roads.glb`, 7 KTX2 pages, about 10 cm/px)
 load within 950 m (1.25 km on computers), and with the photo buildings its HKU buildings in their own photos
-(`hku-photo.glb`), and in the satellite map its other buildings in their own photos (`city-photo.glb`, 4 KTX2 pages);
-the other HKU buildings stay white. Only the nearest tiles hold them (phones: 2 with photo roads, 2 with the photo
-city, 3 with photo buildings; the main campus's photo roads only near the campus), and they are dropped as the view moves
+(`hku-photo.glb`); the other HKU buildings stay white. Only the nearest tiles hold them (phones: 2 with photo roads,
+3 with photo buildings; the main campus's photo roads only near the campus), and they are dropped as the view moves
 on: iOS Safari reloads the page when it runs out of memory. Tiles without a high-quality release paint their bridge decks
 with their orthophoto (`bridges.json`, see above) and keep plain concrete sides.
 
