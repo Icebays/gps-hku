@@ -1,4 +1,5 @@
 import { marked } from '../vendor/marked.esm.js';
+import { catIcon, placeIcon } from './icons.js';
 
 /* ---------------- i18n ---------------- */
 const UI = {
@@ -256,13 +257,13 @@ async function renderBuildings(meta, params) {
       .sort((a, b) => (parseInt(a.no) || 999) - (parseInt(b.no) || 999));
     page.innerHTML = renderMarkdown(intro, meta) +
       `<div class="filters"><button class="chip ${filter === 'all' ? 'on' : ''}" data-cat="all">${t('all')}</button>` +
-      Object.entries(cats).map(([k, c]) => `<button class="chip ${filter === k ? 'on' : ''}" data-cat="${k}"><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</button>`).join('') +
+      Object.entries(cats).map(([k, c]) => `<button class="chip ${filter === k ? 'on' : ''}" data-cat="${k}">${catIcon(k, c.color)}${esc(L(c))}</button>`).join('') +
       `</div><div class="bldg-list">` + list.map((p) => {
         const other = lang === 'zh' ? p.name.en : p.name.zh;
         const pinned = isPinned(p);
         return `<div class="bldg" id="b-${p.id}">
           <span class="no" title="${t('mapNo')}">${esc(p.no || '–')}</span>
-          <div><h3>${esc(L(p.name))}<small>${esc(other)}</small></h3><p>${esc(L(p.desc))}</p></div>
+          <div><h3>${placeIcon(p, cats)}${esc(L(p.name))}<small>${esc(other)}</small></h3><p>${esc(L(p.desc))}</p></div>
           <div class="acts">
             ${pinned ? `<a class="btn primary" href="${href('map', { place: p.id })}">📍 ${t('showOnMap')}</a>` : `<span class="tag">${t('notPinned')}</span>`}
             <button class="btn" data-fp="${p.id}">🗺 ${t('floorPlans')}${p.floors?.length ? ` (${p.floors.length})` : ''}</button>

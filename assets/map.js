@@ -11,6 +11,7 @@ import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
 import { createIndoor, cutify } from './indoor.js';
 import { createTiles } from './tiles.js';
+import { catIcon, placeIcon } from './icons.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -582,7 +583,7 @@ function buildUI() {
     const items = (S.places?.places || []).filter((p) => !q || `${p.name.en} ${p.name.zh} ${p.no || ''}`.toLowerCase().includes(q))
       .sort((a, b) => isPinned(b) - isPinned(a));
     list.hidden = false;
-    list.innerHTML = items.slice(0, 40).map((p) => `<button data-id="${p.id}" class="${isPinned(p) ? '' : 'unpinned'}"><i class="dot" style="background:${S.places.categories[p.cat]?.color}"></i>${esc(L(p.name))}<small>${isPinned(p) ? (p.no ? '#' + p.no : '') : tt('notPinned')}</small></button>`).join('');
+    list.innerHTML = items.slice(0, 40).map((p) => `<button data-id="${p.id}" class="${isPinned(p) ? '' : 'unpinned'}">${placeIcon(p, S.places.categories)}${esc(L(p.name))}<small>${isPinned(p) ? (p.no ? '#' + p.no : '') : tt('notPinned')}</small></button>`).join('');
   };
   input.addEventListener('focus', showList); input.addEventListener('input', showList);
   list.addEventListener('click', (e) => {
@@ -613,7 +614,7 @@ function buildUI() {
   S.hiddenCats = S.hiddenCats || new Set();
   const zh = getLang() === 'zh', wm = S.indoor?.wallMode || 'cutaway';
   const walls = [['cutaway', zh ? '跟角度變透明（好似 The Sims）' : 'See-through facing you (like The Sims)'], ['full', zh ? '完整牆身' : 'Full walls'], ['low', zh ? '矮牆' : 'Low walls']];
-  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}><i class="dot" style="background:${c.color}"></i>${esc(L(c))}</label>`).join('') +
+  S.legend = ui('map-legend', Object.entries(cats).map(([k, c]) => `<label><input type="checkbox" data-cat="${k}" ${S.hiddenCats.has(k) ? '' : 'checked'}>${catIcon(k, c.color)}${esc(L(c))}</label>`).join('') +
     `<b class="legend-h">${zh ? '室內平面圖：牆' : 'Floor plans: walls'}</b>` +
     walls.map(([k, t]) => `<label><input type="radio" name="walls" value="${k}" ${wm === k ? 'checked' : ''}>${t}</label>`).join(''));
   S.legend.hidden = true;
@@ -718,7 +719,8 @@ function makePins() {
     const pos = placeAnchor(p); if (!pos) continue;
     const el = document.createElement('div');
     el.className = 'pin' + (p.cat === 'landmark' || p.cat === 'transport' ? '' : ' small') + (S.selected?.place?.id === p.id ? ' active' : '');
-    el.innerHTML = `<span><i class="dot" style="background:${S.places.categories[p.cat]?.color}"></i>${esc(L(p.name))}</span><i></i>`;
+    // the kind as an icon; MTR exits: the MTR mark, then station and exit ('short')
+    el.innerHTML = `<span>${placeIcon(p, S.places.categories)}${esc(L(p.short || p.name))}</span><i></i>`;
     el.addEventListener('click', () => selectPlace(p, true));
     S.labels.appendChild(el);
     S.pins.push({ el, pos, place: p });
@@ -1633,7 +1635,7 @@ function showInfo() {
   const cat = p && S.places.categories[p.cat];
   let html = `<button class="icon-btn close">${ICON.close}</button>`;
   if (p) {
-    html += `<h3>${esc(L(p.name))}</h3><div class="sub"><i class="dot" style="background:${cat?.color}"></i>${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
+    html += `<h3>${esc(L(p.name))}</h3><div class="sub">${placeIcon(p, S.places.categories)}${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
       ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}${p.guess ? `<p class="guess">⚠︎ ${tt('guess')}</p>` : ''}
       <div class="acts"><a class="btn primary" href="${href('buildings', { b: p.id })}">${tt('guide')}</a>${p.floors?.length ? `<a class="btn" href="${href('buildings', { b: p.id })}">🗺 ${tt('floorPlans')} (${p.floors.length})</a>` : ''}</div>`;
   } else {
