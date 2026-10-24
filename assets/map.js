@@ -1004,7 +1004,9 @@ function setTreeTheme(s, dark) {
   const real = s.basemap === 'real';
   for (const g of [s.trees, ...[...(s.tiles?.tiles.values() || [])].map((t) => t.feat?.trees)]) {
     if (!g) continue;
-    if (real) g.userData.mats.crown.color.setScalar(1.45); else g.userData.mats.crown.color.set(dark ? 0x5d7c6a : 0xffffff);
+    const crown = g.userData.mats.crown;
+    if (real) crown.color.setScalar(1.45); else crown.color.set(dark ? 0x5d7c6a : 0xffffff);
+    if (crown.flatShading === real) { crown.flatShading = !real; crown.needsUpdate = true; }   // rounder crowns over the photo
     g.userData.mats.trunk.color.set(dark && !real ? 0x4a4038 : 0x8a7462);
     if (g.userData.photo !== real) {
       g.userData.photo = real;
@@ -1014,6 +1016,8 @@ function setTreeTheme(s, dark) {
 }
 /* Trees from the surveyed canopy (data/landcover.json, a tile's land.json): one instanced trunk + crown per tree. */
 const CROWN_GEO = new THREE.IcosahedronGeometry(1, 0), TRUNK_GEO = new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1, true).translate(0, 0.5, 0);   // (ends hidden: in the ground and the crown)
+// round normals: the satellite map shades the crowns smooth (the drawn map keeps them faceted with flatShading)
+CROWN_GEO.setAttribute('normal', CROWN_GEO.attributes.position.clone()); CROWN_GEO.normalizeNormals();
 function makeTrees(s) {
   if (!LAND?.trees?.length) return;
   s.trees = treeGroup(LAND.trees); s.scene.add(s.trees);
