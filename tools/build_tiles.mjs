@@ -19,11 +19,11 @@
 //   the tile's own box (about 1.2 cm steps), from a quantized one bit for bit as in the input; only the triangles of
 //   the tile are kept, in the order that compresses best. A building belongs to the tile its centre
 //   (assets/model/buildings.json) lies in; one far outside every tile is left out.
-// - canopy.webp (tiles with a surveyed tree canopy): the whole photo at 2048 px for the satellite trees.
 // - lod.glb (tools/build_lod.mjs: the buildings and bridges simplified, for the distance), bridges.json + .webp
 //   (tools/build_bridge_photo.mjs: the photo for the bridges in the satellite map), and land.json, roads.glb,
-//   canopy.glb (tiles with a high-quality release, tools/build_tile_features.py): listed in
-//   index.json when they are in the tile's folder.
+//   (tiles with a high-quality release, tools/build_tile_features.py), photo-roads.glb, hku-photo.glb + .json (their
+//   surveyed photo roads and bridges, and HKU buildings, tools/README.md): listed in index.json when they are in the
+//   tile's folder (with the ids of the photo HKU buildings).
 // heights.bin: ground height every 10 m over all tiles (int16, decimetres), for pins and labels on tiles not loaded.
 // With an older model: buildings it has keep its geometry (e.g. the main campus, quantized finer before the far tiles
 // stretched the model's bounding box), and so do its bridges within its terrain tiles.
@@ -40,9 +40,11 @@ const [, , input, oldInput, oldBjson] = process.argv;
 const OUT = process.env.OUT || 'assets/tiles', DEPTH = 3, NODE_PX = 512;
 // a tile's feature files (tools/build_tile_features.py), when present
 function features(item) {
-  for (const [k, f] of [['lod', 'lod.glb'], ['bridges', 'bridges.json'], ['land', 'land.json'], ['roads', 'roads.glb'], ['canopyMesh', 'canopy.glb']]) {
+  for (const [k, f] of [['lod', 'lod.glb'], ['bridges', 'bridges.json'], ['land', 'land.json'], ['roads', 'roads.glb'], ['photoRoads', 'photo-roads.glb'], ['hkuPhoto', 'hku-photo.glb']]) {
     if (fs.existsSync(path.join(OUT, item.id, f))) item[k] = `${item.id}/${f}`; else delete item[k];
   }
+  if (item.hkuPhoto) item.hkuPhotoIds = JSON.parse(fs.readFileSync(path.join(OUT, item.id, 'hku-photo.json'), 'utf8')); else delete item.hkuPhotoIds;
+  delete item.canopy; delete item.canopyMesh;   // (the 3D photo canopy is gone: tools/build_tree_colours.mjs)
   return item;
 }
 if (input === '--index') {
@@ -52,8 +54,6 @@ if (input === '--index') {
   console.log(index.tiles.filter((t) => t.land).map((t) => t.id).join(' ') || 'no tile features');
   process.exit(0);
 }
-// tiles with a surveyed tree canopy (high-quality release): their whole photo at 2048 px for the satellite trees
-const CANOPY = ['7A', '7B', '7C', '7D', '6A', '6C', '6D', '11B', '11C', '11D', '12A', '12C', '16B', '16D', '17A'].map((k) => '11-SW-' + k);
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready]);
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
 const TILES = JSON.parse(fs.readFileSync('data/tiles.json', 'utf8')).tiles;
@@ -290,7 +290,6 @@ for (const p of parts) {
     }
     nodes.push(lev);
   }
-  if (CANOPY.includes(tile.id)) write(`${tile.id}/canopy.webp`, await rawImg().resize(2048).removeAlpha().webp({ quality: 80 }).toBuffer());
   // terrain.glb
   const doc = newDoc();
   const P = acc(doc, posA.getArray().slice(), 'VEC3', posA.getNormalized()), UV = acc(doc, uv.slice(), 'VEC2', uvA.getNormalized());
@@ -308,7 +307,6 @@ for (const p of parts) {
 for (const rec of perTile.values()) {
   if (!rec.nodes) continue;
   const t = rec.tile, item = { id: t.id, extent: t.extent, y: rec.y, terrain: `${t.id}/terrain.glb`, nodes: rec.nodes, photo: rec.photo };
-  if (CANOPY.includes(t.id)) item.canopy = `${t.id}/canopy.webp`;
   if (rec.objects.length) {
     const doc = newDoc(); let nb = 0;
     for (const o of rec.objects) {

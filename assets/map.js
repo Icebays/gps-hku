@@ -252,7 +252,9 @@ async function init() {
     s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top, tile: s.tiles.tileAt(x, z, 50)?.info.id }));
     s.bparts.forEach((p) => splitPart(s, p));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
-    s.photoSet = new Set(photoIds.map((c) => s.bidByCode.get(c)).filter((b) => b != null));
+    // HKU buildings with a photo copy: the main campus's (satellite-buildings.json) and the other tiles' (hku-photo.glb)
+    const tileIds = [...s.tiles.tiles.values()].flatMap((t) => t.info.hkuPhotoIds || []);
+    s.photoSet = new Set([...photoIds, ...tileIds].map((c) => s.bidByCode.get(c)).filter((b) => b != null));
     makeExtraBuildings(s, campus?.extraBuildings || []);
     s.shadowKey = null;   // redraw the shadow map with the buildings in it
     // the drawn roads lie on the main campus tiles: built once those are in (the map is open already)
@@ -932,29 +934,11 @@ async function loadSurfaces(s) {
 /* Base map: 'classic' (drawn map: plain roads with painted markings, contour hills, land cover) or
    'real' (aerial photo everywhere and the photo-textured surveyed roads and bridges, loaded on first use). */
 const BASEMAP_KEY = 'gps-basemap';
-// u = a*x + b, v = c*z + d of a terrain tile (its photo is a top-down orthophoto), fitted from its own
-// world-space vertices; returns vec4(a, b, c, d) or null
-function terrainUVMap(mesh) {
-  const pos = mesh.geometry.attributes.position, uv = mesh.geometry.attributes.uv;
-  if (!pos || !uv) return null;
-  mesh.updateMatrixWorld(true);
-  const v = new THREE.Vector3(), step = Math.max(1, Math.floor(pos.count / 4000));
-  let n = 0, sx = 0, su = 0, sxx = 0, sxu = 0, sz = 0, sv = 0, szz = 0, szv = 0;
-  for (let i = 0; i < pos.count; i += step) {
-    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
-    const u = uv.getX(i), w = uv.getY(i);
-    n++; sx += v.x; su += u; sxx += v.x * v.x; sxu += v.x * u; sz += v.z; sv += w; szz += v.z * v.z; szv += v.z * w;
-  }
-  const a = (n * sxu - sx * su) / (n * sxx - sx * sx), b = (su - a * sx) / n;
-  const c = (n * szv - sz * sv) / (n * szz - sz * sz), d = (sv - c * sz) / n;
-  return [a, b, c, d].every(Number.isFinite) ? new THREE.Vector4(a, b, c, d) : null;
-}
-
 // Base maps: 'classic' (drawn map), 'hybrid' (drawn map + photo-textured HKU buildings),
-// 'real' (satellite: aerial photo, photo roads, photo HKU buildings, 3D photo canopy instead of drawn trees).
+// 'real' (satellite: aerial photo, photo roads and bridges, photo HKU buildings, 3D trees in the photo's colours).
 // Assets load on first use; anything that fails to load leaves the classic layer in place.
 // bump when the satellite / photo assets are rebuilt, so phones never mix new code with cached old files
-const ASSET_V = '2026-10-20c';
+const ASSET_V = '2026-10-24';
 const ktx2Loader = (s) => s.ktx2 || (s.ktx2 = new KTX2Loader().setTranscoderPath('vendor/three/addons/libs/basis/').detectSupport(s.renderer));
 const once = (s, key, fn) => s[key] || (s[key] = fn().catch((e) => (console.warn(key, e), null)));
 async function setBasemap(s, mode) {
@@ -969,42 +953,12 @@ async function setBasemap(s, mode) {
   setSky(s);
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const jobs = [];
-  if (photoBuildings) jobs.push(once(s, 'satBuildingsP', () => loader.loadAsync(`assets/model/satellite-buildings.glb?v=${ASSET_V}`).then((g) => {
-    g.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      const map = o.material.map;
-      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-      o.material = cutify(new THREE.MeshBasicMaterial({ map }));   // photo is already lit
-      o.castShadow = true;
-    });
-    s.satBuildings = g.scene; s.scene.add(g.scene);
+  if (photoBuildings) jobs.push(once(s, 'satBuildingsP', () => loadPhotoBuildings(s, `assets/model/satellite-buildings.glb?v=${ASSET_V}`).then((g) => {
+    s.satBuildings = g; s.scene.add(g);
   })));
   // photo roads: KTX2 (Basis) atlas pages, kept GPU-compressed so phones can hold full sharpness
-  if (real) jobs.push(once(s, 'roadsPhotoP', () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader(s)).loadAsync(`assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
-    g.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      const map = o.material.map;
-      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-      const bridge = /bridge/i.test(o.name || o.parent?.name || '');
-      o.material = new THREE.MeshBasicMaterial({ map, polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-      o.renderOrder = bridge ? 0 : 2;
-    });
-    s.roadsPhoto = g.scene; s.scene.add(g.scene);
-  })));
-  // canopy: surveyed tree canopy as a height field wearing the terrain's own aerial photo
-  if (real) jobs.push(once(s, 'canopyP', () => loader.loadAsync(`assets/model/satellite-trees.glb?v=${ASSET_V}`).then((g) => {
-    g.scene.updateMatrixWorld(true);
-    g.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      // the terrain tile under it: its photo (canopy.webp, the whole tile) and UV mapping
-      o.geometry.computeBoundingBox(); const c = o.geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(o.matrixWorld);
-      const t = s.tiles.tileAt(c.x, c.z), tile = t?.terrain?.full;
-      const fit = tile && t.info.canopy && terrainUVMap(tile);
-      let map = null;
-      if (fit) { map = new THREE.TextureLoader().load('assets/tiles/' + t.info.canopy); map.flipY = false; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
-      o.material = canopyMaterial(map, fit);
-    });
-    s.canopy = g.scene; s.scene.add(g.scene);
+  if (real) jobs.push(once(s, 'roadsPhotoP', () => loadPhotoRoads(s, `assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
+    s.roadsPhoto = g; s.scene.add(g);
   })));
   await Promise.all(jobs);
   if (s.basemap !== mode) return;   // switched again while loading
@@ -1012,8 +966,7 @@ async function setBasemap(s, mode) {
   if (s.satBuildings) s.satBuildings.visible = showPhotoB;
   // the white HKU buildings stay for picking / highlight, just not drawn; other buildings stay white
   BUILD_MAT.visible = !showPhotoB;
-  if (s.canopy) s.canopy.visible = real;
-  if (s.trees) s.trees.visible = !(real && s.canopy);
+  setTreeTheme(s, isDark());
   for (const t of s.tiles.tiles.values()) { tileBasemap(s, t); tileBridges(s, t); }
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
   if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
@@ -1022,24 +975,41 @@ async function setBasemap(s, mode) {
   s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !(real && s.roadsPhoto); });
 }
 
-// the canopy wears the terrain's aerial photo: its position in the photo from world x / z with the terrain
-// tile's own (affine) UV mapping fit, then the texture's own transform (a crop of the photo)
-function canopyMaterial(map, fit) {
-  const m = new THREE.MeshBasicMaterial({ map: fit ? map : null, color: fit ? 0xffffff : 0x55704f, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-  if (fit && map) m.onBeforeCompile = (sh) => {
-    sh.uniforms.uUVMap = { value: fit };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec4 uUVMap;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\n{ vec4 cw = modelMatrix * vec4(position, 1.0); vMapUv = (mapTransform * vec3(uUVMap.x * cw.x + uUVMap.y, uUVMap.z * cw.z + uUVMap.w, 1.0)).xy; }');
-  };
-  return m;
+// the surveyed photo models (KTX2 / Basis pages, GPU-compressed): roads and bridges, HKU buildings
+const photoLoader = (s) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader(s));
+const photoMap = (o) => { const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; } return map; };
+async function loadPhotoRoads(s, url) {
+  const g = await photoLoader(s).loadAsync(url);
+  g.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const bridge = /bridge/i.test(o.name || o.parent?.name || '');
+    o.material = new THREE.MeshBasicMaterial({ map: photoMap(o), polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    o.renderOrder = bridge ? 0 : 2;
+  });
+  return g.scene;
+}
+async function loadPhotoBuildings(s, url) {
+  const g = await photoLoader(s).loadAsync(url);
+  g.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) }));   // photo is already lit
+    o.castShadow = true;
+  });
+  return g.scene;
 }
 
-// per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler)
+// per-tree colours are tints; the material colour sets the overall tone (night: darker, cooler). The satellite map
+// colours each crown as the aerial photo under it (tools/build_tree_colours.mjs), brightened for the shading
 function setTreeTheme(s, dark) {
+  const real = s.basemap === 'real';
   for (const g of [s.trees, ...[...(s.tiles?.tiles.values() || [])].map((t) => t.feat?.trees)]) {
     if (!g) continue;
-    g.userData.mats.crown.color.set(dark ? 0x5d7c6a : 0xffffff);
-    g.userData.mats.trunk.color.set(dark ? 0x4a4038 : 0x8a7462);
+    if (real) g.userData.mats.crown.color.setScalar(1.45); else g.userData.mats.crown.color.set(dark ? 0x5d7c6a : 0xffffff);
+    g.userData.mats.trunk.color.set(dark && !real ? 0x4a4038 : 0x8a7462);
+    if (g.userData.photo !== real) {
+      g.userData.photo = real;
+      for (const cell of g.children) { const cr = cell.children[0]; cr.instanceColor.array.set(real ? cr.userData.photo : cr.userData.style); cr.instanceColor.needsUpdate = true; }
+    }
   }
 }
 /* Trees from the surveyed canopy (data/landcover.json, a tile's land.json): one instanced trunk + crown per tree. */
@@ -1071,6 +1041,8 @@ function treeGroup(list) {
       trunk.setMatrixAt(i, m.compose(new THREE.Vector3(x, y - 0.3, z), q, new THREE.Vector3(1, Math.max(0.5, h - ch + 0.6), 1)));
       crown.setColorAt(i, c.setHSL(0.27 + k * 0.06, 0.32 + k * 0.12, 0.36 + k * 0.08));
     });
+    crown.userData.style = crown.instanceColor.array.slice();
+    crown.userData.photo = Float32Array.from(trees.flatMap((t) => (t[5] != null ? c.setHex(t[5], THREE.SRGBColorSpace) : c.setHSL(0.3, 0.25, 0.3)).toArray()));
     crown.name = 'trees'; trunk.name = 'trunks';
     crown.castShadow = trunk.castShadow = true;
     crown.computeBoundingSphere(); trunk.computeBoundingSphere();
@@ -1140,10 +1112,12 @@ async function makeRoads(s) {
    Tiles with a high-quality release have what the main campus has (tools/build_tile_features.py): their land cover
    drawn into the terrain (land.json: vegetation, water), from as far as the terrain loads; and from as near as their
    buildings load, the surveyed road surfaces (roads.glb) with markings and street lamps from the measured centre
-   lines, the trees, and in the satellite map the 3D canopy (canopy.glb) wearing the tile's own photo. */
+   lines, and the trees; in the satellite map the surveyed photo roads and bridges (photo-roads.glb) and with the photo
+   buildings the HKU buildings in their own photos (hku-photo.glb). */
 const TILE_LAND_RES = 1.25;   // m per canvas pixel
 // a tile's trees, markings and lamps are drawn within this distance (m) - further out they are specks in the haze
 const FEATURE_NEAR = matchMedia('(pointer: coarse)').matches ? 650 : 950;
+const PHOTO_NEAR = FEATURE_NEAR + 300;   // m: a tile's photo roads load within this (a few MB of GPU memory each)
 function tileOverlay(t) {
   return t.overlay || (t.overlay = { uOvA: { value: null }, uOvB: { value: null }, uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) }, uOvOn: { value: 0 } });
 }
@@ -1168,7 +1142,7 @@ async function tileFeatures(s, t, root) {
   for (let i = 0; i < 300 && alive() && !t.terrain; i++) await new Promise((r) => setTimeout(r, 100));
   if (!alive() || !t.terrain || t.feat) return;
   const land = t.info.land ? await landOf(t) : null;
-  const f = { group: new THREE.Group(), roadMeshes: [], trees: null, marks: null, canopy: null };
+  const f = { group: new THREE.Group(), roadMeshes: [], trees: null, marks: null, photoRoads: null, hkuPhoto: null };
   f.group.name = 'tile-features';
   if (t.info.roads) {
     const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/tiles/' + t.info.roads).catch((e) => (console.warn(t.info.roads, e), null));
@@ -1202,19 +1176,24 @@ async function tileFeatures(s, t, root) {
   setTreeTheme(s, isDark()); tileBasemap(s, t);
   s.shadowKey = null;
 }
-// satellite map: the photo shows the roads (no drawn surface or markings; lamps stay) and the 3D canopy replaces the trees
+// satellite map: the photo roads and bridges replace the drawn road surface and markings (lamps stay), and the plain
+// bridges; the photo base maps show the HKU buildings in their own photos
 function tileBasemap(s, t) {
   const f = t.feat; if (!f) return;
-  const real = s.basemap === 'real';
-  if (real && t.info.canopyMesh && !f.canopyP) f.canopyP = loadTileCanopy(s, t, f);
-  f.roadMeshes.forEach((m) => (m.visible = !real));
+  const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
+  if (real && t.info.photoRoads && !f.photoRoadsP && s.tiles.distTo(t.info.id) < PHOTO_NEAR) f.photoRoadsP = loadPhotoRoads(s, 'assets/tiles/' + t.info.photoRoads).then((g) => { if (t.feat !== f) return disposeTree(g); f.photoRoads = g; f.group.add(g); tileBasemap(s, t); tileBridges(s, t); }).catch((e) => console.warn(t.info.photoRoads, e));
+  if (photoB && t.info.hkuPhoto && !f.hkuPhotoP) f.hkuPhotoP = loadPhotoBuildings(s, 'assets/tiles/' + t.info.hkuPhoto).then((g) => { if (t.feat !== f) return disposeTree(g); f.hkuPhoto = g; f.group.add(g); tileBasemap(s, t); s.shadowKey = null; }).catch((e) => console.warn(t.info.hkuPhoto, e));
+  const photoRoads = real && !!f.photoRoads;
+  if (f.photoRoads) f.photoRoads.visible = real;
+  if (f.hkuPhoto) f.hkuPhoto.visible = photoB;
+  f.roadMeshes.forEach((m) => (m.visible = !photoRoads));
   f.marks?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !real; });
-  if (f.canopy) f.canopy.visible = real;
-  f.treesOn = !(real && f.canopy);
+  f.treesOn = true;
   showTileFeatures(s, t);
 }
 function showTileFeatures(s, t) {
-  const f = t.feat, near = s.tiles.distTo(t.info.id) < FEATURE_NEAR;
+  const f = t.feat, d = s.tiles.distTo(t.info.id), near = d < FEATURE_NEAR;
+  if (s.basemap === 'real' && t.info.photoRoads && !f.photoRoadsP && d < PHOTO_NEAR) tileBasemap(s, t);
   if (f.trees) {
     f.trees.visible = near && f.treesOn;
     const cam = s.camera.position;
@@ -1222,15 +1201,7 @@ function showTileFeatures(s, t) {
   }
   if (f.marks) f.marks.visible = near;
 }
-async function loadTileCanopy(s, t, f) {
-  const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/tiles/' + t.info.canopyMesh).catch((e) => (console.warn(t.info.canopyMesh, e), null));
-  if (!g || t.feat !== f || !t.terrain) return;
-  // the tile's whole-photo piece (always held while its terrain is) and the terrain's UV mapping
-  const map = t.pieces.get('0_0_0')?.tex, fit = terrainUVMap(t.terrain.full);
-  g.scene.traverse((o) => { if (o.isMesh) o.material = canopyMaterial(map, fit); });
-  f.canopy = g.scene; f.group.add(g.scene);
-  tileBasemap(s, t); s.shadowKey = null;
-}
+const disposeTree = (root) => root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
 function dropTileFeatures(s, t) {
   const f = t.feat; t.feat = null;
   if (!f) return;
@@ -1241,13 +1212,14 @@ function disposeFeatures(f) {
   f.group.traverse((o) => {
     if (!o.isMesh) return;
     if (o.geometry !== CROWN_GEO && o.geometry !== TRUNK_GEO && o.name !== 'streetlamps') o.geometry.dispose();   // (shared)
-    if (o.material !== ROAD_MAT) { if (f.marks && o.material.map && o.parent === f.marks) o.material.map.dispose(); o.material.dispose(); }
+    if (o.material !== ROAD_MAT) { o.material.map?.dispose(); o.material.dispose(); }
     o.isInstancedMesh && o.dispose();
   });
 }
 
-/* Satellite map: bridges wear the tile's own orthophoto, looked up by world x / z (tools/build_bridge_photo.mjs: the
-   32 px photo blocks under the bridges, packed into an atlas; an index texture gives each block's place in it).
+/* Satellite map, tiles without surveyed photo bridges: the decks wear the tile's own orthophoto, looked up by world
+   x / z (tools/build_bridge_photo.mjs: the 32 px photo blocks under the bridges, packed into an atlas; an index texture
+   gives each block's place in it); their sides are plain concrete (the orthophoto only sees the decks).
    Everything else about the bridges stays: the full models close by, the simplified ones further out. */
 function tileBridges(s, t) {
   const meshes = [...s.infraMeshes.filter((m) => m.userData.tile === t.info.id), ...(t.lodParts?.infra || [])];
@@ -1255,6 +1227,8 @@ function tileBridges(s, t) {
   if (want && !t.bridgeMat && !t.bridgeP) t.bridgeP = loadBridges(t).then((m) => { if (!t.terrain) return m?.dispose(); t.bridgeMat = m; tileBridges(s, t); }).catch((e) => console.warn(t.info.bridges, e));
   const mat = want && t.bridgeMat ? t.bridgeMat : INFRA_MAT;
   meshes.forEach((m) => (m.material = mat));
+  // tiles with surveyed photo bridges (photo-roads.glb) show those instead
+  if (t.feat) { const hide = s.basemap === 'real' && !!t.feat.photoRoads; s.infraMeshes.forEach((m) => { if (m.userData.tile === t.info.id) m.visible = !hide; }); }
 }
 async function loadBridges(t) {
   const base = 'assets/tiles/' + t.info.bridges.replace(/\.json$/, '');
@@ -1281,8 +1255,10 @@ uniform float uSrc, uDst, uPad, uCols;`).replace('#include <map_fragment>', `#in
 {
   vec2 p = vec2(uFit.x * vWorld.x + uFit.y, uFit.z * vWorld.z + uFit.w) * uPhotoPx;   // photo pixel
   vec2 bq = p / uSrc; ivec2 blk = ivec2(floor(bq)), n = textureSize(uIdx, 0);
+  vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+  float up = smoothstep(0.55, 0.75, abs(fn.y));   // deck tops (a loose threshold: the screen-space normal is noisy)
   vec3 col = vec3(0.32);
-  if (blk.x >= 0 && blk.y >= 0 && blk.x < n.x && blk.y < n.y) {
+  if (up > 0.0 && blk.x >= 0 && blk.y >= 0 && blk.x < n.x && blk.y < n.y) {
     vec4 e = texelFetch(uIdx, blk, 0);
     float sl = floor(e.r * 255.0 + 0.5) + floor(e.g * 255.0 + 0.5) * 256.0 - 1.0;
     if (sl >= 0.0) {
@@ -1291,7 +1267,8 @@ uniform float uSrc, uDst, uPad, uCols;`).replace('#include <map_fragment>', `#in
       col = textureGrad(uAtlas, ap / uAtlasSize, dFdx(p) * g, dFdy(p) * g).rgb;
     }
   }
-  diffuseColor.rgb *= col;
+  vec3 side = vec3(0.52, 0.5, 0.46) * (0.8 + 0.2 * abs(fn.x));   // concrete, lit a little by its facing
+  diffuseColor.rgb *= mix(side, col, up);
 }`);
   };
   m.userData.textures = [atlas, idx];
@@ -1387,7 +1364,7 @@ function splitLod(s, t) {
     const idx = o.userData.all.array, bid = o.geometry.attributes._bid, a = [], b = [];
     for (let k = 0; k < idx.length; k += 3) (set.has(bid.getX(idx[k])) ? a : b).push(idx[k], idx[k + 1], idx[k + 2]);
     o.geometry.setIndex(new THREE.BufferAttribute(new idx.constructor(b), 1)); indexBounds(o.geometry);
-    const h = L.hku[i].geometry; setSolid(s, h, new idx.constructor(a)); L.hku[i].material = SOLID_MATS;
+    const h = L.hku[i].geometry; h.setIndex(new THREE.BufferAttribute(new idx.constructor(a), 1)); L.hku[i].material = BUILD_MAT_PLAIN;
     if (a.length) indexBounds(h);
   });
 }

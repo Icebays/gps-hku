@@ -102,15 +102,19 @@ Trees are instanced from `data/landcover.json` (canopy tops: position, height, c
 
 # Features of the other tiles
 
-Tiles with a high-quality release get the same land cover, trees, surveyed roads with markings and lamps, and
-satellite canopy as the main campus, each in the tile's own folder, streamed with the tile:
+Tiles with a high-quality release get the same land cover, trees, surveyed roads with markings and lamps, photo roads
+and bridges, and photo HKU buildings as the main campus, each in the tile's own folder, streamed with the tile:
 
 ```bash
-mkdir -p work/7A && cd work/7A && unzip ../../11-SW-7A.zip 'TERRAIN(TB)/*' 'VEGETATION(TB)/*' 'WATERBODY/*' 'INFRASTRUCTURE(TB)/*' 'INFRASTRUCTURE/*'; cd ../..
-python3 tools/build_tile_features.py work/7A 11-SW-7A assets/tiles/11-SW-7A        # land.json, canopy-raw.glb
-node tools/optimize_canopy.mjs assets/tiles/11-SW-7A/canopy-raw.glb assets/tiles/11-SW-7A/canopy.glb
-rm assets/tiles/11-SW-7A/canopy-raw.glb
+mkdir -p work/7A && cd work/7A && unzip ../../11-SW-7A.zip 'TERRAIN(TB)/*' 'VEGETATION(TB)/*' 'WATERBODY/*' 'INFRASTRUCTURE(TB)/*' 'INFRASTRUCTURE/*' 'BUILDING/*'; cd ../..
+python3 tools/build_tile_features.py work/7A 11-SW-7A assets/tiles/11-SW-7A        # land.json
 node tools/build_surfaces.mjs --roads assets/tiles/11-SW-7A/roads.glb work/7A        # surveyed road surfaces
+PAGES=7 python3 tools/build_roads_photo.py work/7A out/rp.glb                        # photo roads and bridges
+node tools/optimize_roads_photo.mjs out/rp.glb assets/tiles/11-SW-7A/photo-roads.glb
+python3 tools/build_satellite.py work/7A out/hb.glb                                  # photo HKU buildings (+ out/hb-ids.json)
+EXACT=1 node tools/optimize_roads_photo.mjs out/hb.glb assets/tiles/11-SW-7A/hku-photo.glb
+cp out/hb-ids.json assets/tiles/11-SW-7A/hku-photo.json
+node tools/build_tree_colours.mjs                                                    # trees' photo colours (all tiles)
 node tools/build_tiles.mjs --index                                                   # list them in index.json
 ```
 
@@ -119,8 +123,13 @@ lines (as `data/roadnet.json`, here found from the road surfaces drawn straight 
 roads plus the dark, upward faces of INFRASTRUCTURE flyover decks). There are no crossings or bus stops outside the
 main campus (those come from OpenStreetMap there). The map draws a tile's land cover into its terrain as soon as the
 terrain loads, and builds its road surface, markings, street lamps and trees when its buildings load (one tile at a
-time). In the satellite map the tile's photo shows its roads, and its canopy (`canopy.glb`, a 1.5 m height field)
-wears the tile's whole-photo piece, so it costs no extra pictures.
+time). In the satellite map its surveyed photo roads and bridges (`photo-roads.glb`, 7 KTX2 pages, about 10 cm/px)
+load within 950 m (1.25 km on computers), and with the photo buildings its HKU buildings in their own photos
+(`hku-photo.glb`); the other HKU buildings stay white. Tiles without a high-quality release paint their bridge decks
+with their orthophoto (`bridges.json`, see above) and keep plain concrete sides.
+
+The satellite map stands the trees up in 3D in the colours of the photo under each crown (a 6th value per tree,
+`tools/build_tree_colours.mjs`), so trees spreading over a road stand over it instead of lying flat in the photo.
 
 The sea (flat terrain at 1.3 mPD in the coastal tiles) is drawn in the colour of the ground plane beyond the map.
 
@@ -136,11 +145,10 @@ Tile extent = the TERRAIN(TB) node position ± its half size: x = E − 832250, 
 # Satellite base map
 
 ```bash
-unzip model/11-SW-7C.zip 'BUILDING/*' 'VEGETATION*' -d work/7C   # (and 7D)
+unzip model/11-SW-7C.zip 'BUILDING/*' -d work/7C   # (and 7D)
 python3 tools/build_satellite.py work/7C work/7D out/sat-raw.glb
-node tools/optimize_satellite.mjs out/sat-raw.glb
-python3 tools/build_canopy.py work/7C work/7D lod_work/7C lod_work/7D out/canopy-raw.glb   # lod_work: the 11-SW-7C.1 / 7D.1 tiles
-node tools/optimize_canopy.mjs out/canopy-raw.glb assets/model/satellite-trees.glb
+EXACT=1 node tools/optimize_roads_photo.mjs out/sat-raw.glb assets/model/satellite-buildings.glb
+cp out/sat-raw-ids.json assets/model/satellite-buildings.json
 unzip model/11-SW-7C.zip 'INFRASTRUCTURE*' -d work/7C   # (and 7D)
 python3 tools/build_roads_photo.py work/7C work/7D out/roads-photo-raw.glb   # env PAGES (page budget, 14), BLOCK, PAD
 node tools/optimize_roads_photo.mjs out/roads-photo-raw.glb assets/model/roads-photo.glb
@@ -148,8 +156,7 @@ node tools/optimize_roads_photo.mjs out/roads-photo-raw.glb assets/model/roads-p
 
 `satellite-buildings.glb`: HKU buildings only (same rule as the map), geometry exactly as surveyed (full
 float positions, no simplification or quantization); their photos are cropped, scaled and packed into
-2048 px atlas pages (WebP). `satellite-trees.glb`: the surveyed VEGETATION(TB) canopy resampled as a 1.5 m
-height field with the terrain tile's UV mapping, so it wears the terrain's own aerial photo (no extra textures).
+2048 px atlas pages (KTX2); `satellite-buildings.json` lists them, and the map keeps every other HKU building white.
 `roads-photo.glb`: the surveyed road surfaces and bridges with their photos at about 7 cm/px. Only the
 used parts of the 4096 px source photos are kept (cut into bands and runs of used 64 px blocks, the triangles
 split along the cuts, packed into 2048 px atlas pages with real neighbouring pixels as padding) and the pages

@@ -1,21 +1,18 @@
 """Map features of one more tile from its high-quality 3dmap.gov.hk release: what the main campus
-(11-SW-7C / 7D) has from tools/build_landcover.py, build_roadnet.py and build_canopy.py, for any tile.
+(11-SW-7C / 7D) has from tools/build_landcover.py and build_roadnet.py, for any tile.
 
     python3 tools/build_tile_features.py work/7A 11-SW-7A assets/tiles/11-SW-7A
-    node tools/optimize_canopy.mjs assets/tiles/11-SW-7A/canopy-raw.glb assets/tiles/11-SW-7A/canopy.glb
 
 work/7A: the high-quality zip unzipped (TERRAIN(TB), VEGETATION(TB), WATERBODY, INFRASTRUCTURE(TB),
 INFRASTRUCTURE are used). The tile's extent comes from data/tiles.json; everything is clipped to it, so
 neighbouring tiles never overlap. Writes into the tile's folder:
   land.json        {ext, green, water, trees, roads} - vegetation / water polygons, trees [x, z, ground y,
                    height, crown radius] and road centre lines [{pts, width, lanes, class}], model frame
-  canopy-raw.glb   the VEGETATION(TB) canopy as a 1.5 m height field (positions only: the site maps the
-                   tile's own aerial photo onto it from the terrain's UV mapping)
 The road centre lines come from the road surfaces drawn straight into a mask (no renders needed):
 INFRASTRUCTURE(TB) roads plus the dark (asphalt) upward faces of INFRASTRUCTURE flyover decks.
 Needs: numpy, pillow, opencv-python-headless, scikit-image
 """
-import glob, json, os, struct, sys
+import glob, json, os, sys
 import numpy as np
 import cv2
 from PIL import Image
@@ -158,50 +155,3 @@ print('roads', len(roads))
 json.dump({'source': '3D Spatial Data © Lands Department, HKSAR', 'ext': [float(X0), float(X1), float(Z0), float(Z1)],
            'green': green, 'water': water, 'trees': trees, 'roads': roads},
           open(os.path.join(out, 'land.json'), 'w'), separators=(',', ':'))
-
-# ---------- canopy height field (as tools/build_canopy.py) ----------
-C = Grid(1.5)
-cg = cv2.resize(ground, (C.W, C.H), interpolation=cv2.INTER_AREA)
-cveg = np.full((C.H, C.W), -1e9); ccnt = np.zeros((C.H, C.W), int)
-for _, _, p in prims('VEGETATION(TB)'):
-    C.splat_max(p['P'], cveg, ccnt)
-m = (ccnt > 0) & (cveg - cg > 1.0)
-m = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_OPEN, np.ones((2, 2), np.uint8)) > 0
-if m.any():
-    top = np.where(m, cveg, cg).astype(np.float32)
-    top = np.where(m, cv2.GaussianBlur(top, (0, 0), 0.8), cg)
-    H, W = C.H, C.W
-    pad = lambda a, v: np.pad(a, 1, constant_values=v)
-    tp, vp = pad(top, -1e9), pad(m, False)
-    corner_v = np.zeros((H + 1, W + 1), bool); corner_h = np.full((H + 1, W + 1), -1e9, np.float32)
-    for dv in (0, 1):
-        for du in (0, 1):
-            c = vp[dv:dv + H + 1, du:du + W + 1]; h = tp[dv:dv + H + 1, du:du + W + 1]
-            corner_v |= c; corner_h = np.where(c, np.maximum(corner_h, h), corner_h)
-    gc = cv2.resize(cg, (W + 1, H + 1), interpolation=cv2.INTER_LINEAR)
-    corner_h = np.where(corner_v, corner_h, gc) + 0.25
-    ring = cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
-    vs, us = np.nonzero(ring)
-    used = np.zeros((H + 1, W + 1), bool)
-    for dv in (0, 1):
-        for du in (0, 1):
-            used[vs + dv, us + du] = True
-    cv, cu = np.nonzero(used)
-    vid = -np.ones((H + 1, W + 1), np.int64); vid[cv, cu] = np.arange(len(cv))
-    pos = np.stack([X0 + np.minimum(cu * C.R, X1 - X0), corner_h[cv, cu], Z0 + np.minimum(cv * C.R, Z1 - Z0)], 1).astype(np.float32)
-    a, b, c, d_ = vid[vs, us], vid[vs, us + 1], vid[vs + 1, us], vid[vs + 1, us + 1]
-    idx = np.stack([a, c, b, b, c, d_], 1).reshape(-1).astype(np.uint32)   # CCW seen from above (y up, z south)
-    pb, ib = pos.tobytes(), idx.tobytes()
-    gl = dict(asset=dict(version='2.0', copyright='3D Spatial Data © Lands Department, HKSAR Government'), scene=0, scenes=[dict(nodes=[0])],
-              nodes=[dict(name='canopy_' + tile_id, mesh=0)],
-              meshes=[dict(name='canopy_' + tile_id, primitives=[dict(attributes=dict(POSITION=0), indices=1)])],
-              accessors=[dict(bufferView=0, componentType=5126, count=len(pos), type='VEC3', min=pos.min(0).tolist(), max=pos.max(0).tolist()),
-                         dict(bufferView=1, componentType=5125, count=len(idx), type='SCALAR')],
-              bufferViews=[dict(buffer=0, byteOffset=0, byteLength=len(pb), target=34962), dict(buffer=0, byteOffset=len(pb), byteLength=len(ib), target=34963)],
-              buffers=[dict(byteLength=len(pb) + len(ib))])
-    js = json.dumps(gl, separators=(',', ':')).encode(); js += b' ' * ((-len(js)) % 4); bb = pb + ib
-    with open(os.path.join(out, 'canopy-raw.glb'), 'wb') as fo:
-        fo.write(struct.pack('<III', 0x46546C67, 2, 28 + len(js) + len(bb)))
-        fo.write(struct.pack('<II', len(js), 0x4E4F534A)); fo.write(js)
-        fo.write(struct.pack('<II', len(bb), 0x004E4942)); fo.write(bb)
-    print('canopy', len(pos), 'vertices', len(idx) // 3, 'triangles')
