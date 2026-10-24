@@ -14,7 +14,8 @@ import { createTiles } from './tiles.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
-const DECO_OPACITY = 0.45;
+const DECO_OPACITY = 0.45;       // buildings that are not HKU's: drawn map
+const SAT_DECO_OPACITY = 0.5;    // and satellite map (in their own colours / photos)
 const MOBILE_MAP = matchMedia('(pointer: coarse)').matches;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
@@ -1025,7 +1026,7 @@ function managePhotos(s) {
     const wantH = photoB && !!t.info.hkuPhoto && d < HKU_PHOTO_NEAR && nh < HKU_PHOTO_MAX;
     nr += wantR; nc += wantC; nh += wantH;
     tilePhoto(s, t, 'photoRoads', wantR, loadPhotoRoads);
-    tilePhoto(s, t, 'cityPhoto', wantC, loadPhotoBuildings);
+    tilePhoto(s, t, 'cityPhoto', wantC, (s, url) => loadPhotoBuildings(s, url, SAT_DECO_OPACITY));
     tilePhoto(s, t, 'hkuPhoto', wantH, loadPhotoBuildings);
   }
 }
@@ -1069,12 +1070,13 @@ async function loadPhotoRoads(s, url) {
   });
   return g.scene;
 }
-async function loadPhotoBuildings(s, url) {
+async function loadPhotoBuildings(s, url, opacity = 1) {
   const g = await photoLoader(s).loadAsync(url);
   g.scene.traverse((o) => {
     if (!o.isMesh) return;
-    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) }));   // photo is already lit
-    o.castShadow = true;
+    const see = opacity < 1;   // see-through (the buildings that are not HKU's)
+    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o), transparent: see, opacity, depthWrite: !see }));   // photo is already lit
+    o.castShadow = true; o.renderOrder = see ? 1 : 0;
   });
   return g.scene;
 }
@@ -1416,14 +1418,12 @@ const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
 // other tiles: their hku-photo.glb); the others, hidden while the tile's photo city is shown (city-photo.glb has every
 // building without an HKU photo copy)]
 const tileSolidMats = (t) => t.solidMats || (t.solidMats = [0, 1].map(() => cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' }))));
-// satellite map: buildings without photo textures in their own colours (the photo under them: tools/build_lod.mjs),
-// and solid, so the street reads as it is
+// satellite map: buildings without photo textures in their own colours (the photo under them: tools/build_lod.mjs);
+// the ones that are not HKU's half see-through, as their photo copies
 function setBuildingColours(s, real) {
   const mats = [BUILD_MAT, BUILD_MAT_PLAIN, DECO_MAT, ...[...s.tiles.tiles.values()].flatMap((t) => t.solidMats || [])];
   for (const m of mats) { if (m.vertexColors !== real) { m.vertexColors = real; m.needsUpdate = true; } }
-  if (DECO_MAT.transparent === real) {
-    DECO_MAT.transparent = !real; DECO_MAT.opacity = real ? 1 : DECO_OPACITY; DECO_MAT.depthWrite = real; DECO_MAT.needsUpdate = true;
-  }
+  DECO_MAT.opacity = real ? SAT_DECO_OPACITY : DECO_OPACITY;
   s.shadowKey = null;
 }
 function setSolid(s, g, A) {

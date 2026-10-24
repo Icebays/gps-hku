@@ -46,7 +46,7 @@ The map opens as soon as `index.json` and `heights.bin` are in. Every tile withi
 simplified buildings (`lod.glb`, about 1 MB for all 35 tiles), so the skyline is there from afar and at once. Close
 by, block by block (150 m blocks within 700 m, 500 m on phones), the full models replace them once `objects.glb` is in:
 HKU's buildings exact, the others simplified to about 0.3 m (`build_lod.mjs`: about half the triangles; close by they
-look the same). Buildings that are not HKU's are drawn 45 % opaque. Every building also carries a colour, the mean of
+look the same). Buildings that are not HKU's are drawn 45 % opaque (50 % in the satellite map). Every building also carries a colour, the mean of
 the aerial photo under it, so the satellite map draws the city solid in its own colours; near the tiles with a
 high-quality release, their buildings in their own photos (`city-photo.glb`, see "Features of the other tiles").
 In the satellite map the bridges (the standard release has no photos on them) wear the tile's own orthophoto, looked
