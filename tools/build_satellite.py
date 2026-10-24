@@ -37,7 +37,7 @@ def inside(x, z, poly):
     return r
 codes = set(C.get('include', [])) | {c for p in P['places'] if p.get('hku', True) is not False for c in p['buildings']}
 ex = set(C.get('exclude', []))
-hku = {b[0][:-2] for b in B if b[0] in codes or (b[0] not in ex and any(inside(b[1], b[2], a['boundary']) for a in C['areas']))}
+hku = {b[0][:-2] for b in B if b[0] in codes or (b[0] not in ex and any(inside(b[1], b[2], a['boundary']) for a in C['areas'] if a.get('solid', True)))}
 
 def gather(paths):
     """-> list of (triangles positions (n,3,3), triangle uvs (n,3,2), image path) per textured primitive."""

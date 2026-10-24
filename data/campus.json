@@ -1,5 +1,5 @@
 {
-  "_readme": "Model coordinates [x, z] (x = Easting - 832250, z = -(Northing - 815900)). 'areas': HKU campuses - buildings whose centre falls inside are drawn solid and clickable, everything else is see-through decoration; each area gets a name label (at 'label') and an outline on the ground. Buildings listed in places.json always count as HKU; 'include' / 'exclude' force individual building IDs either way. 'extraBuildings': buildings missing from the 3D data, extruded from footprints traced from OpenStreetMap (ids usable in places.json). 'hills': terrain inside is drawn as shaded relief with contour lines instead of the aerial photo.",
+  "_readme": "Model coordinates [x, z] (x = Easting - 832250, z = -(Northing - 815900)). 'areas': HKU campuses - buildings whose centre falls inside are drawn solid and clickable, everything else is see-through decoration; each area gets a name label (at 'label') and an outline on the ground; an area with \"solid\": false only gets those (its HKU buildings are the ones in places.json). Buildings listed in places.json always count as HKU; 'include' / 'exclude' force individual building IDs either way. 'extraBuildings': buildings missing from the 3D data, extruded from footprints traced from OpenStreetMap (ids usable in places.json). 'hills': terrain inside is drawn as shaded relief with contour lines instead of the aerial photo.",
   "areas": [
     {
       "id": "main-campus",
@@ -17,6 +17,26 @@
       "label": [-335, -55],
       "boundary": [
         [-460, -255], [-340, -255], [-300, -200], [-275, -195], [-275, -85], [-460, -80]
+      ]
+    },
+    {
+      "id": "pokfield-campus",
+      "name": { "en": "Pokfield Campus (in progress)", "zh": "蒲飛路校園（興建中）" },
+      "label": [-730, 100],
+      "solid": false,
+      "boundary": [
+        [-800, 45], [-745, 38], [-700, 52], [-662, 55], [-660, 158], [-700, 162], [-745, 165], [-800, 160]
+      ]
+    },
+    {
+      "id": "sassoon-road-campus",
+      "name": { "en": "Sassoon Road Campus", "zh": "沙宣道校園" },
+      "label": [-905, 1480],
+      "solid": false,
+      "boundary": [
+        [-915, 1312], [-850, 1312], [-790, 1345], [-762, 1360], [-765, 1440], [-775, 1490], [-785, 1545],
+        [-785, 1600], [-835, 1625], [-880, 1630], [-895, 1700], [-960, 1712], [-1025, 1700], [-1025, 1555],
+        [-1020, 1470], [-998, 1418], [-945, 1405], [-925, 1340]
       ]
     }
   ],

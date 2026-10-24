@@ -3,6 +3,9 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
 import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
@@ -444,6 +447,7 @@ function setSky(s) {
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
   for (const t of s.tiles?.tiles.values() || []) t.feat?.marks?.userData.setTheme(dark);
+  s.areaLines?.children.forEach((l) => [l, l.userData.ghost].forEach((m) => m.material.color.set(dark ? 0x7fd6a4 : 0x0f5132)));
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
@@ -646,18 +650,14 @@ function makeAreas() {
   if (!S.areaLines) {
     S.areaLines = new THREE.Group();
     for (const a of areas) {
-      const pts = [];
-      a.boundary.forEach((p, i) => {
-        const q = a.boundary[(i + 1) % a.boundary.length];
-        const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
-        for (let k = 0; k < n; k++) {
-          const x = p[0] + ((q[0] - p[0]) * k) / n, z = p[1] + ((q[1] - p[1]) * k) / n;
-          pts.push(new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + 1.5, z));
-        }
-      });
-      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
-        new THREE.LineDashedMaterial({ color: 0x0f5132, dashSize: 6, gapSize: 4, transparent: true, opacity: 0.45 }));
-      line.computeLineDistances(); line.renderOrder = 2;
+      // a dashed line a few pixels wide at any distance (Line2), on the ground
+      const line = new Line2(new LineGeometry(), new LineMaterial({ color: 0x0f5132, linewidth: 3.5, dashed: true, dashSize: 8, gapSize: 5, transparent: true, opacity: 0.8, fog: false }));   // (no fog: the edge-fade fog chunks need a mesh shader)
+      line.renderOrder = 2; line.userData.area = a;
+      // and faintly where trees or buildings hide it, so the whole outline reads
+      const ghost = new Line2(line.geometry, line.material.clone());
+      ghost.material.depthTest = false; ghost.material.opacity = 0.45; ghost.renderOrder = 3;
+      line.userData.ghost = ghost; line.add(ghost);
+      drapeArea(line);
       S.areaLines.add(line);
     }
     S.scene.add(S.areaLines);
@@ -671,6 +671,29 @@ function makeAreas() {
     S.areaLabels.appendChild(el);
     return { el, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + 40, z) };
   });
+}
+
+// an area's outline on the ground: on the terrain meshes once the tiles under it are in (until then the 10 m height
+// grid); frame() re-drapes the outlines still waiting for their terrain
+function drapeArea(line) {
+  const a = line.userData.area, xs = a.boundary.map((p) => p[0]), zs = a.boundary.map((p) => p[1]);
+  const tiles = [...S.tiles.tiles.values()].filter(({ info: { extent: e } }) => e[0] < Math.max(...xs) && e[1] > Math.min(...xs) && e[2] < Math.max(...zs) && e[3] > Math.min(...zs));
+  const ready = tiles.every((t) => t.terrain);
+  if (!ready && line.userData.built) return;   // (still waiting)
+  const h = ready ? heightIndex(tiles.map((t) => t.terrain.full)) : null;
+  const pts = [];
+  a.boundary.forEach((p, i) => {
+    const q = a.boundary[(i + 1) % a.boundary.length];
+    const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
+    for (let k = 0; k < n; k++) {
+      const x = p[0] + ((q[0] - p[0]) * k) / n, z = p[1] + ((q[1] - p[1]) * k) / n, y = h?.(x, z);
+      pts.push(x, (Number.isFinite(y) ? y : S.tiles.heightAt(x, z) ?? 60) + 1.5, z);
+    }
+  });
+  pts.push(pts[0], pts[1], pts[2]);   // closed
+  line.geometry.dispose(); line.geometry = new LineGeometry().setPositions(pts);
+  line.computeLineDistances(); line.userData.ghost.geometry = line.geometry;
+  line.userData.built = true; line.userData.draped = ready;
 }
 
 /* ---------------- pins ---------------- */
@@ -1472,7 +1495,7 @@ function splitPart(s, part) {
 }
 function splitBuildings() {
   if (!S.bmeta) return;
-  const c = S.campus || {}, polys = (c.areas || []).map((a) => a.boundary), exclude = new Set(c.exclude || []);
+  const c = S.campus || {}, polys = (c.areas || []).filter((a) => a.solid !== false).map((a) => a.boundary), exclude = new Set(c.exclude || []);
   const codes = new Set([...(c.include || []), ...S.places.places.filter((p) => p.hku !== false).flatMap((p) => p.buildings)]);
   const set = new Set();
   S.bmeta.forEach((b, i) => { if (codes.has(b.id) || (!exclude.has(b.id) && polys.some((poly) => insidePoly(b.x, b.z, poly)))) set.add(i); });
@@ -1746,7 +1769,11 @@ function frame(now) {
   // the main campus's trees: also only within FEATURE_NEAR, block by block
   const cam = S.camera.position;
   if (S.trees) for (const c of S.trees.children) c.visible = cam.distanceTo(c.userData.center) < FEATURE_NEAR + c.userData.radius;
-  if (S.tiles && (S.photoTick = (S.photoTick || 0) + 1) % 20 === 0) managePhotos(S);
+  if (S.tiles && (S.photoTick = (S.photoTick || 0) + 1) % 20 === 0) {
+    managePhotos(S);
+    const wait = S.areaLines?.children.find((l) => !l.userData.draped);   // one outline at a time
+    if (wait) drapeArea(wait);
+  }
   fitShadow(S);
   S.indoor?.update();
   S.renderer.render(S.scene, S.camera);
