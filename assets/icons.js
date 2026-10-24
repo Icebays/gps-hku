@@ -1,5 +1,5 @@
 /* Category icons, so a place's kind reads at a glance and not by colour alone (white glyph on the category's colour),
-   and the MTR mark for the MTR exits. Inline SVG, 24 x 24 view box. */
+   and the MTR mark for the MTR exits. Inline SVG, 24 x 24 view box (the MTR mark: its own). */
 const GLYPH = {
   // star
   landmark: '<path d="M12 3.2l2.6 5.5 6 .7-4.4 4.1 1.2 5.9L12 16.5l-5.4 2.9 1.2-5.9-4.4-4.1 6-.7z"/>',
@@ -17,16 +17,17 @@ const GLYPH = {
   transport: '<path d="M6.5 3h11A2.5 2.5 0 0120 5.5v10.3a2 2 0 01-1 1.7V20h-2.4v-1.6H7.4V20H5v-2.5a2 2 0 01-1-1.7V5.5A2.5 2.5 0 016.5 3zM6 6.2v4.7h12V6.2zm1.6 7.1a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6zm8.8 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6z"/>',
   other: '<circle cx="12" cy="12" r="4.2"/>',
 };
-// the MTR mark: a bar through an upper arc opening up and a lower arc opening down (white on MTR red, rounded square)
-const MTR_MARK = '<path fill="#fff" d="M3.5 5.2h2.6c1.4 2.3 3.4 3.4 4.6 3.6V5.2h2.6v3.6c1.2-.2 3.2-1.3 4.6-3.6h2.6c-1.6 3.6-4.4 5.7-7.2 6.1v1.4c2.8.4 5.6 2.5 7.2 6.1h-2.6c-1.4-2.3-3.4-3.4-4.6-3.6v3.6h-2.6v-3.6c-1.2.2-3.2 1.3-4.6 3.6H3.5c1.6-3.6 4.4-5.7 7.2-6.1v-1.4C7.9 10.9 5.1 8.8 3.5 5.2z"/>';
-export const MTR_RED = '#e2231a';
+// the MTR mark, as its logo: a bar through an upper arc opening up and a lower arc opening down, white on a maroon
+// oval (the oval is the icon's background: view box in the logo's proportions, 162 x 137)
+const MTR_MARK = '<path fill="#fff" d="M43 35a46.5 36 0 0 0 93 0h-14a32.5 24.5 0 0 1-65 0zM43 119a46.5 36 0 0 1 93 0h-14a32.5 24.5 0 0 0-65 0z"/><path fill="#fff" d="M82 34h15v86H82z"/>';
+export const MTR_RED = '#9c2133';
 
 export function catIcon(cat, color) {
   return `<svg class="ico" viewBox="0 0 24 24" style="background:${color}" aria-hidden="true">${GLYPH[cat] || GLYPH.other}</svg>`;
 }
 // a place's icon: the MTR mark for MTR exits, else its category's
 export function placeIcon(p, cats) {
-  if (p.icon === 'mtr') return `<svg class="ico mtr" viewBox="0 0 24 24" style="background:${MTR_RED}" aria-hidden="true">${MTR_MARK}</svg>`;
+  if (p.icon === 'mtr') return `<svg class="ico mtr" viewBox="8.5 8.5 162 137" style="background:${MTR_RED}" aria-hidden="true">${MTR_MARK}</svg>`;
   return catIcon(p.cat, cats[p.cat]?.color);
 }
 

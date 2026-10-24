@@ -143,7 +143,8 @@ body.map-mode .page { max-width: none; padding: 0; }
 .bldg h3 .ico, .sub .ico { margin-right: 6px; }
 .pin.small .ico { width: 15px; height: 15px; padding: 2px; }
 .pin.active .ico { box-shadow: 0 0 0 1.5px #fff; }
-.ico.mtr { border-radius: 22%; padding: 1.5px; }
+.ico.mtr { width: 20px; padding: 0; }
+.pin.small .ico.mtr { width: 18px; padding: 0; }
 /* "3D floor plans" under a place's name (pins, directory) */
 .pin span b { display: flex; flex-direction: column; line-height: 1.2; font-weight: inherit; }
 .fp { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--accent-text); white-space: nowrap; }
