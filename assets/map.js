@@ -14,8 +14,7 @@ import { createTiles } from './tiles.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
-const DECO_OPACITY = 0.18;
-const DECO_NEAR = 1100;   // m
+const DECO_OPACITY = 0.45;
 const MOBILE_MAP = matchMedia('(pointer: coarse)').matches;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
@@ -232,7 +231,7 @@ async function init() {
     onLod: (t, root) => { addLod(s, t, root); tileBridges(s, t); scene.add(root); },
     onLodDrop: (t, root) => { scene.remove(root); t.lodParts = null; },
     onObjectsDrop: (t, root) => {
-      dropTileFeatures(s, t);
+      dropTileFeatures(s, t); dropTilePhotos(s, t);
       root.traverse((o) => {
         if (!o.isMesh) return;
         const part = o.userData.part;
@@ -988,9 +987,9 @@ async function setBasemap(s, mode) {
   if (s.basemap !== mode) return;   // switched again while loading
   const showPhotoB = photoBuildings && !!s.satBuildings;
   if (s.satBuildings) s.satBuildings.visible = showPhotoB;
-  // the white HKU buildings stay for picking / highlight, just not drawn; other buildings stay white
-  BUILD_MAT.visible = !showPhotoB;
+  // the white HKU buildings with a photo copy stay for picking / highlight, just not drawn (per tile: showLod)
   setTreeTheme(s, isDark());
+  setBuildingColours(s, real);
   for (const t of s.tiles.tiles.values()) { tileBasemap(s, t); tileBridges(s, t); }
   managePhotos(s);
   coreRoadsShown(s);
@@ -1005,9 +1004,10 @@ function coreRoadsShown(s) {
 }
 const nearCore = (s, extra = 0) => Math.min(...s.coreTiles.map((id) => s.tiles.distTo(id))) < PHOTO_NEAR + extra;
 /* Photo models hold a lot of GPU memory (a KTX2 page is about 3 MB): only the nearest tiles keep them (phones: 2 with
-   photo roads, 3 with photo HKU buildings), and they are dropped as soon as the view moves on, so a long walk across
-   the map never piles them up (iOS Safari reloads the page when it runs out of memory). Checked a few times a second. */
-const PHOTO_ROADS_MAX = MOBILE_MAP ? 2 : 4, HKU_PHOTO_MAX = MOBILE_MAP ? 3 : 6, HKU_PHOTO_NEAR = MOBILE_MAP ? 1100 : 1500;
+   photo roads, 2 with the photo city, 3 with photo HKU buildings), and they are dropped as soon as the view moves on,
+   so a long walk across the map never piles them up (iOS Safari reloads the page when it runs out of memory).
+   Checked a few times a second. A tile's photo models live in t.ph, from its buildings' loading to their dropping. */
+const PHOTO_ROADS_MAX = MOBILE_MAP ? 2 : 4, CITY_PHOTO_MAX = MOBILE_MAP ? 2 : 4, HKU_PHOTO_MAX = MOBILE_MAP ? 3 : 6, HKU_PHOTO_NEAR = MOBILE_MAP ? 1100 : 1500;
 function managePhotos(s) {
   const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
   // the main campus's photo roads (14 pages): only near the campus
@@ -1017,27 +1017,35 @@ function managePhotos(s) {
     s.roadsPhoto = g; s.scene.add(g); coreRoadsShown(s);
   }).catch((e) => console.warn('roads-photo', e));
   // the other tiles, nearest first (loaded ones a little ahead, so they do not flap at the edge)
-  const order = [...s.tiles.tiles.values()].filter((t) => t.feat).map((t) => [s.tiles.distTo(t.info.id) - (t.feat.photoRoads || t.feat.hkuPhoto ? 150 : 0), t]).sort((a, b) => a[0] - b[0]);
-  let nr = 0, nh = 0;
+  const order = [...s.tiles.tiles.values()].filter((t) => t.objects).map((t) => [s.tiles.distTo(t.info.id) - (t.ph ? 150 : 0), t]).sort((a, b) => a[0] - b[0]);
+  let nr = 0, nc = 0, nh = 0;
   for (const [d, t] of order) {
     const wantR = real && !!t.info.photoRoads && d < PHOTO_NEAR && nr < PHOTO_ROADS_MAX;
+    const wantC = real && !!t.info.cityPhoto && d < PHOTO_NEAR && nc < CITY_PHOTO_MAX;
     const wantH = photoB && !!t.info.hkuPhoto && d < HKU_PHOTO_NEAR && nh < HKU_PHOTO_MAX;
-    nr += wantR; nh += wantH;
+    nr += wantR; nc += wantC; nh += wantH;
     tilePhoto(s, t, 'photoRoads', wantR, loadPhotoRoads);
+    tilePhoto(s, t, 'cityPhoto', wantC, loadPhotoBuildings);
     tilePhoto(s, t, 'hkuPhoto', wantH, loadPhotoBuildings);
   }
 }
 function tilePhoto(s, t, key, want, load) {
-  const f = t.feat, P = key + 'P';
-  if (want && !f[P]) {
+  const P = key + 'P';
+  if (want && !t.ph?.[P]) {
+    const f = t.ph || (t.ph = { group: new THREE.Group() });
+    if (!f.group.parent) s.scene.add(f.group);
     const p = f[P] = load(s, 'assets/tiles/' + t.info[key]).then((g) => {
-      if (t.feat !== f || f[P] !== p) return disposeTree(g);
+      if (t.ph !== f || f[P] !== p) return disposeTree(g);
       f[key] = g; f.group.add(g); tileBasemap(s, t); tileBridges(s, t); s.shadowKey = null;
     }).catch((e) => console.warn(t.info[key], e));
-  } else if (!want && f[P]) {
-    f[P] = null;
+  } else if (!want && t.ph?.[P]) {
+    const f = t.ph; f[P] = null;
     if (f[key]) { f.group.remove(f[key]); disposeTree(f[key]); f[key] = null; tileBasemap(s, t); tileBridges(s, t); s.shadowKey = null; }
   }
+}
+function dropTilePhotos(s, t) {
+  if (!t.ph) return;
+  s.scene.remove(t.ph.group); disposeTree(t.ph.group); t.ph = null;
 }
 
 // the surveyed photo models (KTX2 / Basis pages, GPU-compressed): roads and bridges, HKU buildings
@@ -1159,7 +1167,7 @@ async function makeRoads(s) {
     }
     const deckMeshes = bridges.length ? bridges : s.infraMeshes.filter((m) => m.userData.core);
     const ground = g0, deck = deckMeshes.length ? heightIndex(deckMeshes, { upOnly: true }) : () => NaN;
-    const coreB = s.bparts.filter((p) => s.coreTiles.includes(p.tile)).flatMap((p) => [p.mesh, ...p.decos]);
+    const coreB = s.bparts.filter((p) => s.coreTiles.includes(p.tile)).flatMap(partMeshes);
     const bIdx = heightIndex(coreB);
     const lampGeo = await loadLampGeometry('assets/model/streetlamp.json').catch(() => null);
     const root = document.documentElement;
@@ -1219,7 +1227,7 @@ async function tileFeatures(s, t, root) {
   for (let i = 0; i < 300 && alive() && !t.terrain; i++) await new Promise((r) => setTimeout(r, 100));
   if (!alive() || !t.terrain || t.feat) return;
   const land = t.info.land ? await landOf(t) : null;
-  const f = { group: new THREE.Group(), roadMeshes: [], trees: null, marks: null, photoRoads: null, hkuPhoto: null };
+  const f = { group: new THREE.Group(), roadMeshes: [], trees: null, marks: null };
   f.group.name = 'tile-features';
   if (t.info.roads) {
     const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('assets/tiles/' + t.info.roads).catch((e) => (console.warn(t.info.roads, e), null));
@@ -1233,7 +1241,7 @@ async function tileFeatures(s, t, root) {
     if (!alive() || !t.terrain) return disposeFeatures(f);
     f.group.updateMatrixWorld(true);
     const infra = s.infraMeshes.filter((m) => m.userData.tile === t.info.id);
-    const parts = s.bparts.filter((p) => p.tile === t.info.id).flatMap((p) => [p.mesh, ...p.decos]);
+    const parts = s.bparts.filter((p) => p.tile === t.info.id).flatMap(partMeshes);
     f.marks = buildRoads({
       FEAT: { roads: land.roads, marks: {}, paths: [] },
       ground: heightIndex([t.terrain.full]),
@@ -1256,11 +1264,12 @@ async function tileFeatures(s, t, root) {
 // satellite map: the photo roads and bridges replace the drawn road surface and markings (lamps stay), and the plain
 // bridges; the photo base maps show the HKU buildings in their own photos
 function tileBasemap(s, t) {
+  const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic', ph = t.ph || {};
+  if (ph.photoRoads) ph.photoRoads.visible = real;
+  if (ph.cityPhoto) ph.cityPhoto.visible = real;
+  if (ph.hkuPhoto) ph.hkuPhoto.visible = photoB;
   const f = t.feat; if (!f) return;
-  const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
-  const photoRoads = real && !!f.photoRoads;
-  if (f.photoRoads) f.photoRoads.visible = real;
-  if (f.hkuPhoto) f.hkuPhoto.visible = photoB;
+  const photoRoads = real && !!ph.photoRoads;
   f.roadMeshes.forEach((m) => (m.visible = !photoRoads));
   f.marks?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !real; });
   f.treesOn = true;
@@ -1302,7 +1311,7 @@ function tileBridges(s, t) {
   const mat = want && t.bridgeMat ? t.bridgeMat : INFRA_MAT;
   meshes.forEach((m) => (m.material = mat));
   // tiles with surveyed photo bridges (photo-roads.glb) show those instead
-  if (t.feat) { const hide = s.basemap === 'real' && !!t.feat.photoRoads; s.infraMeshes.forEach((m) => { if (m.userData.tile === t.info.id) m.visible = !hide; }); }
+  if (!s.coreTiles.includes(t.info.id)) { const hide = s.basemap === 'real' && !!t.ph?.photoRoads; s.infraMeshes.forEach((m) => { if (m.userData.tile === t.info.id) m.visible = !hide; }); }
 }
 async function loadBridges(t) {
   const base = 'assets/tiles/' + t.info.bridges.replace(/\.json$/, '');
@@ -1392,15 +1401,30 @@ function insidePoly(x, z, poly) {
   return r;
 }
 /* Buildings come in parts: one mesh per tile (and per source model) as the tiles stream in (assets/tiles.js). Each
-   part's HKU buildings stay in the solid mesh; the rest go to see-through child meshes sharing its vertices, one per
-   DECO_CELL block (by building centre) so the renderer skips the blocks out of view. Further than DECO_NEAR from a
-   tile, and before its full models are in, its simplified buildings (lod.glb) stand in for them. */
+   part is cut into DECO_CELL blocks (by building centre), each a solid mesh of its HKU buildings and a see-through one
+   of the rest, sharing the part's vertices. Blocks within LOD_NEAR show the full models; further out, and before a
+   tile's full models are in, the same blocks of its simplified buildings (lod.glb) stand in for them, so zooming out
+   turns the city simpler block by block. */
 const DECO_CELL = 150;
+const LOD_NEAR = MOBILE_MAP ? 500 : 700;   // m from the camera to a block's centre
 const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
 // HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
 // in the photo base maps
 const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
 const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
+// per tile: HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
+// other tiles: their hku-photo.glb)
+const tileSolidMats = (t) => t.solidMats || (t.solidMats = [cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })), BUILD_MAT_PLAIN]);
+// satellite map: buildings without photo textures in their own colours (the photo under them: tools/build_lod.mjs),
+// and solid, so the street reads as it is
+function setBuildingColours(s, real) {
+  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, DECO_MAT, ...[...s.tiles.tiles.values()].map((t) => t.solidMats?.[0]).filter(Boolean)];
+  for (const m of mats) { if (m.vertexColors !== real) { m.vertexColors = real; m.needsUpdate = true; } }
+  if (DECO_MAT.transparent === real) {
+    DECO_MAT.transparent = !real; DECO_MAT.opacity = real ? 1 : DECO_OPACITY; DECO_MAT.depthWrite = real; DECO_MAT.needsUpdate = true;
+  }
+  s.shadowKey = null;
+}
 function setSolid(s, g, A) {
   const photo = s.photoSet || new Set(), bid = g.attributes._bid, a = [], b = [];
   for (let i = 0; i < A.length; i += 3) (photo.has(bid.getX(A[i])) ? a : b).push(A[i], A[i + 1], A[i + 2]);
@@ -1410,52 +1434,90 @@ function setSolid(s, g, A) {
 const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
 function addPart(s, mesh, tile) {
   mesh.material = BUILD_MAT; mesh.castShadow = mesh.receiveShadow = true;
-  const part = { mesh, tile, all: mesh.geometry.index, hl: new Map(), decos: [] };
+  const part = { mesh, tile, all: mesh.geometry.index, hl: new Map(), cells: [] };
   mesh.userData.part = part;
   s.bparts.push(part); s.pickables.push(mesh);
   splitPart(s, part);
   addHighlight(s, part);
 }
-// a tile's simplified buildings: HKU ones solid, the rest see-through (as the full models); bridges as the full ones
+// a tile's simplified buildings, in the same blocks: HKU ones solid, the rest see-through (as the full models);
+// bridges as the full ones
 function addLod(s, t, root) {
   const meshes = []; root.traverse((o) => o.isMesh && meshes.push(o));
-  t.lodParts = { hku: [], deco: [], infra: [] };
+  t.lodParts = { roots: [], cells: [], infra: [] };
   for (const o of meshes) {
     if ((o.name || o.parent?.name || '').startsWith('buildings')) {
       o.material = DECO_MAT; o.renderOrder = 1; o.userData.all = o.geometry.index;
-      const h = new THREE.Mesh(new THREE.BufferGeometry(), BUILD_MAT);
-      for (const k of ['position', '_bid']) h.geometry.setAttribute(k, o.geometry.attributes[k]);
-      h.geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(0), 1));
-      o.add(h); t.lodParts.deco.push(o); t.lodParts.hku.push(h);
+      t.lodParts.roots.push(o);
     } else { o.material = INFRA_MAT; t.lodParts.infra.push(o); }
   }
   splitLod(s, t);
 }
 function splitLod(s, t) {
-  const set = s.hkuSet, L = t.lodParts; if (!L || !set || L.split === set) return;
+  const set = s.hkuSet, L = t.lodParts; if (!L || !set || !s.bmeta || L.split === set) return;
   L.split = set;
-  L.deco.forEach((o, i) => {
-    const idx = o.userData.all.array, bid = o.geometry.attributes._bid, a = [], b = [];
-    for (let k = 0; k < idx.length; k += 3) (set.has(bid.getX(idx[k])) ? a : b).push(idx[k], idx[k + 1], idx[k + 2]);
-    o.geometry.setIndex(new THREE.BufferAttribute(new idx.constructor(b), 1)); indexBounds(o.geometry);
-    const h = L.hku[i].geometry; h.setIndex(new THREE.BufferAttribute(new idx.constructor(a), 1)); L.hku[i].material = BUILD_MAT_PLAIN;
-    if (a.length) indexBounds(h);
-  });
+  for (const c of L.cells) for (const m of [c.solid, c.deco]) if (m) { m.parent.remove(m); m.geometry.dispose(); }
+  L.cells = [];
+  for (const o of L.roots) {
+    const g = o.geometry, idx = o.userData.all.array;
+    g.setIndex(new THREE.BufferAttribute(new idx.constructor(0), 1));   // (the blocks draw it)
+    for (const [key, { hku, deco }] of cellSplit(s, g, idx, set)) {
+      const c = blockOf(key);
+      if (hku.length) { c.solid = cellMesh(g, null, tileSolidMats(t)); setSolid(s, c.solid.geometry, hku); indexBounds(c.solid.geometry); o.add(c.solid); }
+      if (deco.length) { c.deco = cellMesh(g, deco, DECO_MAT); c.deco.renderOrder = 1; o.add(c.deco); }
+      L.cells.push(c);
+    }
+  }
 }
-// full models or simplified ones, per tile (see DECO_NEAR)
+// a part's triangles by block and by HKU / not: Map key -> {hku, deco} index arrays
+function cellSplit(s, g, idx, set) {
+  const bid = g.attributes._bid, cells = new Map();
+  for (let i = 0; i < idx.length; i += 3) {
+    const b = bid.getX(idx[i]), m = s.bmeta[b], key = m ? `${Math.floor(m.x / DECO_CELL)},${Math.floor(m.z / DECO_CELL)}` : '0,0';
+    let c = cells.get(key); if (!c) cells.set(key, (c = { hku: [], deco: [] }));
+    (set.has(b) ? c.hku : c.deco).push(idx[i], idx[i + 1], idx[i + 2]);
+  }
+  for (const c of cells.values()) { c.hku = new idx.constructor(c.hku); c.deco = new idx.constructor(c.deco); }
+  return cells;
+}
+function cellMesh(g, idx, mat) {
+  const m = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+  for (const k of ['position', '_bid', 'color']) if (g.attributes[k]) m.geometry.setAttribute(k, g.attributes[k]);
+  if (idx) { m.geometry.setIndex(new THREE.BufferAttribute(idx, 1)); indexBounds(m.geometry); }
+  return m;
+}
+// a block: its centre on the ground (heights grid), for the near / far test
+function blockOf(key) {
+  const [i, j] = key.split(',').map(Number), x = (i + 0.5) * DECO_CELL, z = (j + 0.5) * DECO_CELL;
+  return { key, solid: null, deco: null, center: new THREE.Vector3(x, S.tiles?.heightAt(x, z) ?? 0, z) };
+}
+const partMeshes = (p) => (p.cells.length ? p.cells.flatMap((c) => [c.solid, c.deco].filter(Boolean)) : [p.mesh]);
+// full models or simplified ones, block by block (LOD_NEAR); HKU buildings with their photo copy shown are hidden
 function showLod(s, t) {
-  const full = !!t.objects, near = full && s.tiles.distTo(t.info.id) < DECO_NEAR, L = t.lodParts;
+  const full = !!t.objects, L = t.lodParts, cam = s.camera.position, R = LOD_NEAR + DECO_CELL * 0.71;
+  const photoB = !!s.basemap && s.basemap !== 'classic';
+  if (t.solidMats) t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
+  const cityPhoto = s.basemap === 'real' && !!t.ph?.cityPhoto;   // its other buildings in their own photos
+  const near = new Set();
+  if (full) for (const p of s.bparts) {
+    if (p.tile !== t.info.id) continue;
+    for (const c of p.cells) {
+      const v = cam.distanceTo(c.center) < R;
+      if (c.solid) c.solid.visible = v;
+      if (c.deco) c.deco.visible = v && !cityPhoto;
+      if (v) near.add(c.key);
+    }
+  }
   if (L) {
-    L.deco.forEach((o) => (o.visible = !near));
-    L.hku.forEach((o) => (o.visible = !full));
+    for (const c of L.cells) { const v = !full || !near.has(c.key); if (c.solid) c.solid.visible = v; if (c.deco) c.deco.visible = v && !cityPhoto; }
     L.infra.forEach((o) => (o.visible = !full));
   }
-  if (full) for (const p of s.bparts) if (p.tile === t.info.id) p.decos.forEach((d) => (d.visible = near));
 }
 function dropPart(s, part) {
-  for (const arr of [s.bparts, s.pickables]) for (const o of [part, part.mesh, ...part.decos]) { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); }
+  const cellMeshes = part.cells.flatMap((c) => [c.solid, c.deco].filter(Boolean));
+  for (const arr of [s.bparts, s.pickables]) for (const o of [part, part.mesh, ...cellMeshes]) { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); }
   s.hl = s.hl.filter((m) => m.parent !== part.mesh);
-  part.decos.forEach((d) => d.geometry.dispose()); part.hl.forEach((g) => g.dispose());
+  cellMeshes.forEach((d) => d.geometry.dispose()); part.hl.forEach((g) => g.dispose());
 }
 // bounds of the triangles a geometry draws (three.js would take every vertex of the shared position buffer)
 function indexBounds(g) {
@@ -1466,31 +1528,20 @@ function indexBounds(g) {
 function splitPart(s, part) {
   const set = s.hkuSet; if (!set || !s.bmeta || part.split === set) return;
   part.split = set;
-  const g = part.mesh.geometry, bid = g.attributes._bid, idx = part.all.array;
-  const cellOf = (b) => { const m = s.bmeta[b]; return m ? `${Math.floor(m.x / DECO_CELL)},${Math.floor(m.z / DECO_CELL)}` : '?'; };
-  const counts = new Map(); let n = 0;
-  for (let i = 0; i < idx.length; i += 3) {
-    const b = bid.getX(idx[i]);
-    if (set.has(b)) n++; else { const c = cellOf(b); counts.set(c, (counts.get(c) || 0) + 1); }
-  }
-  const A = new idx.constructor(n * 3), cells = new Map();
-  for (const [c, k] of counts) cells.set(c, { arr: new idx.constructor(k * 3), o: 0 });
-  for (let i = 0, a = 0; i < idx.length; i += 3) {
-    const b = bid.getX(idx[i]);
-    let dst, o;
-    if (set.has(b)) { dst = A; o = a; a += 3; } else { const c = cells.get(cellOf(b)); dst = c.arr; o = c.o; c.o += 3; }
-    dst[o] = idx[i]; dst[o + 1] = idx[i + 1]; dst[o + 2] = idx[i + 2];
-  }
-  setSolid(s, g, A); part.mesh.material = SOLID_MATS; indexBounds(g);
-  for (const d of part.decos) { part.mesh.remove(d); d.geometry.dispose(); const i = s.pickables.indexOf(d); if (i >= 0) s.pickables.splice(i, 1); }
-  part.decos = [];
-  for (const { arr } of cells.values()) {
-    const d = new THREE.Mesh(new THREE.BufferGeometry(), DECO_MAT);
-    for (const k of ['position', '_bid']) d.geometry.setAttribute(k, g.attributes[k]);
-    d.geometry.setIndex(new THREE.BufferAttribute(arr, 1)); indexBounds(d.geometry);
-    d.renderOrder = 1; d.castShadow = true; d.userData.deco = true; d.userData.part = part;
-    d.userData.center = d.geometry.boundingSphere.center.clone().applyMatrix4(part.mesh.matrixWorld);
-    part.mesh.add(d); part.decos.push(d); s.pickables.push(d);
+  const g = part.mesh.geometry, idx = part.all.array, t = s.tiles.tiles.get(part.tile);
+  for (const m of partMeshes(part)) { if (m === part.mesh) continue; part.mesh.remove(m); m.geometry.dispose(); const i = s.pickables.indexOf(m); if (i >= 0) s.pickables.splice(i, 1); }
+  part.cells = [];
+  const i0 = s.pickables.indexOf(part.mesh); if (i0 >= 0) s.pickables.splice(i0, 1);
+  g.setIndex(new THREE.BufferAttribute(new idx.constructor(0), 1));   // the part's own mesh draws nothing: its blocks do
+  for (const [key, { hku, deco }] of cellSplit(s, g, idx, set)) {
+    const c = blockOf(key);
+    if (hku.length) {
+      c.solid = cellMesh(g, null, t ? tileSolidMats(t) : SOLID_MATS); setSolid(s, c.solid.geometry, hku); indexBounds(c.solid.geometry);
+      c.solid.castShadow = c.solid.receiveShadow = true; c.solid.userData.part = part;
+    }
+    if (deco.length) { c.deco = cellMesh(g, deco, DECO_MAT); c.deco.renderOrder = 1; c.deco.castShadow = true; c.deco.userData.deco = true; c.deco.userData.part = part; }
+    for (const m of [c.solid, c.deco]) if (m) { part.mesh.add(m); s.pickables.push(m); }
+    part.cells.push(c);
   }
 }
 function splitBuildings() {

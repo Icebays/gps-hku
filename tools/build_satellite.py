@@ -5,6 +5,8 @@
     (another high-quality tile: tools/README.md, "Features of the other tiles")
 
 Also writes the ids of the buildings it covers (out/sat-raw-ids.json): the map keeps every other HKU building white.
+OTHERS=1: every other building instead (the photo city of the satellite map, city-photo.glb). BPAGES: atlas pages a
+tile (default 2).
 
 Takes the high-quality tiles (model/11-SW-7C.zip, 11-SW-7D.zip unzipped with BUILDING):
 - HKU buildings only (the same rule as the map: inside a campus area of data/campus.json, or tagged
@@ -122,14 +124,15 @@ def pack(groups, budget_px):
         out_items.append(res)
     return pages, out_items
 
-bdirs = [d for t in tiles for d in glob.glob(f'{t}/BUILDING/*') if os.path.basename(d)[:-2] in hku]
+others = bool(os.environ.get('OTHERS'))
+bdirs = [d for t in tiles for d in glob.glob(f'{t}/BUILDING/*') if (os.path.basename(d)[:-2] in hku) != others]
 bitems = gather([os.path.join(d, os.path.basename(d) + '.gltf') for d in bdirs])
-print('HKU buildings', len(bdirs), 'textured prims', len(bitems))
+print('other' if others else 'HKU', 'buildings', len(bdirs), 'textured prims', len(bitems))
 found = {os.path.basename(d)[:-2] for d in bdirs}
 json.dump(sorted(b[0] for b in B if b[0][:-2] in found), open(os.path.splitext(out)[0] + '-ids.json', 'w'))
 if not bitems:
     sys.exit(0)
-bpages, (bres,) = pack([(bitems, 1.0)], 2 * len(tiles) * PAGE * PAGE * 0.8)   # 2 atlas pages a tile
+bpages, (bres,) = pack([(bitems, 1.0)], float(os.environ.get('BPAGES', 2)) * len(tiles) * PAGE * PAGE * 0.8)
 
 
 # ---------- GLB writer ----------
