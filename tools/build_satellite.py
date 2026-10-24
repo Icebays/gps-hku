@@ -79,7 +79,7 @@ def pack(groups, budget_px):
         cw, ch = e['crop'][2] - e['crop'][0], e['crop'][3] - e['crop'][1]
         e['area'] = cw * ch * e['w']
     total = sum(e['area'] for e in imgs.values())
-    k = np.sqrt(budget_px / max(total, 1))
+    k = min(1.0, np.sqrt(budget_px / max(total, 1)))   # (never above the photos' own resolution)
     # shelf packing, largest first
     pages, shelves = [], []
     order = sorted(imgs, key=lambda i: -(imgs[i]['crop'][3] - imgs[i]['crop'][1]))
