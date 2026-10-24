@@ -1412,13 +1412,14 @@ const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatSh
 // in the photo base maps
 const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
 const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
-// per tile: HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
-// other tiles: their hku-photo.glb)
-const tileSolidMats = (t) => t.solidMats || (t.solidMats = [cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })), BUILD_MAT_PLAIN]);
+// per tile: [HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
+// other tiles: their hku-photo.glb); the others, hidden while the tile's photo city is shown (city-photo.glb has every
+// building without an HKU photo copy)]
+const tileSolidMats = (t) => t.solidMats || (t.solidMats = [0, 1].map(() => cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' }))));
 // satellite map: buildings without photo textures in their own colours (the photo under them: tools/build_lod.mjs),
 // and solid, so the street reads as it is
 function setBuildingColours(s, real) {
-  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, DECO_MAT, ...[...s.tiles.tiles.values()].map((t) => t.solidMats?.[0]).filter(Boolean)];
+  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, DECO_MAT, ...[...s.tiles.tiles.values()].flatMap((t) => t.solidMats || [])];
   for (const m of mats) { if (m.vertexColors !== real) { m.vertexColors = real; m.needsUpdate = true; } }
   if (DECO_MAT.transparent === real) {
     DECO_MAT.transparent = !real; DECO_MAT.opacity = real ? 1 : DECO_OPACITY; DECO_MAT.depthWrite = real; DECO_MAT.needsUpdate = true;
@@ -1496,8 +1497,11 @@ const partMeshes = (p) => (p.cells.length ? p.cells.flatMap((c) => [c.solid, c.d
 function showLod(s, t) {
   const full = !!t.objects, L = t.lodParts, cam = s.camera.position, R = LOD_NEAR + DECO_CELL * 0.71;
   const photoB = !!s.basemap && s.basemap !== 'classic';
-  if (t.solidMats) t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
   const cityPhoto = s.basemap === 'real' && !!t.ph?.cityPhoto;   // its other buildings in their own photos
+  if (t.solidMats) {
+    t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
+    t.solidMats[1].visible = !cityPhoto;
+  }
   const near = new Set();
   if (full) for (const p of s.bparts) {
     if (p.tile !== t.info.id) continue;
