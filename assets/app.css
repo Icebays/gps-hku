@@ -143,6 +143,14 @@ body.map-mode .page { max-width: none; padding: 0; }
 .bldg h3 .ico, .sub .ico { margin-right: 6px; }
 .pin.small .ico { width: 15px; height: 15px; padding: 2px; }
 .pin.active .ico { box-shadow: 0 0 0 1.5px #fff; }
+.ico.mtr { border-radius: 22%; padding: 1.5px; }
+/* "3D floor plans" under a place's name (pins, directory) */
+.pin span b { display: flex; flex-direction: column; line-height: 1.2; font-weight: inherit; }
+.fp { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--accent-text); white-space: nowrap; }
+.fp-ico { width: 11px; height: 11px; flex: none; }
+.pin.active .fp { color: #fff; }
+.bldg .fp { margin-top: 3px; font-size: 12px; }
+.bldg .fp-ico { width: 13px; height: 13px; }
 .bldg-list { display: grid; gap: 10px; }
 .bldg { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: start; }
 .bldg .no { font: 600 13px ui-monospace, monospace; color: var(--text-soft); background: var(--bg-soft); border-radius: 6px; padding: 3px 7px; min-width: 34px; text-align: center; }

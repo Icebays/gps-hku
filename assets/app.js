@@ -1,15 +1,15 @@
 import { marked } from '../vendor/marked.esm.js';
-import { catIcon, placeIcon } from './icons.js';
+import { catIcon, placeIcon, floorsBadge } from './icons.js';
 
 /* ---------------- i18n ---------------- */
 const UI = {
   en: { search: 'Search GPS-HKU…', openMap: '3D Map', prev: 'Previous', next: 'Next', onThisPage: 'On this page',
-        noResults: 'No results', showOnMap: 'Show on map', notPinned: 'Not on map yet',
+        noResults: 'No results', showOnMap: 'Show on map', notPinned: 'Not on map yet', floors3d: '3D floor plans',
         floorPlans: 'Floor plans', noFloorPlans: 'No floor plans yet — see “About floor plans” to add them.',
         all: 'All', places: 'Places', pages: 'Pages', notFound: 'Page not found', notFoundText: 'This page does not exist yet.',
         mapNo: 'Map no.', updated: 'Unofficial student-made guide. Not affiliated with HKU.' },
   zh: { search: '搜尋 GPS-HKU…', openMap: '3D 地圖', prev: '上一頁', next: '下一頁', onThisPage: '本頁內容',
-        noResults: '找不到結果', showOnMap: '在地圖顯示', notPinned: '尚未標示',
+        noResults: '找不到結果', showOnMap: '在地圖顯示', notPinned: '尚未標示', floors3d: '立體分層平面圖',
         floorPlans: '平面圖', noFloorPlans: '暫未有平面圖 — 請參閱「關於平面圖」加入。',
         all: '全部', places: '地點', pages: '頁面', notFound: '找不到頁面', notFoundText: '此頁面尚未建立。',
         mapNo: '地圖編號', updated: '學生自製非官方指南，與香港大學無關。' },
@@ -247,7 +247,7 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------------- building directory ---------------- */
 async function renderBuildings(meta, params) {
-  const data = await loadPlaces();
+  const [data, indoor] = await Promise.all([loadPlaces(), getJSON('data/indoor/index.json').catch(() => ({}))]);
   const cats = data.categories;
   let filter = params.get('cat') || 'all';
   const intro = (await getText(`content/${lang}/buildings.md`)) || '';
@@ -263,7 +263,7 @@ async function renderBuildings(meta, params) {
         const pinned = isPinned(p);
         return `<div class="bldg" id="b-${p.id}">
           <span class="no" title="${t('mapNo')}">${esc(p.no || '–')}</span>
-          <div><h3>${placeIcon(p, cats)}${esc(L(p.name))}<small>${esc(other)}</small></h3><p>${esc(L(p.desc))}</p></div>
+          <div><h3>${placeIcon(p, cats)}${esc(L(p.name))}<small>${esc(other)}</small></h3>${indoor[p.id] ? floorsBadge(t('floors3d')) : ''}<p>${esc(L(p.desc))}</p></div>
           <div class="acts">
             ${pinned ? `<a class="btn primary" href="${href('map', { place: p.id })}">📍 ${t('showOnMap')}</a>` : `<span class="tag">${t('notPinned')}</span>`}
             <button class="btn" data-fp="${p.id}">🗺 ${t('floorPlans')}${p.floors?.length ? ` (${p.floors.length})` : ''}</button>

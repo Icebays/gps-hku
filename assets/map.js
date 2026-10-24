@@ -11,7 +11,7 @@ import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
 import { createIndoor, cutify } from './indoor.js';
 import { createTiles } from './tiles.js';
-import { catIcon, placeIcon } from './icons.js';
+import { catIcon, placeIcon, floorsBadge } from './icons.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -23,13 +23,13 @@ const T = {
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet.',
-        min: 'min', notPinned: 'not on map yet', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
+        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
         guess: 'Approximate position, not yet confirmed.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。',
-        min: '分鐘', notPinned: '尚未標示', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
+        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
         guess: '位置係估計，未經確認。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
@@ -250,7 +250,9 @@ async function init() {
     fetch('data/campus.json').then((r) => r.json()).catch(() => null),
     loadOverlay(),
     fetch('assets/model/satellite-buildings.json').then((r) => r.json()).catch(() => []),
-  ]).then(([, bjson, campus, , photoIds]) => {
+    fetch('data/indoor/index.json').then((r) => r.json()).catch(() => ({})),
+  ]).then(([, bjson, campus, , photoIds, indoorIndex]) => {
+    s.withFloors = new Set(Object.keys(indoorIndex).filter((k) => !k.startsWith('_')));   // places with 3D floor plans
     clearInterval(tick);
     s.campus = campus;
     setHills(campus?.hills);
@@ -720,7 +722,9 @@ function makePins() {
     const el = document.createElement('div');
     el.className = 'pin' + (p.cat === 'landmark' || p.cat === 'transport' ? '' : ' small') + (S.selected?.place?.id === p.id ? ' active' : '');
     // the kind as an icon; MTR exits: the MTR mark, then station and exit ('short')
-    el.innerHTML = `<span>${placeIcon(p, S.places.categories)}${esc(L(p.short || p.name))}</span><i></i>`;
+    // places with 3D floor plans say so under their name
+    const fp = S.withFloors?.has(p.id) ? floorsBadge(tt('floors3d')) : '';
+    el.innerHTML = `<span>${placeIcon(p, S.places.categories)}<b>${esc(L(p.short || p.name))}${fp}</b></span><i></i>`;
     el.addEventListener('click', () => selectPlace(p, true));
     S.labels.appendChild(el);
     S.pins.push({ el, pos, place: p });

@@ -17,8 +17,8 @@ const GLYPH = {
   transport: '<path d="M6.5 3h11A2.5 2.5 0 0120 5.5v10.3a2 2 0 01-1 1.7V20h-2.4v-1.6H7.4V20H5v-2.5a2 2 0 01-1-1.7V5.5A2.5 2.5 0 016.5 3zM6 6.2v4.7h12V6.2zm1.6 7.1a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6zm8.8 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6z"/>',
   other: '<circle cx="12" cy="12" r="4.2"/>',
 };
-// the MTR mark: two arcs bowing towards a vertical bar (white on MTR red)
-const MTR_MARK = '<path d="M5.2 4.6Q12 11.4 18.8 4.6M5.2 19.4Q12 12.6 18.8 19.4M12 3.2v17.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>';
+// the MTR mark: a bar through an upper arc opening up and a lower arc opening down (white on MTR red, rounded square)
+const MTR_MARK = '<path fill="#fff" d="M3.5 5.2h2.6c1.4 2.3 3.4 3.4 4.6 3.6V5.2h2.6v3.6c1.2-.2 3.2-1.3 4.6-3.6h2.6c-1.6 3.6-4.4 5.7-7.2 6.1v1.4c2.8.4 5.6 2.5 7.2 6.1h-2.6c-1.4-2.3-3.4-3.4-4.6-3.6v3.6h-2.6v-3.6c-1.2.2-3.2 1.3-4.6 3.6H3.5c1.6-3.6 4.4-5.7 7.2-6.1v-1.4C7.9 10.9 5.1 8.8 3.5 5.2z"/>';
 export const MTR_RED = '#e2231a';
 
 export function catIcon(cat, color) {
@@ -26,6 +26,10 @@ export function catIcon(cat, color) {
 }
 // a place's icon: the MTR mark for MTR exits, else its category's
 export function placeIcon(p, cats) {
-  if (p.icon === 'mtr') return `<svg class="ico" viewBox="0 0 24 24" style="background:${MTR_RED}" aria-hidden="true">${MTR_MARK}</svg>`;
+  if (p.icon === 'mtr') return `<svg class="ico mtr" viewBox="0 0 24 24" style="background:${MTR_RED}" aria-hidden="true">${MTR_MARK}</svg>`;
   return catIcon(p.cat, cats[p.cat]?.color);
 }
+
+// a place with 3D floor plans (data/indoor/index.json): stacked floors, and a small label under its name
+const FLOORS = '<svg class="fp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l9 4.5-9 4.5-9-4.5zM3 12l9 4.5 9-4.5M3 16l9 4.5 9-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+export const floorsBadge = (label) => `<small class="fp">${FLOORS}${label}</small>`;
