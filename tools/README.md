@@ -31,7 +31,7 @@ used before it streamed tiles; `build_tiles.mjs` still takes such a file.)
 `build_tiles.mjs` writes, per tile, `terrain.glb` (the terrain, plus a simplified copy with its edges locked),
 `objects.glb` (buildings and bridges, never simplified) and the aerial photo as a quadtree of WebP pieces
 (512 px for the whole tile down to 8 x 8 pieces at the full 4096 px), with `index.json` and a 10 m height grid
-(`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera, their full buildings within 1.7 km
+(`heights.bin`). The map loads the terrain of tiles within 4.2 km of the camera (3.3 km on phones), their full buildings within 1.7 km
 (1.4 km on phones), and only the photo pieces that are in view and drawn larger than their own resolution, within a
 memory budget. Tiles further than 700 m use the simplified terrain. The main campus tiles (11-SW-7C, 7D, whose centres
 lie in the campus extent) always stay loaded.
@@ -125,7 +125,9 @@ main campus (those come from OpenStreetMap there). The map draws a tile's land c
 terrain loads, and builds its road surface, markings, street lamps and trees when its buildings load (one tile at a
 time). In the satellite map its surveyed photo roads and bridges (`photo-roads.glb`, 7 KTX2 pages, about 10 cm/px)
 load within 950 m (1.25 km on computers), and with the photo buildings its HKU buildings in their own photos
-(`hku-photo.glb`); the other HKU buildings stay white. Tiles without a high-quality release paint their bridge decks
+(`hku-photo.glb`); the other HKU buildings stay white. Only the nearest tiles hold them (phones: 2 with photo roads,
+3 with photo buildings; the main campus's photo roads only near the campus), and they are dropped as the view moves
+on: iOS Safari reloads the page when it runs out of memory. Tiles without a high-quality release paint their bridge decks
 with their orthophoto (`bridges.json`, see above) and keep plain concrete sides.
 
 The satellite map stands the trees up in 3D in the colours of the photo under each crown (a 6th value per tree,

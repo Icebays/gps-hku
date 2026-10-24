@@ -425,14 +425,18 @@ export function buildRoads({ FEAT, ground, deck, building, lampGeo, dark, surfac
     group.add(pole, lantern);
     mats.lamp = pole.material; mats.lantern = lantern.material;
   }
-  group.userData.setTheme = (d) => {
+  group.userData.setTheme = themeSetter(mats);
+  group.userData.lampCount = lamps.length;
+  return group;
+}
+// (made outside buildRoads: a closure inside it would keep all of its height lookups alive, tens of MB a tile)
+function themeSetter(mats) {
+  return (d) => {
     const s = STYLE[d ? 'dark' : 'light'];
     mats.pave.color.set(s.pavement); mats.kerb.color.set(s.kerb); mats.walkEdge.color.set(s.kerb); mats.tar.color.set(s.tarmac); mats.deckTar.color.set(s.deck);
     mats.walk.color.set(s.walk); mats.indoor.color.set(s.indoor); mats.white.color.set(s.paint); mats.yellow.color.set(s.yellow);
     mats.lamp?.color.set(s.lamp); mats.lantern?.color.set(s.lantern);
   };
-  group.userData.lampCount = lamps.length;
-  return group;
 }
 
 function runFilter(flags, step, minLen) {

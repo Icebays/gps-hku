@@ -13,6 +13,7 @@ import { createTiles } from './tiles.js';
 const ORIGIN = { E: 832250, N: 815900 };
 const DECO_OPACITY = 0.18;
 const DECO_NEAR = 1100;   // m
+const MOBILE_MAP = matchMedia('(pointer: coarse)').matches;
 const T = {
   en: { loading: 'Loading 3D campus…', find: 'Find a building or place…', reset: 'Reset view', top: 'Top / 3D view', north: 'Face north',
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
@@ -939,7 +940,7 @@ const BASEMAP_KEY = 'gps-basemap';
 // Assets load on first use; anything that fails to load leaves the classic layer in place.
 // bump when the satellite / photo assets are rebuilt, so phones never mix new code with cached old files
 const ASSET_V = '2026-10-24';
-const ktx2Loader = (s) => s.ktx2 || (s.ktx2 = new KTX2Loader().setTranscoderPath('vendor/three/addons/libs/basis/').detectSupport(s.renderer));
+const ktx2Loader = (s) => s.ktx2 || (s.ktx2 = new KTX2Loader().setTranscoderPath('vendor/three/addons/libs/basis/').setWorkerLimit(2).detectSupport(s.renderer));
 const once = (s, key, fn) => s[key] || (s[key] = fn().catch((e) => (console.warn(key, e), null)));
 async function setBasemap(s, mode) {
   s.basemap = mode;
@@ -957,7 +958,7 @@ async function setBasemap(s, mode) {
     s.satBuildings = g; s.scene.add(g);
   })));
   // photo roads: KTX2 (Basis) atlas pages, kept GPU-compressed so phones can hold full sharpness
-  if (real) jobs.push(once(s, 'roadsPhotoP', () => loadPhotoRoads(s, `assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
+  if (real && nearCore(s)) jobs.push(once(s, 'roadsPhotoP', () => loadPhotoRoads(s, `assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
     s.roadsPhoto = g; s.scene.add(g);
   })));
   await Promise.all(jobs);
@@ -968,16 +969,65 @@ async function setBasemap(s, mode) {
   BUILD_MAT.visible = !showPhotoB;
   setTreeTheme(s, isDark());
   for (const t of s.tiles.tiles.values()) { tileBasemap(s, t); tileBridges(s, t); }
+  managePhotos(s);
+  coreRoadsShown(s);
+  s.shadowKey = null;
+}
+// the main campus's photo roads or its drawn roads (painted markings belong to the drawn roads; lamps stay everywhere)
+function coreRoadsShown(s) {
+  const real = s.basemap === 'real';
   if (s.roadsPhoto) s.roadsPhoto.visible = real;
   if (s.roads3d) s.roads3d.visible = !(real && s.roadsPhoto);
-  s.shadowKey = null;
-  // painted markings belong to the drawn roads; lamps stay everywhere
   s.roads?.children.forEach((c) => { if (c.name !== 'streetlamps' && c.name !== 'lanterns') c.visible = !(real && s.roadsPhoto); });
+}
+const nearCore = (s, extra = 0) => Math.min(...s.coreTiles.map((id) => s.tiles.distTo(id))) < PHOTO_NEAR + extra;
+/* Photo models hold a lot of GPU memory (a KTX2 page is about 3 MB): only the nearest tiles keep them (phones: 2 with
+   photo roads, 3 with photo HKU buildings), and they are dropped as soon as the view moves on, so a long walk across
+   the map never piles them up (iOS Safari reloads the page when it runs out of memory). Checked a few times a second. */
+const PHOTO_ROADS_MAX = MOBILE_MAP ? 2 : 4, HKU_PHOTO_MAX = MOBILE_MAP ? 3 : 6, HKU_PHOTO_NEAR = MOBILE_MAP ? 1100 : 1500;
+function managePhotos(s) {
+  const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
+  // the main campus's photo roads (14 pages): only near the campus
+  if (s.roadsPhoto && !(real && nearCore(s, 400))) { s.scene.remove(s.roadsPhoto); disposeTree(s.roadsPhoto); s.roadsPhoto = null; s.roadsPhotoP = null; coreRoadsShown(s); }
+  else if (real && !s.roadsPhotoP && nearCore(s)) s.roadsPhotoP = loadPhotoRoads(s, `assets/model/roads-photo.glb?v=${ASSET_V}`).then((g) => {
+    if (!(s.basemap === 'real' && nearCore(s, 400))) { s.roadsPhotoP = null; return disposeTree(g); }
+    s.roadsPhoto = g; s.scene.add(g); coreRoadsShown(s);
+  }).catch((e) => console.warn('roads-photo', e));
+  // the other tiles, nearest first (loaded ones a little ahead, so they do not flap at the edge)
+  const order = [...s.tiles.tiles.values()].filter((t) => t.feat).map((t) => [s.tiles.distTo(t.info.id) - (t.feat.photoRoads || t.feat.hkuPhoto ? 150 : 0), t]).sort((a, b) => a[0] - b[0]);
+  let nr = 0, nh = 0;
+  for (const [d, t] of order) {
+    const wantR = real && !!t.info.photoRoads && d < PHOTO_NEAR && nr < PHOTO_ROADS_MAX;
+    const wantH = photoB && !!t.info.hkuPhoto && d < HKU_PHOTO_NEAR && nh < HKU_PHOTO_MAX;
+    nr += wantR; nh += wantH;
+    tilePhoto(s, t, 'photoRoads', wantR, loadPhotoRoads);
+    tilePhoto(s, t, 'hkuPhoto', wantH, loadPhotoBuildings);
+  }
+}
+function tilePhoto(s, t, key, want, load) {
+  const f = t.feat, P = key + 'P';
+  if (want && !f[P]) {
+    const p = f[P] = load(s, 'assets/tiles/' + t.info[key]).then((g) => {
+      if (t.feat !== f || f[P] !== p) return disposeTree(g);
+      f[key] = g; f.group.add(g); tileBasemap(s, t); tileBridges(s, t); s.shadowKey = null;
+    }).catch((e) => console.warn(t.info[key], e));
+  } else if (!want && f[P]) {
+    f[P] = null;
+    if (f[key]) { f.group.remove(f[key]); disposeTree(f[key]); f[key] = null; tileBasemap(s, t); tileBridges(s, t); s.shadowKey = null; }
+  }
 }
 
 // the surveyed photo models (KTX2 / Basis pages, GPU-compressed): roads and bridges, HKU buildings
 const photoLoader = (s) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(ktx2Loader(s));
-const photoMap = (o) => { const map = o.material.map; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; } return map; };
+const photoMap = (o) => {
+  const map = o.material.map;
+  if (map) {
+    map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+    // once on the GPU, the compressed pages need no copy in JavaScript memory
+    map.onUpdate = () => { for (const m of map.mipmaps || []) m.data = null; };
+  }
+  return map;
+};
 async function loadPhotoRoads(s, url) {
   const g = await photoLoader(s).loadAsync(url);
   g.scene.traverse((o) => {
@@ -1120,7 +1170,7 @@ async function makeRoads(s) {
    buildings the HKU buildings in their own photos (hku-photo.glb). */
 const TILE_LAND_RES = 1.25;   // m per canvas pixel
 // a tile's trees, markings and lamps are drawn within this distance (m) - further out they are specks in the haze
-const FEATURE_NEAR = matchMedia('(pointer: coarse)').matches ? 650 : 950;
+const FEATURE_NEAR = MOBILE_MAP ? 650 : 950;
 const PHOTO_NEAR = FEATURE_NEAR + 300;   // m: a tile's photo roads load within this (a few MB of GPU memory each)
 function tileOverlay(t) {
   return t.overlay || (t.overlay = { uOvA: { value: null }, uOvB: { value: null }, uOvExt: { value: new THREE.Vector4(0, 1, 0, 1) }, uOvOn: { value: 0 } });
@@ -1185,8 +1235,6 @@ async function tileFeatures(s, t, root) {
 function tileBasemap(s, t) {
   const f = t.feat; if (!f) return;
   const real = s.basemap === 'real', photoB = !!s.basemap && s.basemap !== 'classic';
-  if (real && t.info.photoRoads && !f.photoRoadsP && s.tiles.distTo(t.info.id) < PHOTO_NEAR) f.photoRoadsP = loadPhotoRoads(s, 'assets/tiles/' + t.info.photoRoads).then((g) => { if (t.feat !== f) return disposeTree(g); f.photoRoads = g; f.group.add(g); tileBasemap(s, t); tileBridges(s, t); }).catch((e) => console.warn(t.info.photoRoads, e));
-  if (photoB && t.info.hkuPhoto && !f.hkuPhotoP) f.hkuPhotoP = loadPhotoBuildings(s, 'assets/tiles/' + t.info.hkuPhoto).then((g) => { if (t.feat !== f) return disposeTree(g); f.hkuPhoto = g; f.group.add(g); tileBasemap(s, t); s.shadowKey = null; }).catch((e) => console.warn(t.info.hkuPhoto, e));
   const photoRoads = real && !!f.photoRoads;
   if (f.photoRoads) f.photoRoads.visible = real;
   if (f.hkuPhoto) f.hkuPhoto.visible = photoB;
@@ -1196,8 +1244,7 @@ function tileBasemap(s, t) {
   showTileFeatures(s, t);
 }
 function showTileFeatures(s, t) {
-  const f = t.feat, d = s.tiles.distTo(t.info.id), near = d < FEATURE_NEAR;
-  if (s.basemap === 'real' && t.info.photoRoads && !f.photoRoadsP && d < PHOTO_NEAR) tileBasemap(s, t);
+  const f = t.feat, near = s.tiles.distTo(t.info.id) < FEATURE_NEAR;
   if (f.trees) {
     f.trees.visible = near && f.treesOn;
     const cam = s.camera.position;
@@ -1696,6 +1743,10 @@ function frame(now) {
   S.tiles?.update();
   // full or simplified buildings per tile; trees, markings and lamps close by
   for (const t of S.tiles?.tiles.values() || []) { showLod(S, t); if (t.feat) showTileFeatures(S, t); }
+  // the main campus's trees: also only within FEATURE_NEAR, block by block
+  const cam = S.camera.position;
+  if (S.trees) for (const c of S.trees.children) c.visible = cam.distanceTo(c.userData.center) < FEATURE_NEAR + c.userData.radius;
+  if (S.tiles && (S.photoTick = (S.photoTick || 0) + 1) % 20 === 0) managePhotos(S);
   fitShadow(S);
   S.indoor?.update();
   S.renderer.render(S.scene, S.camera);

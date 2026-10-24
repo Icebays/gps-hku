@@ -13,8 +13,9 @@
 import * as THREE from 'three';
 
 const BASE = 'assets/tiles/';
-const TERRAIN_NEAR = 4200, TERRAIN_FAR = 5000;      // m from the camera to the tile: load / drop
 const MOBILE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+// m from the camera to the tile: load / drop (phones: less, for memory - the haze hides most of it beyond 3 km)
+const TERRAIN_NEAR = MOBILE ? 3300 : 4200, TERRAIN_FAR = TERRAIN_NEAR + (MOBILE ? 600 : 800);
 const OBJECTS_NEAR = MOBILE ? 1400 : 1700, OBJECTS_FAR = OBJECTS_NEAR + 500;      // buildings beyond are far into the haze
 const FULL_NEAR = 700;    // m: closer than this a tile's terrain is drawn in full, further out simplified
 const REFINE = 1.15;      // refine a piece when it covers more than REFINE x its pixels on screen
