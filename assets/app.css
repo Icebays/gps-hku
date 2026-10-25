@@ -216,6 +216,11 @@ body.map-mode .page { max-width: none; padding: 0; }
 .pin > i { width: 2px; height: 16px; background: var(--text); opacity: .6; }
 .pin.active span { background: var(--accent); color: #fff; border-color: transparent; }
 .pin.small span { font-size: 11.5px; padding: 2px 8px 2px 6px; }
+/* crowded: a pin folds into its icon (a round badge) and opens again when there is room */
+.pin > span { transition: padding .25s ease, gap .25s ease; }
+.pin > span > b, .pin > span > .exits { max-width: 260px; max-height: 3em; overflow: hidden; transition: max-width .3s ease, max-height .3s ease, opacity .2s ease, margin .25s ease; }
+.pin.compact > span { padding: 3px; gap: 0; }
+.pin.compact > span > b, .pin.compact > span > .exits { max-width: 0; max-height: 0; opacity: 0; margin: 0; }
 .route-panel { left: 14px; top: 76px; width: min(300px, calc(100% - 28px)); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 12px; font-size: 14px; }
 .route-panel h4 { margin: 0 0 8px; font-size: 14px; }
 .route-panel button.r { display: block; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; cursor: pointer; font-size: 13.5px; }

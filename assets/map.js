@@ -762,11 +762,19 @@ function updatePins() {
     const x = (_v.x * 0.5 + 0.5) * w, y = (-_v.y * 0.5 + 0.5) * h;
     let vis = _v.z < 1 && x > -50 && x < w + 50 && y > -20 && y < h + 40 && d < 2200;
     const active = S.selected?.place?.id === p.place.id;
-    if (vis && !active) { // declutter
-      const r = { x: x - 60, y: y - 30, w: 120, h: 26 };
-      if (placed.some((q) => !(r.x + r.w < q.x || q.x + q.w < r.x || r.y + r.h < q.y || q.y + q.h < r.y))) vis = false;
-      else placed.push(r);
+    // declutter, nearest first: the full label where it has room, else just its icon (a round badge), else hidden;
+    // a badge opens again only with a little room to spare, so it does not flicker at the edge
+    let dot = false;
+    if (vis && !active) {
+      if (!p.w && p.el.style.display !== 'none' && !p.el.classList.contains('compact')) { p.w = p.el.firstChild.offsetWidth; p.h = p.el.firstChild.offsetHeight; }
+      const fw = p.w || 40 + 12 * L(p.place.short || p.place.name).length, fh = p.h || 26, pad = p.el.classList.contains('compact') ? 6 : 0;
+      const full = { x: x - fw / 2 - pad, y: y - 16 - fh - pad, w: fw + 2 * pad, h: fh + 2 * pad }, badge = { x: x - 13, y: y - 42, w: 26, h: 26 };
+      const hit = (r) => placed.some((q) => !(r.x + r.w < q.x || q.x + q.w < r.x || r.y + r.h < q.y || q.y + q.h < r.y));
+      if (!hit(full)) placed.push(full);
+      else if (!hit(badge)) { dot = true; placed.push(badge); }
+      else vis = false;
     }
+    p.el.classList.toggle('compact', dot);
     p.el.style.display = vis || active ? '' : 'none';
     if (vis || active) { p.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`; p.el.style.zIndex = active ? 999 : Math.round(1000 - d / 3); }
   }
