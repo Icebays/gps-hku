@@ -5,7 +5,8 @@
     (another high-quality tile: tools/README.md, "Features of the other tiles")
 
 Also writes the ids of the buildings it covers (out/sat-raw-ids.json): the map keeps every other HKU building white.
-BPAGES: atlas pages a tile (default 2).
+BPAGES: atlas pages a tile (default 2). SKIP: a json list of building ids to leave out (another tile's photo copy
+already has them, e.g. SKIP=assets/model/satellite-buildings.json for a tile next to the main campus).
 
 Takes the high-quality tiles (model/11-SW-7C.zip, 11-SW-7D.zip unzipped with BUILDING):
 - HKU buildings only (the same rule as the map: inside a campus area of data/campus.json, or tagged
@@ -39,6 +40,8 @@ def inside(x, z, poly):
 codes = set(C.get('include', [])) | {c for p in P['places'] if p.get('hku', True) is not False for c in p['buildings']}
 ex = set(C.get('exclude', []))
 hku = {b[0][:-2] for b in B if b[0] in codes or (b[0] not in ex and any(inside(b[1], b[2], a['boundary']) for a in C['areas'] if a.get('solid', True)))}
+if os.environ.get('SKIP'):
+    hku -= {c[:-2] for c in json.load(open(os.environ['SKIP']))}
 
 def gather(paths):
     """-> list of (triangles positions (n,3,3), triangle uvs (n,3,2), image path) per textured primitive."""

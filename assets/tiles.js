@@ -1,6 +1,7 @@
 /* Streamed map tiles, Google Earth style (data from tools/build_tiles.mjs, assets/tiles/).
-   Only the tiles around the view are loaded: a tile's terrain within TERRAIN_NEAR of the camera, its buildings and
-   bridges within OBJECTS_NEAR, and both are dropped again further out. Each tile's aerial photo is a quadtree
+   Only the tiles on screen are loaded (in the view, or right under the camera): a tile's terrain within TERRAIN_NEAR
+   of the camera, its buildings and bridges within OBJECTS_NEAR, and both are dropped again further out, or a few
+   seconds after the tile has left the screen - nothing is loaded behind the camera. Each tile's aerial photo is a quadtree
    (levels 0-3: the whole tile at 512 px down to 8 x 8 pieces at the full 4096 px); a piece is fetched only when it is
    in view and drawn larger on screen than its own resolution, so the photo sharpens as you zoom in and only the
    pieces you look at are held. Until a piece arrives its parent stays in its place. A tile further than FULL_NEAR
@@ -21,9 +22,12 @@ const FULL_NEAR = 700;    // m: closer than this a tile's terrain is drawn in fu
 const REFINE = 1.15;      // refine a piece when it covers more than REFINE x its pixels on screen
 const BUDGET = MOBILE ? 70 : 170;   // photo pieces held (about 1.1 MB of GPU memory each)
 const PARALLEL = 6;
+const UNSEEN = new THREE.MeshBasicMaterial({ visible: false });
+const AROUND = 120;       // m: tiles this near the camera count as on screen (turning around shows them at once)
+const KEEP = 4000;        // ms: a tile off screen keeps what it has loaded this long (a glance away does not drop it)
 
 export function createTiles({ camera, renderer, loader, core = [], terrainMaterial, onTerrain, onTerrainDrop, onObjects, onObjectsDrop, onLod, onLodDrop }) {
-  const st = { index: null, tiles: new Map(), queue: [], active: 0, tick: 0, last: '', heights: null };
+  const st = { index: null, tiles: new Map(), queue: [], active: 0, tick: 0, last: '', heights: null, started: false };
   const box = new THREE.Box3(), frustum = new THREE.Frustum(), pm = new THREE.Matrix4(), v = new THREE.Vector2();
   const dist = (x0, x1, y0, y1, z0, z1) => {
     const p = camera.position;
@@ -143,19 +147,19 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     const leaves = cut(t, pxPerRad);
     const chosen = new Map();
     for (const lf of leaves) {
-      const p = want(t, keyOf(lf.L, lf.i, lf.j), lf.n, lf.L * 1e4 + lf.d + (lf.seen ? 0 : 1e5));
+      // pieces off screen are not fetched (and go first when memory is short): drawn only if they are in already
+      // (a coarser stand-in would cover the sharp pieces next to it on screen)
+      if (!lf.seen) { const q = t.pieces.get(keyOf(lf.L, lf.i, lf.j)); if (q?.ready) chosen.set(keyOf(lf.L, lf.i, lf.j), [lf.L, lf.i, lf.j, q]); continue; }
+      const p = want(t, keyOf(lf.L, lf.i, lf.j), lf.n, lf.L * 1e4 + lf.d);
       // the nearest piece that is ready: this one, else its parent...
       let L = lf.L, i = lf.i, j = lf.j, q = p;
       while (!q?.ready && L > 0) { L--; i >>= 1; j >>= 1; q = t.pieces.get(keyOf(L, i, j)); if (q) q.seen = st.tick; }
       if (q?.ready) chosen.set(keyOf(L, i, j), [L, i, j, q]);
     }
     if (!root.ready) { T.full.visible = T.far.visible = false; return; }
-    // drop pieces covered by a chosen parent
-    const keys = [...chosen.keys()].filter((k) => {
-      let [L, i, j] = k.split('_').map(Number);
-      while (L > 0) { L--; i >>= 1; j >>= 1; if (chosen.has(keyOf(L, i, j))) return false; }
-      return true;
-    }).sort();
+    // finest first: a coarser piece (standing in while its children load) fills only what they leave (each node's
+    // triangles are a range within its parent's)
+    const keys = [...chosen.keys()].sort((x, y) => y[0] - x[0] || (x < y ? -1 : 1));
     const e = t.info.extent, [y0, y1] = t.info.y;
     const near = dist(e[0], e[1], y0, y1, e[2], e[3]) < FULL_NEAR;
     const [show, hide] = near ? [T.full, T.far] : [T.far, T.full];
@@ -163,12 +167,26 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     if (T.sig !== sig) {
       T.sig = sig;
       const g = show.geometry; g.clearGroups();
-      const mats = [];
+      const mats = [], covered = [];
       for (const k of keys) {
         const [L, i, j, q] = chosen.get(k), n = nodes[L][j * (1 << L) + i];
         const [a, c] = near ? [n[0], n[1]] : [n[6], n[7]];
-        if (c) { g.addGroup(a * 3, c * 3, mats.length); mats.push(q.mat); }
+        if (!c) continue;
+        const inner = covered.filter(([s0, s1]) => s0 >= a && s1 <= a + c).sort((u, w) => u[0] - w[0]);
+        let at = a;
+        const add = (s0, s1) => { if (s1 > s0) g.addGroup(s0 * 3, (s1 - s0) * 3, mats.length); };
+        const n0 = g.groups.length;
+        for (const [s0, s1] of inner) { add(at, s0); at = Math.max(at, s1); }
+        add(at, a + c);
+        if (g.groups.length > n0) mats.push(q.mat);
+        covered.push([a, a + c]);
       }
+      // what no piece draws (off screen) stays in the mesh unseen, for clicks and heights
+      const [r0, rc] = near ? [nodes[0][0][0], nodes[0][0][1]] : [nodes[0][0][6], nodes[0][0][7]], n0 = g.groups.length;
+      let at = r0;
+      for (const [s0, s1] of covered.sort((u, w) => u[0] - w[0])) { if (s0 > at) g.addGroup(at * 3, (s0 - at) * 3, mats.length); at = Math.max(at, s1); }
+      if (r0 + rc > at) g.addGroup(at * 3, (r0 + rc - at) * 3, mats.length);
+      if (g.groups.length > n0) mats.push(UNSEEN);
       show.material = mats;
       hide.geometry.clearGroups(); hide.material = root.mat;    // (the full mesh is also what clicks and heights hit)
     }
@@ -190,12 +208,18 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
     // screen pixels per radian of view (phones: at most 1.25 device pixels per CSS pixel, for memory)
     const pr = renderer.getPixelRatio(), h = (renderer.getDrawingBufferSize(v).y / pr) * Math.min(pr, MOBILE ? 1.25 : 2);
     const pxPerRad = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+    const now = performance.now();
     for (const t of st.tiles.values()) {
       const e = t.info.extent, [y0, y1] = t.info.y;
       const d = dist(e[0], e[1], y0, y1 + 150, e[2], e[3]);
+      // on screen (or just off it a moment ago)
+      box.min.set(e[0] - 60, y0, e[2] - 60); box.max.set(e[1] + 60, y1 + 150, e[3] + 60);
+      if (d < AROUND || frustum.intersectsBox(box)) t.seenAt = now;
+      const shown = now - (t.seenAt ?? -1e9) < KEEP;
+      // the main campus: its terrain always (the campus roads and trees stand on it), its buildings until the map opens
       const pinned = core.includes(t.info.id);
-      t.wantTerrain = pinned || d < (t.terrain || t.loadingTerrain ? TERRAIN_FAR : TERRAIN_NEAR);
-      t.wantObjects = !!t.info.objects && (pinned || d < (t.objects || t.loadingObjects ? OBJECTS_FAR : OBJECTS_NEAR));
+      t.wantTerrain = pinned || (shown && d < (t.terrain || t.loadingTerrain ? TERRAIN_FAR : TERRAIN_NEAR));
+      t.wantObjects = !!t.info.objects && ((pinned && !st.started) || (shown && d < (t.objects || t.loadingObjects ? OBJECTS_FAR : OBJECTS_NEAR)));
       if (t.wantTerrain && !t.terrain && !t.loadingTerrain) { t.loadingTerrain = true; enqueue({ pri: -2e9 + d, run: () => loadTerrain(t).finally(() => (t.loadingTerrain = false)) }); }
       if (t.wantTerrain && t.info.lod && !t.lod && !t.loadingLod) { t.loadingLod = true; enqueue({ pri: -1.8e9 + d, run: () => loadLod(t).finally(() => (t.loadingLod = false)) }); }
       if (!t.wantTerrain && (t.terrain || t.lod)) dropTerrain(t);
@@ -247,6 +271,7 @@ export function createTiles({ camera, renderer, loader, core = [], terrainMateri
       };
       check();
     });
+    st.started = true;
   });
   const progress = () => {
     let want = 0, have = 0;

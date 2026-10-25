@@ -115,6 +115,7 @@ python3 tools/build_tile_features.py work/7A 11-SW-7A assets/tiles/11-SW-7A     
 node tools/build_surfaces.mjs --roads assets/tiles/11-SW-7A/roads.glb work/7A        # surveyed road surfaces
 PAGES=7 python3 tools/build_roads_photo.py work/7A out/rp.glb                        # photo roads and bridges
 node tools/optimize_roads_photo.mjs out/rp.glb assets/tiles/11-SW-7A/photo-roads.glb
+SKIP=assets/model/satellite-buildings.json \
 python3 tools/build_satellite.py work/7A out/hb.glb                                  # photo HKU buildings (+ out/hb-ids.json)
 EXACT=1 node tools/optimize_roads_photo.mjs out/hb.glb assets/tiles/11-SW-7A/hku-photo.glb
 cp out/hb-ids.json assets/tiles/11-SW-7A/hku-photo.json
@@ -129,7 +130,8 @@ main campus (those come from OpenStreetMap there). The map draws a tile's land c
 terrain loads, and builds its road surface, markings, street lamps and trees when its buildings load (one tile at a
 time). In the satellite map its surveyed photo roads and bridges (`photo-roads.glb`, 7 KTX2 pages, about 10 cm/px)
 load within 950 m (1.25 km on computers), and with the photo buildings its HKU buildings in their own photos
-(`hku-photo.glb`); the other HKU buildings stay white. Only the nearest tiles hold them (phones: 2 with photo roads,
+(`hku-photo.glb`; `SKIP` leaves out the buildings the main campus's copy has already, so none is drawn twice - a
+building near a tile's edge can come in its neighbour's release); the other HKU buildings stay white. Only the nearest tiles hold them (phones: 2 with photo roads,
 3 with photo buildings; the main campus's photo roads only near the campus), and they are dropped as the view moves
 on: iOS Safari reloads the page when it runs out of memory. Tiles without a high-quality release paint their bridge decks
 with their orthophoto (`bridges.json`, see above) and keep plain concrete sides.

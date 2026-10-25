@@ -259,9 +259,12 @@ async function init() {
     s.bmeta = bjson.map(([id, x, z, base, top]) => ({ id, x, z, base, top, tile: s.tiles.tileAt(x, z, 50)?.info.id }));
     s.bparts.forEach((p) => splitPart(s, p));
     s.bidByCode = new Map(s.bmeta.map((b, i) => [b.id, i]));
-    // HKU buildings with a photo copy: the main campus's (satellite-buildings.json) and the other tiles' (hku-photo.glb)
-    const tileIds = [...s.tiles.tiles.values()].flatMap((t) => t.info.hkuPhotoIds || []);
-    s.photoSet = new Set([...photoIds, ...tileIds].map((c) => s.bidByCode.get(c)).filter((b) => b != null));
+    // HKU buildings with a photo copy, and where it comes from: the main campus's (satellite-buildings.json, 'core')
+    // or a tile's (its hku-photo.glb, the tile id) - not always the tile whose buildings hold the white one
+    s.photoSrc = new Map();
+    const addSrc = (c, src) => { const b = s.bidByCode.get(c); if (b != null && !s.photoSrc.has(b)) s.photoSrc.set(b, src); };
+    photoIds.forEach((c) => addSrc(c, 'core'));
+    for (const t of s.tiles.tiles.values()) (t.info.hkuPhotoIds || []).forEach((c) => addSrc(c, t.info.id));
     makeExtraBuildings(s, campus?.extraBuildings || []);
     s.shadowKey = null;   // redraw the shadow map with the buildings in it
     // the drawn roads lie on the main campus tiles: built once those are in (the map is open already)
@@ -968,7 +971,7 @@ const BASEMAP_KEY = 'gps-basemap';
 // 'real' (satellite: aerial photo, photo roads and bridges, photo HKU buildings, 3D trees in the photo's colours).
 // Assets load on first use; anything that fails to load leaves the classic layer in place.
 // bump when the satellite / photo assets are rebuilt, so phones never mix new code with cached old files
-const ASSET_V = '2026-10-24';
+const ASSET_V = '2026-10-25';
 const ktx2Loader = (s) => s.ktx2 || (s.ktx2 = new KTX2Loader().setTranscoderPath('vendor/three/addons/libs/basis/').setWorkerLimit(2).detectSupport(s.renderer));
 const once = (s, key, fn) => s[key] || (s[key] = fn().catch((e) => (console.warn(key, e), null)));
 async function setBasemap(s, mode) {
@@ -1415,23 +1418,35 @@ const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatSh
 // HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
 // in the photo base maps
 const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
-const SOLID_MATS = [BUILD_MAT, BUILD_MAT_PLAIN];
-// per tile: HKU buildings with a photo copy, hidden while that copy is shown (the main campus: satellite-buildings.glb;
-// other tiles: their hku-photo.glb)
-const tileSolidMats = (t) => t.solidMats || (t.solidMats = [cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })), BUILD_MAT_PLAIN]);
+// HKU buildings with a photo copy: a material per copy (s.photoSrc: 'core' = satellite-buildings.glb, else the tile of
+// its hku-photo.glb), hidden while that copy is shown (photoMatsShown) - whichever tile the white building comes in
+const PHOTO_MATS = new Map();
+const photoMat = (src) => PHOTO_MATS.get(src) || PHOTO_MATS.set(src, cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' }))).get(src);
+function photoMatsShown(s) {
+  const photoB = !!s.basemap && s.basemap !== 'classic';
+  for (const [src, m] of PHOTO_MATS) m.visible = !(photoB && (src === 'core' ? !!s.satBuildings : !!s.tiles.tiles.get(src)?.ph?.hkuPhoto));
+}
 // satellite map: HKU buildings without a photo copy in their own colours (the photo under them: tools/build_lod.mjs);
 // the buildings that are not HKU's stay plain (no photo, no colour), half see-through
 function setBuildingColours(s, real) {
-  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, ...[...s.tiles.tiles.values()].map((t) => t.solidMats?.[0]).filter(Boolean)];
+  const mats = [BUILD_MAT, BUILD_MAT_PLAIN, ...PHOTO_MATS.values()];
   for (const m of mats) { if (m.vertexColors !== real) { m.vertexColors = real; m.needsUpdate = true; } }
   DECO_MAT.opacity = real ? SAT_DECO_OPACITY : DECO_OPACITY;
   s.shadowKey = null;
 }
-function setSolid(s, g, A) {
-  const photo = s.photoSet || new Set(), bid = g.attributes._bid, a = [], b = [];
-  for (let i = 0; i < A.length; i += 3) (photo.has(bid.getX(A[i])) ? a : b).push(A[i], A[i + 1], A[i + 2]);
-  g.setIndex(new THREE.BufferAttribute(new A.constructor(a.concat(b)), 1));
-  g.clearGroups(); g.addGroup(0, a.length, 0); g.addGroup(a.length, b.length, 1);
+// a block's HKU buildings: grouped by their photo copy's material (photoMat), those without one plain
+function setSolid(s, mesh, A) {
+  const g = mesh.geometry, src = s.photoSrc || new Map(), bid = g.attributes._bid, by = new Map();
+  for (let i = 0; i < A.length; i += 3) {
+    const k = src.get(bid.getX(A[i])) ?? '';
+    let a = by.get(k); if (!a) by.set(k, (a = []));
+    a.push(A[i], A[i + 1], A[i + 2]);
+  }
+  const keys = [...by.keys()], all = keys.flatMap((k) => by.get(k));
+  g.setIndex(new THREE.BufferAttribute(new A.constructor(all), 1));
+  g.clearGroups();
+  let o = 0; keys.forEach((k, i) => { g.addGroup(o, by.get(k).length, i); o += by.get(k).length; });
+  mesh.material = keys.map((k) => (k ? photoMat(k) : BUILD_MAT_PLAIN));
 }
 const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
 function addPart(s, mesh, tile) {
@@ -1465,7 +1480,7 @@ function splitLod(s, t) {
     g.setIndex(new THREE.BufferAttribute(new idx.constructor(0), 1));   // (the blocks draw it)
     for (const [key, { hku, deco }] of cellSplit(s, g, idx, set)) {
       const c = blockOf(key);
-      if (hku.length) { c.solid = cellMesh(g, null, tileSolidMats(t)); setSolid(s, c.solid.geometry, hku); indexBounds(c.solid.geometry); o.add(c.solid); }
+      if (hku.length) { c.solid = cellMesh(g, null, BUILD_MAT_PLAIN); setSolid(s, c.solid, hku); indexBounds(c.solid.geometry); o.add(c.solid); }
       if (deco.length) { c.deco = cellMesh(g, deco, DECO_MAT); c.deco.renderOrder = 1; o.add(c.deco); }
       L.cells.push(c);
     }
@@ -1494,11 +1509,9 @@ function blockOf(key) {
   return { key, solid: null, deco: null, center: new THREE.Vector3(x, S.tiles?.heightAt(x, z) ?? 0, z) };
 }
 const partMeshes = (p) => (p.cells.length ? p.cells.flatMap((c) => [c.solid, c.deco].filter(Boolean)) : [p.mesh]);
-// full models or simplified ones, block by block (LOD_NEAR); HKU buildings with their photo copy shown are hidden
+// full models or simplified ones, block by block (LOD_NEAR)
 function showLod(s, t) {
   const full = !!t.objects, L = t.lodParts, cam = s.camera.position, R = LOD_NEAR + DECO_CELL * 0.71;
-  const photoB = !!s.basemap && s.basemap !== 'classic';
-  if (t.solidMats) t.solidMats[0].visible = !(photoB && (s.coreTiles.includes(t.info.id) ? s.satBuildings : t.ph?.hkuPhoto));
   const near = new Set();
   if (full) for (const p of s.bparts) {
     if (p.tile !== t.info.id) continue;
@@ -1529,7 +1542,7 @@ function indexBounds(g) {
 function splitPart(s, part) {
   const set = s.hkuSet; if (!set || !s.bmeta || part.split === set) return;
   part.split = set;
-  const g = part.mesh.geometry, idx = part.all.array, t = s.tiles.tiles.get(part.tile);
+  const g = part.mesh.geometry, idx = part.all.array;
   for (const m of partMeshes(part)) { if (m === part.mesh) continue; part.mesh.remove(m); m.geometry.dispose(); const i = s.pickables.indexOf(m); if (i >= 0) s.pickables.splice(i, 1); }
   part.cells = [];
   const i0 = s.pickables.indexOf(part.mesh); if (i0 >= 0) s.pickables.splice(i0, 1);
@@ -1537,7 +1550,7 @@ function splitPart(s, part) {
   for (const [key, { hku, deco }] of cellSplit(s, g, idx, set)) {
     const c = blockOf(key);
     if (hku.length) {
-      c.solid = cellMesh(g, null, t ? tileSolidMats(t) : SOLID_MATS); setSolid(s, c.solid.geometry, hku); indexBounds(c.solid.geometry);
+      c.solid = cellMesh(g, null, BUILD_MAT_PLAIN); setSolid(s, c.solid, hku); indexBounds(c.solid.geometry);
       c.solid.castShadow = c.solid.receiveShadow = true; c.solid.userData.part = part;
     }
     if (deco.length) { c.deco = cellMesh(g, deco, DECO_MAT); c.deco.renderOrder = 1; c.deco.castShadow = true; c.deco.userData.deco = true; c.deco.userData.part = part; }
@@ -1570,7 +1583,7 @@ function highlight(bids) {
 }
 // the highlighted buildings within one part (again when its tile streams back in)
 function addHighlight(s, part) {
-  const bids = s.hlBids; if (!bids?.length || !bids.some((b) => s.bmeta?.[b]?.tile === part.tile)) return;
+  const bids = s.hlBids; if (!bids?.length) return;   // (a building near a tile's edge can come in its neighbour's)
   const key = bids.join(',');
   let geo = part.hl.get(key);
   if (!geo) {
@@ -1818,6 +1831,7 @@ function frame(now) {
   S.tiles?.update();
   // full or simplified buildings per tile; trees, markings and lamps close by
   for (const t of S.tiles?.tiles.values() || []) { showLod(S, t); if (t.feat) showTileFeatures(S, t); }
+  photoMatsShown(S);   // HKU buildings with their photo copy shown: hidden
   // the main campus's trees: also only within FEATURE_NEAR, block by block
   const cam = S.camera.position;
   if (S.trees) for (const c of S.trees.children) c.visible = cam.distanceTo(c.userData.center) < FEATURE_NEAR + c.userData.radius;
