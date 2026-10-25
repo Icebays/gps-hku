@@ -757,6 +757,9 @@ function updatePins() {
   const camPos = S.camera.position;
   const sorted = S.pins.map((p) => ({ p, d: camPos.distanceTo(p.pos) })).sort((a, b) => a.d - b.d);
   const placed = [];
+  // zoomed (nearly) all the way out, every pin is a badge (back to labels a little closer in)
+  const zoom = S.camera.position.distanceTo(S.controls.target) / S.controls.maxDistance;
+  S.allBadges = S.allBadges ? zoom > 0.75 : zoom > 0.82;
   for (const { p, d } of sorted) {
     _v.copy(p.pos).project(S.camera);
     const x = (_v.x * 0.5 + 0.5) * w, y = (-_v.y * 0.5 + 0.5) * h;
@@ -770,7 +773,7 @@ function updatePins() {
       const fw = p.w || 40 + 12 * L(p.place.short || p.place.name).length, fh = p.h || 26, pad = p.el.classList.contains('compact') ? 6 : 0;
       const full = { x: x - fw / 2 - pad, y: y - 16 - fh - pad, w: fw + 2 * pad, h: fh + 2 * pad }, badge = { x: x - 13, y: y - 42, w: 26, h: 26 };
       const hit = (r) => placed.some((q) => !(r.x + r.w < q.x || q.x + q.w < r.x || r.y + r.h < q.y || q.y + q.h < r.y));
-      if (!hit(full)) placed.push(full);
+      if (!S.allBadges && !hit(full)) placed.push(full);
       else if (!hit(badge)) { dot = true; placed.push(badge); }
       else vis = false;
     }
