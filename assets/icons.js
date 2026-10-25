@@ -1,5 +1,5 @@
 /* Category icons, so a place's kind reads at a glance and not by colour alone (white glyph on the category's colour),
-   and the MTR mark for the MTR exits. Inline SVG, 24 x 24 view box (the MTR mark: its own). */
+   and the MTR exit sign for the MTR exits. Inline SVG, 24 x 24 view box (the exit sign and tiles: their own). */
 const GLYPH = {
   // star
   landmark: '<path d="M12 3.2l2.6 5.5 6 .7-4.4 4.1 1.2 5.9L12 16.5l-5.4 2.9 1.2-5.9-4.4-4.1 6-.7z"/>',
@@ -17,17 +17,25 @@ const GLYPH = {
   transport: '<path d="M6.5 3h11A2.5 2.5 0 0120 5.5v10.3a2 2 0 01-1 1.7V20h-2.4v-1.6H7.4V20H5v-2.5a2 2 0 01-1-1.7V5.5A2.5 2.5 0 016.5 3zM6 6.2v4.7h12V6.2zm1.6 7.1a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6zm8.8 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6z"/>',
   other: '<circle cx="12" cy="12" r="4.2"/>',
 };
-// the MTR mark, as its logo: a bar through an upper arc opening up and a lower arc opening down, white on a maroon
-// oval (the oval is the icon's background: view box in the logo's proportions, 162 x 137)
-const MTR_MARK = '<path fill="#fff" d="M43 35a46.5 36 0 0 0 93 0h-14a32.5 24.5 0 0 1-65 0zM43 119a46.5 36 0 0 1 93 0h-14a32.5 24.5 0 0 0-65 0z"/><path fill="#fff" d="M82 34h15v86H82z"/>';
-export const MTR_RED = '#9c2133';
-
+// MTR exits as the MTR signs them (and Wikipedia draws them): the green exit sign (出 EXIT, white on green), then the
+// exit's code in slate tiles - its letter on a 2:3 tile, a number on a half-width tile beside it (A1 = [A][1])
+export const EXIT_GREEN = '#00944f';
+const EXIT_SIGN = `<rect width="100" height="100" fill="${EXIT_GREEN}"/><path fill="#fff" d="M44.4 14h11.2v48.8H44.4zM24 16.8h10.8v8.4H24zM65.2 16.8H76v8.4H65.2zM24 25.2h52v10.4H24zM24 41.2h10.8v12H24zM65.2 41.2H76v12H65.2zM24 53.2h52v9.6H24z"/>`
+  + '<text x="50" y="82.8" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="20.5" text-anchor="middle" textLength="51" lengthAdjust="spacingAndGlyphs">EXIT</text>';
+const TILE = '#738a96';
+const exitTile = (code) => {
+  const [, l, n] = /^([A-Z]+)(\d*)$/.exec(code) || [, code, ''], w = 200 + (n ? 100 : 0);
+  const font = 'font-family="\'Myriad Pro\', \'Segoe UI\', Helvetica, Arial, sans-serif" fill="#fff" text-anchor="middle"';
+  return `<svg class="exit-tile" viewBox="0 0 ${w} 300" aria-hidden="true"><rect width="${w}" height="300" fill="${TILE}"/>`
+    + `<text x="100" y="238" font-size="240" ${font}>${l}</text>${n ? `<text x="250" y="242" font-size="150" ${font}>${n}</text>` : ''}</svg>`;
+};
+export const exitTiles = (codes) => `<span class="exits" aria-label="${codes.join(' / ')}">${codes.map(exitTile).join('')}</span>`;
 export function catIcon(cat, color) {
   return `<svg class="ico" viewBox="0 0 24 24" style="background:${color}" aria-hidden="true">${GLYPH[cat] || GLYPH.other}</svg>`;
 }
-// a place's icon: the MTR mark for MTR exits, else its category's
+// a place's icon: the exit sign for MTR exits, else its category's
 export function placeIcon(p, cats) {
-  if (p.icon === 'mtr') return `<svg class="ico mtr" viewBox="8.5 8.5 162 137" style="background:${MTR_RED}" aria-hidden="true">${MTR_MARK}</svg>`;
+  if (p.icon === 'mtr') return `<svg class="ico exit" viewBox="0 0 100 100" aria-hidden="true">${EXIT_SIGN}</svg>`;
   return catIcon(p.cat, cats[p.cat]?.color);
 }
 

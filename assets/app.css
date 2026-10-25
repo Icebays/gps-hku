@@ -143,8 +143,11 @@ body.map-mode .page { max-width: none; padding: 0; }
 .bldg h3 .ico, .sub .ico { margin-right: 6px; }
 .pin.small .ico { width: 15px; height: 15px; padding: 2px; }
 .pin.active .ico { box-shadow: 0 0 0 1.5px #fff; }
-.ico.mtr { width: 20px; padding: 0; }
-.pin.small .ico.mtr { width: 18px; padding: 0; }
+/* MTR exits: the green exit sign, then the exit's tiles (A1 = [A][1]) */
+.ico.exit { border-radius: 2px; padding: 0; }
+.pin.active .ico.exit { box-shadow: 0 0 0 1.5px #fff; }
+.exits, .pin span.exits { display: inline-flex; gap: 2px; flex: none; margin-left: -2px; background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+.exit-tile { height: 18px; width: auto; display: block; border-radius: 1.5px; }
 /* "3D floor plans" under a place's name (pins, directory) */
 .pin span b { display: flex; flex-direction: column; line-height: 1.2; font-weight: inherit; }
 .fp { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--accent-text); white-space: nowrap; }
@@ -256,8 +259,14 @@ body.map-mode .page { max-width: none; padding: 0; }
 .area-labels { z-index: 2; }
 .area-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: 20px; letter-spacing: .08em; color: #0f5132; text-shadow: 0 0 4px #fff, 0 0 10px #fff, 0 0 2px #fff; white-space: nowrap; opacity: .9; will-change: transform; }
 .area-label small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+/* groups of residences: smaller, light blue, a serif italic - never mistaken for a campus */
+.area-label.halls { font-family: Georgia, 'Noto Serif TC', 'Songti TC', serif; font-style: italic; font-weight: 700; font-size: 14px; letter-spacing: .02em; color: #1971c2; opacity: 1; }
+.area-label.halls small { font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: none; }
+.area-label.link { pointer-events: auto; cursor: pointer; }
 [data-theme="dark"] .area-label { color: #b7e4c7; text-shadow: 0 0 4px #000, 0 0 10px #000; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .area-label { color: #b7e4c7; text-shadow: 0 0 4px #000, 0 0 10px #000; } }
+[data-theme="dark"] .area-label.halls { color: #74c0fc; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .area-label.halls { color: #74c0fc; } }
 .map-info .guess { font-size: 12.5px; color: inherit; background: rgba(217,119,6,.1); border-radius: 8px; padding: 6px 8px; }
 .map-legend hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
 .map-legend .legend-h { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; opacity: .7; margin-bottom: 2px; }

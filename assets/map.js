@@ -11,7 +11,7 @@ import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
 import { createIndoor, cutify } from './indoor.js';
 import { createTiles } from './tiles.js';
-import { catIcon, placeIcon, floorsBadge } from './icons.js';
+import { catIcon, placeIcon, floorsBadge, exitTiles } from './icons.js';
 
 /* Model frame: x = HK1980 Easting − 832250, z = −(Northing − 815900), y = height in mPD */
 const ORIGIN = { E: 832250, N: 815900 };
@@ -651,13 +651,16 @@ function cycleBasemap() {
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
 /* ---------------- campus areas ---------------- */
+const HALLS_NEAR = 1600;   // m: groups of residences are named within this (campuses always)
 function makeAreas() {
   const areas = S.campus?.areas || [];
   if (!S.areaLines) {
     S.areaLines = new THREE.Group();
     for (const a of areas) {
-      // a dashed line a few pixels wide at any distance (Line2), on the ground
-      const line = new Line2(new LineGeometry(), new LineMaterial({ color: 0x0f5132, linewidth: 3.5, dashed: true, dashSize: 8, gapSize: 5, transparent: true, opacity: 0.8, fog: false }));   // (no fog: the edge-fade fog chunks need a mesh shader)
+      // a dashed line a few pixels wide at any distance (Line2), on the ground; groups of residences ("kind": "halls")
+      // finer and light blue
+      const halls = a.kind === 'halls';
+      const line = new Line2(new LineGeometry(), new LineMaterial({ color: halls ? 0x4dabf7 : 0x0f5132, linewidth: halls ? 2.5 : 3.5, dashed: true, dashSize: halls ? 3 : 8, gapSize: halls ? 2.5 : 5, transparent: true, opacity: halls ? 0.95 : 0.8, fog: false }));   // (no fog: the edge-fade fog chunks need a mesh shader)
       line.renderOrder = 2; line.userData.area = a;
       // and faintly where trees or buildings hide it, so the whole outline reads
       const ghost = new Line2(line.geometry, line.material.clone());
@@ -671,11 +674,14 @@ function makeAreas() {
   S.areaLabels.innerHTML = '';
   S.areas = areas.map((a) => {
     const [x, z] = a.label;
-    const el = document.createElement('div');
-    el.className = 'area-label';
+    const el = document.createElement('div'), halls = a.kind === 'halls';
+    el.className = 'area-label' + (halls ? ' halls' : '');
     el.innerHTML = `${esc(L(a.name))}<small>${esc(getLang() === 'zh' ? a.name.en : a.name.zh)}</small>`;
+    // a group standing for a place (its pin is left out): the label selects it
+    const place = a.place && S.places.places.find((p) => p.id === a.place);
+    if (place) { el.classList.add('link'); el.addEventListener('click', () => selectPlace(place, true)); }
     S.areaLabels.appendChild(el);
-    return { el, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + 40, z) };
+    return { el, halls, near: halls ? HALLS_NEAR : Infinity, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + (halls ? 25 : 40), z) };
   });
 }
 
@@ -719,15 +725,16 @@ function placeAnchor(p) {
 function makePins() {
   if (!S.places || !S.bmeta) return;
   S.labels.innerHTML = ''; S.pins = [];
+  const byArea = new Set((S.campus?.areas || []).map((a) => a.place).filter(Boolean));   // (named by their area)
   for (const p of S.places.places) {
-    if (S.hiddenCats?.has(p.cat)) continue;
+    if (S.hiddenCats?.has(p.cat) || byArea.has(p.id)) continue;
     const pos = placeAnchor(p); if (!pos) continue;
     const el = document.createElement('div');
     el.className = 'pin' + (p.cat === 'landmark' || p.cat === 'transport' ? '' : ' small') + (S.selected?.place?.id === p.id ? ' active' : '');
-    // the kind as an icon; MTR exits: the MTR mark, then station and exit ('short')
+    // the kind as an icon; MTR exits: the exit sign and the exit's tiles, then the station ('short')
     // places with 3D floor plans say so under their name
     const fp = S.withFloors?.has(p.id) ? floorsBadge(tt('floors3d')) : '';
-    el.innerHTML = `<span>${placeIcon(p, S.places.categories)}<b>${esc(L(p.short || p.name))}${fp}</b></span><i></i>`;
+    el.innerHTML = `<span>${placeIcon(p, S.places.categories)}${p.exit ? exitTiles(p.exit) : ''}<b>${esc(L(p.short || p.name))}${fp}</b></span><i></i>`;
     el.addEventListener('click', () => selectPlace(p, true));
     S.labels.appendChild(el);
     S.pins.push({ el, pos, place: p });
@@ -736,9 +743,12 @@ function makePins() {
 const _v = new THREE.Vector3();
 function updatePins() {
   const w = S.wrap.clientWidth, h = S.wrap.clientHeight;
+  // groups of residences go with the residences' category (legend)
+  const noHalls = !!S.hiddenCats?.has('hall');
+  S.areaLines?.children.forEach((l) => { if (l.userData.area.kind === 'halls') l.visible = !noHalls; });
   for (const a of S.areas || []) {
     _v.copy(a.pos).project(S.camera);
-    const vis = _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2;
+    const vis = !(a.halls && noHalls) && _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 && S.camera.position.distanceTo(a.pos) < a.near;
     a.el.style.display = vis ? '' : 'none';
     if (vis) a.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * w}px, ${(-_v.y * 0.5 + 0.5) * h}px) translate(-50%, -50%)`;
   }
