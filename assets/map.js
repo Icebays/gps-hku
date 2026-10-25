@@ -453,7 +453,7 @@ function setSky(s) {
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
   for (const t of s.tiles?.tiles.values() || []) t.feat?.marks?.userData.setTheme(dark);
-  s.areaLines?.children.forEach((l) => [l, l.userData.ghost].forEach((m) => m.material.color.set(dark ? 0x7fd6a4 : 0x0f5132)));
+  s.areaLines?.children.forEach((l) => [l, l.userData.ghost].forEach((m) => m.material.color.set(areaColour(l.userData.area, dark))));
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
@@ -651,6 +651,8 @@ function cycleBasemap() {
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
 /* ---------------- campus areas ---------------- */
+// outlines: campuses green, groups of residences light blue (and a little lighter on the dark map)
+const areaColour = (a, dark) => (a.kind === 'halls' ? (dark ? 0x74c0fc : 0x4dabf7) : dark ? 0x7fd6a4 : 0x0f5132);
 const HALLS_NEAR = 1600;   // m: groups of residences are named within this (campuses always)
 function makeAreas() {
   const areas = S.campus?.areas || [];
@@ -660,7 +662,7 @@ function makeAreas() {
       // a dashed line a few pixels wide at any distance (Line2), on the ground; groups of residences ("kind": "halls")
       // finer and light blue
       const halls = a.kind === 'halls';
-      const line = new Line2(new LineGeometry(), new LineMaterial({ color: halls ? 0x4dabf7 : 0x0f5132, linewidth: halls ? 2.5 : 3.5, dashed: true, dashSize: halls ? 3 : 8, gapSize: halls ? 2.5 : 5, transparent: true, opacity: halls ? 0.95 : 0.8, fog: false }));   // (no fog: the edge-fade fog chunks need a mesh shader)
+      const line = new Line2(new LineGeometry(), new LineMaterial({ color: areaColour(a, isDark()), linewidth: halls ? 2.5 : 3.5, dashed: true, dashSize: halls ? 3 : 8, gapSize: halls ? 2.5 : 5, transparent: true, opacity: halls ? 0.95 : 0.8, fog: false }));   // (no fog: the edge-fade fog chunks need a mesh shader)
       line.renderOrder = 2; line.userData.area = a;
       // and faintly where trees or buildings hide it, so the whole outline reads
       const ghost = new Line2(line.geometry, line.material.clone());
