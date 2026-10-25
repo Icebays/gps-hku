@@ -83,7 +83,13 @@ async function route() {
   if (isMap) {
     toc.innerHTML = '';
     document.title = `${L(meta?.title) || 'Map'} · GPS-HKU`;
-    mapModule = mapModule || (await import('./map.js'));
+    // (a page opened before an update gets the new map module with its old helpers: one reload fetches them anew)
+    if (!mapModule) mapModule = await import('./map.js').catch((e) => {
+      let again = false; try { again = sessionStorage.getItem('gps-map-reload') === '1'; sessionStorage.setItem('gps-map-reload', '1'); } catch (_) {}
+      if (!again) { location.reload(); return new Promise(() => {}); }
+      throw e;
+    });
+    try { sessionStorage.removeItem('gps-map-reload'); } catch (_) {}
     await mapModule.mount(page, { lang, params });
     return;
   }
