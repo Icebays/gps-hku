@@ -37,7 +37,7 @@ memory budget. Tiles further than 700 m use the simplified terrain. The main cam
 lie in the campus extent) always stay loaded.
 
 ```bash
-node tools/build_lod.mjs               # lod.glb per tile (1.5 m), other buildings in objects.glb at 0.3 m, colours
+node tools/build_lod.mjs               # lod.glb per tile (2 m), other buildings in objects.glb at 0.8 m, colours
 node tools/build_bridge_photo.mjs      # bridges.webp + .json per tile: the photo under the bridges (satellite map)
 node tools/build_tiles.mjs --index     # list them in index.json
 ```
@@ -45,8 +45,9 @@ node tools/build_tiles.mjs --index     # list them in index.json
 The map opens as soon as `index.json` and `heights.bin` are in. Every tile within the terrain range shows its
 simplified buildings (`lod.glb`, about 1 MB for all 35 tiles), so the skyline is there from afar and at once. Close
 by, block by block (150 m blocks within 700 m, 500 m on phones), the full models replace them once `objects.glb` is in:
-HKU's buildings exact, the others simplified to about 0.3 m (`build_lod.mjs`: about half the triangles; close by they
-look the same). Buildings that are not HKU's are drawn plain and 45 % opaque (50 % in the satellite map). Every
+HKU's buildings exact, the others simplified to about 0.8 m (`build_lod.mjs`; half see-through, close by they look
+much the same). The simplifying is for good: after marking more buildings as HKU's in `data/places.json`, put the
+tiles' original `objects.glb` back (from git history) and run `build_lod.mjs` again, or they stay simplified. Buildings that are not HKU's are drawn plain and 45 % opaque (50 % in the satellite map). Every
 building also carries a colour, the mean of the aerial photo under it: the satellite map draws HKU's buildings that
 have no photo copy in it.
 In the satellite map the bridges (the standard release has no photos on them) wear the tile's own orthophoto, looked

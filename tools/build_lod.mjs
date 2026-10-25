@@ -1,13 +1,15 @@
 // Simpler buildings away from HKU's, Google Earth style. For each tile:
-// - lod.glb: its buildings and bridges simplified to about FAR metres (1.5), for the distance: the map draws a tile's
+// - lod.glb: its buildings and bridges simplified to about FAR metres (2), for the distance: the map draws a tile's
 //   lod.glb from as far as its terrain loads, block by block where the full models are not near;
 // - objects.glb (from tools/build_tiles.mjs) keeps HKU's buildings (data/places.json, data/campus.json: the map's
-//   rule) and the bridges exact, and its other buildings are simplified to about NEAR metres (0.3): close by they look
-//   the same and take far less memory. Marked in the file, so running this again does not simplify them twice.
+//   rule) and the bridges exact, and its other buildings are simplified to about NEAR metres (0.8): half see-through,
+//   close by they look much the same and take far less memory. Marked in the file, so running this again does not
+//   simplify them twice - and so a building newly counted as HKU's needs the tiles' original objects.glb back first
+//   (git history, or tools/build_tiles.mjs), then this run again: it keeps it exact from then on.
 // - every building gets a colour (COLOR_0, per vertex), the mean of the aerial photo under its vertices (mostly its
 //   roof), for the satellite map: buildings without photo textures stand in their own colours.
 //
-//   node tools/build_lod.mjs [far error in m, default 1.5] [near error in m, default 0.3]
+//   node tools/build_lod.mjs [far error in m, default 2] [near error in m, default 0.8]
 //     -> assets/tiles/<tile>/lod.glb (and objects.glb), then node tools/build_tiles.mjs --index
 // needs: npm i @gltf-transform/core@4 @gltf-transform/extensions@4 @gltf-transform/functions@4 meshoptimizer@0.22
 import fs from 'fs';
@@ -18,7 +20,7 @@ import { reorder, prune } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
-const OUT = process.env.OUT || 'assets/tiles', FAR = +(process.argv[2] || 1.5), NEAR = +(process.argv[3] || 0.3);
+const OUT = process.env.OUT || 'assets/tiles', FAR = +(process.argv[2] || 2), NEAR = +(process.argv[3] || 0.8);
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready]);
 MeshoptSimplifier.useExperimentalFeatures = true;   // (Prune)
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
