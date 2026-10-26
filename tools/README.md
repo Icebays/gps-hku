@@ -227,3 +227,13 @@ x-ray view (`map.js`): the whole map faded to 19 % and the plan drawn over it; a
 trees are cut away above the floor. The MTR lines are drawn at the depth of their tracks (rail level, 1 m under the stations' platforms, straight between
 them), in a dark shade of the line's colour, seen faintly through the map.
 Needs `shapely`, `pyproj` and `pyshp`.
+
+## Eateries
+
+HKU Catering Services' outlets are places in `data/places.json` (category `dining`, `in` = the building they are in,
+listed on its card as one of its facilities). Their photos, online order pages, food, mode of service and opening
+hours come from their pages on catering.hku.hk:
+
+```bash
+python3 tools/build_eateries.py [cache folder]      # data/eateries.json (photos are linked, not copied)
+```

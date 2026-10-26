@@ -1,0 +1,667 @@
+{
+ "source": "HKU Catering Services, catering.hku.hk (photos linked from there)",
+ "outlets": {
+  "juying-tai": {
+   "page": "https://catering.hku.hk/en/eateries/FSCACR/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/2a6852b3bb965462b6d8322030a39906810b17a1e706.png",
+    "https://catering.hku.hk/cache/img/2a6852b3bb96e06119c2bdda32777e37fc58eb6dbefa.jpeg",
+    "https://catering.hku.hk/cache/img/2a6852b3bb964725490485fe3a22e3c9b81d79a541ba.jpeg",
+    "https://catering.hku.hk/cache/img/2a6852b3bb965f238e6f959eb51bfb1387a1782d20f6.jpeg",
+    "https://catering.hku.hk/cache/img/2a6852b3bb969e85c2eb828d269263528b028a3e4842.jpeg",
+    "https://catering.hku.hk/cache/img/2a6852b3bb96a914c6e013be34b1fc59554f80f33fef.jpeg"
+   ],
+   "service": "Self-serviced",
+   "food": "Pick & Weight Chinese Dishes, Authentic Noodle Dish, Provincial Rice Dishes, Malatang (Numb-and-Spicy Broth Dish), and Hot Pot in the evenings Contact TBC",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 21:00"
+    ],
+    [
+     "Saturday",
+     "07:30 - 14:30"
+    ],
+    [
+     "Sunday, Public Holiday & University Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "urban-coffee-roaster": {
+   "page": "https://catering.hku.hk/en/eateries/mlc/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/a217bc16b79d941f2e01033dfc0c6c7dcf6b6d67e6ad.jpg",
+    "https://catering.hku.hk/cache/img/a217bc16b79dbae3b31cfa1a32f53db52d126b38aa38.jpg",
+    "https://catering.hku.hk/cache/img/a217bc16b79de5328c98d7e7f5707539337c0cb55851.jpg",
+    "https://catering.hku.hk/cache/img/a217bc16b79d5f72a038a17e7d2f3647471c25abb053.jpg",
+    "https://catering.hku.hk/cache/img/a217bc16b79dfc56567d0d70125cd3210f0023848b85.jpg",
+    "https://catering.hku.hk/cache/img/a217bc16b79de7cba1b64a9f787442827c801fd92253.jpg"
+   ],
+   "service": "Self-serviced",
+   "food": "Fresh bakery - breads, sourdough, cakes, pastries & pizza, salads and coffee Contact cs@ucr.hk",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 20:30"
+    ],
+    [
+     "Saturday",
+     "08:00 - 18:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "08:00 - 18:00"
+    ]
+   ]
+  },
+  "tamjai-samgor": {
+   "page": "https://catering.hku.hk/en/eateries/CCOutletB/",
+   "order": "https://samgor.idimsum.com/byod/scan/store/102/S130/qr?orderType=TAKEAWAY",
+   "photos": [
+    "https://catering.hku.hk/cache/img/35a8acf9763bc52579663c296473f299c62ba952890d.jpg",
+    "https://catering.hku.hk/cache/img/35a8acf9763b33685ce56e203bc893ca7ae34d4c7e67.jpg",
+    "https://catering.hku.hk/cache/img/35a8acf9763b5bba1fc2addb157def71ab3057f0a286.jpg",
+    "https://catering.hku.hk/cache/img/35a8acf9763b17ed45130e7e832c9ae15c8cb72b30c2.jpg",
+    "https://catering.hku.hk/cache/img/35a8acf9763b51e72c1308c3cc59b655b4624e0c086c.jpg",
+    "https://catering.hku.hk/cache/img/35a8acf9763b3c62462f82d0db296faeba36db4d935e.jpg"
+   ],
+   "service": "Table-serviced",
+   "food": "Noodles, rice dishes, snacks and drink Contact 8200 1880",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:45 - 21:30"
+    ],
+    [
+     "Saturday",
+     "07:45 - 20:30"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "07:45 - 20:30"
+    ]
+   ]
+  },
+  "so330": {
+   "page": "https://catering.hku.hk/en/eateries/cymc/",
+   "order": "https://app.eats365pos.com/hk/en/so330_hku",
+   "photos": [
+    "https://catering.hku.hk/cache/img/579f16c7a45dfe69c068a0dd3dc20c37edce2d1a67f3.jpg",
+    "https://catering.hku.hk/cache/img/579f16c7a45d670375c3fb70863fc8e52c191ed811dc.jpg",
+    "https://catering.hku.hk/cache/img/579f16c7a45dc0de8c3477afe0dfebce11b05e4535e8.jpg",
+    "https://catering.hku.hk/cache/img/579f16c7a45d033de43ed4c2b3ccf40f959a15793f65.jpg",
+    "https://catering.hku.hk/cache/img/579f16c7a45d71333430442adafdd185cb84475ea89d.jpg",
+    "https://catering.hku.hk/cache/img/579f16c7a45df598271cf4d1e39fb1f522283811e4c8.jpg"
+   ],
+   "service": "Self-serviced",
+   "food": "Salad, Sandwiches, Lunch Hot Meals, Coffee, Grab-n-go Contact so330_hku@nlpra.org.hk",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 20:30"
+    ],
+    [
+     "Saturday & Public Holidays (excl. Sunday)",
+     "10:00 - 18:00"
+    ],
+    [
+     "Sunday",
+     "Closed"
+    ]
+   ]
+  },
+  "asian-gourmet": {
+   "page": "https://catering.hku.hk/en/eateries/CCOutletC/",
+   "order": "https://scan.aigens.com/scan?code=c3RvcmU9MjEyODI4Jm1vZGU9dGFrZWF3YXkmcGFnZT1ieW9k",
+   "photos": [
+    "https://catering.hku.hk/cache/img/c1d987793a98074bbf9775c7b4a0e8d966966e0911d8.jpg",
+    "https://catering.hku.hk/cache/img/c1d987793a98443d191b9e866199432b8281db1b7981.jpg",
+    "https://catering.hku.hk/cache/img/c1d987793a9807a9a3a0c354d8d39faf778fb990eb21.jpg",
+    "https://catering.hku.hk/cache/img/c1d987793a98c3b9f524d99b91c39241c3c13f80f41c.jpg",
+    "https://catering.hku.hk/cache/img/c1d987793a9857d666bcf2db820d6489c0be8900d664.jpg",
+    "https://catering.hku.hk/cache/img/c1d987793a982ac06cb17a0ab4fbd67a7926cef4804a.jpg"
+   ],
+   "service": "Table-serviced",
+   "food": "South-east Asian Cuisine, rice dishes and noodles Contact 2175 7778",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 20:00"
+    ],
+    [
+     "Saturday & Public Holiday",
+     "08:00 - 20:00"
+    ],
+    [
+     "Sunday",
+     "Closed"
+    ]
+   ]
+  },
+  "alfafa-bistro": {
+   "page": "https://catering.hku.hk/en/eateries/CCOutletA/",
+   "order": "https://alfafabistro.self-order.app/alfafabistro/?c3RvcmVOdW1iZXI9MTA3JnRhYmxlTnVtYmVyPVRBS0VBV0FZ",
+   "photos": [
+    "https://catering.hku.hk/cache/img/12dba116550ed42ceb60446991fc3ecbc119c53e16b3.jpg",
+    "https://catering.hku.hk/cache/img/12dba116550e46af427e36cc285d6789de246f6a4934.jpg",
+    "https://catering.hku.hk/cache/img/12dba116550ead7c035770f016cfac2786ed58c7e36c.jpg",
+    "https://catering.hku.hk/cache/img/12dba116550e5e0ee68e96807cb2e84224c1d065f534.jpg",
+    "https://catering.hku.hk/cache/img/12dba116550e02df791100d9cdedddc41257f97a0523.jpg",
+    "https://catering.hku.hk/cache/img/12dba116550ebbcc7d97216b93a9037f4f599cd604a6.jpg"
+   ],
+   "service": "Self-Serviced",
+   "food": "Pasta, sandwiches, salads, bakery and dessert Contact info@cuisinecontinental.com 2546 2121",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 20:30"
+    ],
+    [
+     "Saturday",
+     "08:00 - 20:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "08:00 - 20:00"
+    ]
+   ]
+  },
+  "cym-canteen": {
+   "page": "https://catering.hku.hk/en/eateries/cymr/",
+   "order": "https://now.order.place/#/store/102858/mode/prekiosk",
+   "photos": [
+    "https://catering.hku.hk/cache/img/d481957871095b6608873c5d5c78764b936b7280249d.jpg",
+    "https://catering.hku.hk/cache/img/d48195787109db16aef4103cc05a37e61f3f449b037f.jpg",
+    "https://catering.hku.hk/cache/img/d4819578710919c9a9e58cb509dc736680fc31b988a5.jpg",
+    "https://catering.hku.hk/cache/img/d481957871095907d8da6cfdba60399aef1b9eb3b3b7.jpg",
+    "https://catering.hku.hk/cache/img/d48195787109d49a5684bd82ff2ea0235151b4ef293f.jpg",
+    "https://catering.hku.hk/cache/img/d48195787109fd0284255293d2f16c86e1ed0d10fd8c.jpg"
+   ],
+   "service": "CYM Canteen - Self-serviced Fast Food",
+   "food": "Local fast food, Noodles, Chinese BBQ, SE Asian food, Sizzling Plate",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 21:30"
+    ],
+    [
+     "Saturday",
+     "07:30 - 21:30"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "07:30 - 21:30"
+    ]
+   ]
+  },
+  "hong-kong-daily": {
+   "page": "https://catering.hku.hk/en/eateries/hkdaily/",
+   "order": "https://csd2.order.place/store/112841/mode/takeaway",
+   "photos": [
+    "https://catering.hku.hk/cache/img/4fe1a300e44f7ef0a18b0b7fa2b54663f7c252f51f07.jpg",
+    "https://catering.hku.hk/cache/img/4fe1a300e44f80072c0799894692480a86b34186f85f.jpg",
+    "https://catering.hku.hk/cache/img/4fe1a300e44fbb35fccf4994ee2dad58f54aae21c7bb.jpg",
+    "https://catering.hku.hk/cache/img/4fe1a300e44f7c5493b16493e64401806cd19ff46e2d.jpg",
+    "https://catering.hku.hk/cache/img/4fe1a300e44f799dbd175c0b75ed85fd84e9a70cfa79.jpg",
+    "https://catering.hku.hk/cache/img/4fe1a300e44f53abb4f6bc8294b1b937e43734a88baf.jpg"
+   ],
+   "service": "Table-serviced",
+   "food": "Local fast food (Cha Chaan Teng) Contact 2857 5511",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 20:00"
+    ],
+    [
+     "Saturday",
+     "07:30 - 20:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "subway-centennial": {
+   "page": "https://catering.hku.hk/en/eateries/COII/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/49f477580574666783678ca73a54236ae6f488f69d9e.jpg",
+    "https://catering.hku.hk/cache/img/49f4775805745a3178a6ab2181a1abe612f807d482ea.jpg",
+    "https://catering.hku.hk/cache/img/49f477580574d32255224b4d6fe3f97ca999cbbabe2a.jpg",
+    "https://catering.hku.hk/cache/img/49f4775805741830492d57d737c9634a8c9ab41913d3.jpg",
+    "https://catering.hku.hk/cache/img/49f477580574287c59df0849913573931ad4bd440b4e.jpg",
+    "https://catering.hku.hk/cache/img/49f47758057462467bb6a2c15a4aab900d64a89b8509.jpg"
+   ],
+   "service": "Over the counter grab-n-go",
+   "food": "Sandwiches, Cookies, Grab-n-go Platter, Meal Box TO-GO options for catering service available: Catering Menu Contact 2561 9002",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 20:30"
+    ],
+    [
+     "Saturday",
+     "09:00 - 19:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "09:00 - 19:00"
+    ]
+   ]
+  },
+  "sandwich-club-kiosk-centennial": {
+   "page": "https://catering.hku.hk/en/eateries/COIII/",
+   "order": "https://odoui1.azurewebsites.net/shop?poiId=1714&secretKey=b53e43d5-586c-4720-b448-698be9d012fe&channelToken=4d821128-0659-4d3e-8dbc-cb3a6665c096&service=preorder",
+   "photos": [
+    "https://catering.hku.hk/cache/img/4becdb82786a178ee9cd41c6b3a5bc12d8b8cae701a4.jpg",
+    "https://catering.hku.hk/cache/img/4becdb82786aed055b8494cac2ca031d5fbeb5318db7.jpg",
+    "https://catering.hku.hk/cache/img/4becdb82786a7ed1e4300e073db55d428eadd18632ae.jpg",
+    "https://catering.hku.hk/cache/img/4becdb82786aa5ba31fc8425147b0b66ca8ddf454c36.jpg",
+    "https://catering.hku.hk/cache/img/4becdb82786af6625d34b1cdb2268f55cc9d850a049b.jpg",
+    "https://catering.hku.hk/cache/img/4becdb82786afea3c323e526028d7444cba4e776c1f5.jpg"
+   ],
+   "service": "Over counter grab-n-go",
+   "food": "Bento boxes, pastries sandwiches and salads Contact 2398 7928",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 19:00"
+    ],
+    [
+     "Saturday",
+     "Closed"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "27-kebab-house": {
+   "page": "https://catering.hku.hk/en/eateries/halalcorner/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/34b71883be58b9a190949f618f06b1807016d75ebd87.jpg",
+    "https://catering.hku.hk/cache/img/34b71883be584f0a43546673a8206b7b6399591a0fc8.jpg",
+    "https://catering.hku.hk/cache/img/34b71883be587c4afc54dba083f996a037fb4fc00ece.jpg",
+    "https://catering.hku.hk/cache/img/34b71883be5826e5ef8ef4f466453cf198e4653ee8fa.jpg",
+    "https://catering.hku.hk/cache/img/34b71883be58e818f64daa23d695f887946b4f2cfcf4.jpg",
+    "https://catering.hku.hk/cache/img/34b71883be585e82bfef23fb7c8fdf470fb00c931a14.jpg"
+   ],
+   "service": "Self-serviced Fast Food",
+   "food": "Halal Food (Kebabs, Pizza, Biryani Rice, Snack) Contact TBC",
+   "hours": [
+    [
+     "Monday - Friday",
+     "10:00 - 20:00"
+    ],
+    [
+     "Saturday",
+     "10:00 - 20:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "union-restaurant": {
+   "page": "https://catering.hku.hk/en/eateries/UR/",
+   "order": "https://now.order.place/#/store/12827/mode/prekiosk",
+   "photos": [
+    "https://catering.hku.hk/cache/img/1f8ef23f547e5640434be00faafafd1bcb1e092a1fdd.jpg",
+    "https://catering.hku.hk/cache/img/1f8ef23f547e547f3c9db04b4a27113f8303bce82415.jpg",
+    "https://catering.hku.hk/cache/img/1f8ef23f547e0327dc49733741c0724b9ed44fa7fa76.jpg",
+    "https://catering.hku.hk/cache/img/1f8ef23f547ec99b24a4f8a92fe06e3522b58b6f3831.jpg",
+    "https://catering.hku.hk/cache/img/1f8ef23f547e8e1be3ccf4b0cb580a581fd2a3c9da17.jpg",
+    "https://catering.hku.hk/cache/img/1f8ef23f547e786e9f167b88c2672e5d7f6fdda06e73.jpg"
+   ],
+   "service": "Self-serviced Fast Food",
+   "food": "Local and multinational fast food Contact 2175 7718",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 21:00"
+    ],
+    [
+     "Saturday",
+     "07:30 - 20:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "07:30 - 20:00"
+    ]
+   ]
+  },
+  "starbucks-composite": {
+   "page": "https://catering.hku.hk/en/eateries/COBG03/",
+   "order": "https://www.starbucks.com.hk/en/new-app-launch",
+   "photos": [
+    "https://catering.hku.hk/cache/img/097de196a9217e9aa77374e370ee1a5f6d18d1e5a19f.jpg",
+    "https://catering.hku.hk/cache/img/097de196a921b19158fb6ebe50abf75bb2cc4765dfb7.jpg",
+    "https://catering.hku.hk/cache/img/097de196a921dfaa4b407f48f364dbeb67e8a6aeabd8.jpg",
+    "https://catering.hku.hk/cache/img/097de196a921ed626318e8558a29eed5db87963a2eb3.jpg",
+    "https://catering.hku.hk/cache/img/097de196a921f41c3c5f0987670f31dd707eb4145901.jpg",
+    "https://catering.hku.hk/cache/img/097de196a9212b85b457f1359066013b28e36dbf2803.jpg"
+   ],
+   "service": "Self-serviced",
+   "food": "Salad, Sandwiches, Bakery, Dessert, Coffee, Grab-n-go Contact 2559 5028",
+   "hours": [
+    [
+     "Monday - Friday",
+     "07:30 - 21:00"
+    ],
+    [
+     "Saturday",
+     "07:30 - 20:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "11:00 - 18:30"
+    ]
+   ]
+  },
+  "tai-tai-foodtopia": {
+   "page": "https://catering.hku.hk/en/eateries/COBG02/",
+   "order": "https://order.taitaiteaology.com/#/goodslist?query=eyJwYXJlbnQiOiI0Iiwic2hvcCI6IjEwMDEiLCJwYWdlIjoiIiwicGlja01lYWxUeXBlIjoiMiIsInRhYmxlTmFtZSI6IiJ9",
+   "photos": [
+    "https://catering.hku.hk/cache/img/0be900671a9e5d702b1d99ab666186caf4c0739db36f.jpg",
+    "https://catering.hku.hk/cache/img/0be900671a9efd273f69fa6681bf93edd71bb58b708a.jpg",
+    "https://catering.hku.hk/cache/img/0be900671a9ecaab9257b81cd6fdca03e2b19c36d89d.jpg",
+    "https://catering.hku.hk/cache/img/0be900671a9e8233864f695d976d49fdad4c3972b7ca.jpg",
+    "https://catering.hku.hk/cache/img/0be900671a9e9f94bf1354391ebece1d62cb11888499.jpg",
+    "https://catering.hku.hk/cache/img/0be900671a9e97521bdcf4c58cfe40af9dae36bde8a8.jpg"
+   ],
+   "service": "Takeaway",
+   "food": "Taiwanese beverages, hot meals, noodles, snacks and dessert Contact taitai.teaology@gmail.com",
+   "hours": [
+    [
+     "Monday - Friday",
+     "09:00 - 20:00"
+    ],
+    [
+     "Saturday",
+     "10:00 - 19:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "oori-hansik": {
+   "page": "https://catering.hku.hk/en/eateries/COBG01/",
+   "order": "https://order.oorihansik.com/#/autoroute?query=eyJwYXJlbnQiOiI0Iiwic2hvcCI6IjIwMDEiLCJwYWdlIjoiIiwicGlja01lYWxUeXBlIjoiMiIsInRhYmxlTmFtZSI6IiJ9",
+   "photos": [
+    "https://catering.hku.hk/cache/img/cc04652790fbd8a5975a77ba6dc33ad675283808325c.jpg",
+    "https://catering.hku.hk/cache/img/cc04652790fb74255eee35657c705b8d2ccdb60da8ae.jpg",
+    "https://catering.hku.hk/cache/img/cc04652790fb72913b32b793a3846064e9178658de2e.jpg",
+    "https://catering.hku.hk/cache/img/cc04652790fb6dd1b3af1cd8375c377d0b804221bbd0.jpg",
+    "https://catering.hku.hk/cache/img/cc04652790fbcce7def3a638f919c0538b55e55509d8.jpg",
+    "https://catering.hku.hk/cache/img/cc04652790fbdf63d1e8bfdc41a424f08a0294b4e33d.jpg"
+   ],
+   "service": "Self-serviced Dine-in & Takeaway",
+   "food": "Korean food, hot meals, fried chicken, snacks, beverages and coffee Contact oorihansik@gmail.com",
+   "hours": [
+    [
+     "Monday - Friday",
+     "10:30 - 21:30"
+    ],
+    [
+     "Saturday & Sunday",
+     "11:00 - 20:00"
+    ],
+    [
+     "Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "vending-nook": {
+   "page": "https://catering.hku.hk/en/eateries/COBG05/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/9f2b8fad9301026fc9ed983e643d3c5c7dd6c370caae.jpg",
+    "https://catering.hku.hk/cache/img/9f2b8fad9301beb2771f27f4b01142585b6c721134e6.jpg",
+    "https://catering.hku.hk/cache/img/9f2b8fad9301043c9175de3c723b5c01f5d9f03df439.jpg",
+    "https://catering.hku.hk/cache/img/9f2b8fad93012e350fac1536c28c85c856d54dcf1a78.jpg",
+    "https://catering.hku.hk/cache/img/9f2b8fad9301f396e99978dd662fc6702b3087f84d53.jpg",
+    "https://catering.hku.hk/cache/img/9f2b8fad930166cc8d0568bc80b499da3b4b9c2b91e0.jpg"
+   ],
+   "service": "Vending service Food & Drink Options Japanese rice ball, dessert, ready-to-eat chicken filet, cup noodles, snacks (cookies, dried fruit, nuts, potato chips, candy,etc...), canned beverages (soft drink, tea, coffee)",
+   "food": null,
+   "hours": [
+    [
+     "Monday - Friday",
+     "All-day"
+    ],
+    [
+     "Saturday",
+     "All-day"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "All-day"
+    ]
+   ]
+  },
+  "bijas-vegetarian": {
+   "page": "https://catering.hku.hk/en/eateries/CCOutletD/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/05ff99de1b3819989a74cb33655166161ff577b7a44e.jpg",
+    "https://catering.hku.hk/cache/img/05ff99de1b384fd21e8ab812542e386db10a8342910d.jpg",
+    "https://catering.hku.hk/cache/img/05ff99de1b38d6bfae8f4be899974c8bce4b5e6aab17.jpg",
+    "https://catering.hku.hk/cache/img/05ff99de1b385737d5d1693541287797bf8cb6fe3cd7.jpg",
+    "https://catering.hku.hk/cache/img/05ff99de1b3853c8db55067572eb49de4aebcddf154c.jpg",
+    "https://catering.hku.hk/cache/img/05ff99de1b38c3dc9beb5603aef6a86eddc159eb8481.jpg"
+   ],
+   "service": "Self-serviced (Buffet Style, Collect-and-pay, charge by weight)",
+   "food": "Halal Certified Chinese Style Vegetarian, Noodle, Coffee, Fresh Juice Contact 2964 9011",
+   "hours": [
+    [
+     "Monday - Friday",
+     "11:00 - 21:00"
+    ],
+    [
+     "Saturday & Public Holiday",
+     "11:00 - 21:00"
+    ],
+    [
+     "Sunday",
+     "Closed"
+    ]
+   ]
+  },
+  "the-good-bridge": {
+   "page": "https://catering.hku.hk/en/eateries/bridge/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/cb909095538485376537fd99f612bcee29dd692ae9bd.jpg",
+    "https://catering.hku.hk/cache/img/110c37885cee7710dbc856251d6a19f6ea8f1b762520.png"
+   ],
+   "service": null,
+   "food": null,
+   "hours": []
+  },
+  "grove": {
+   "page": "https://catering.hku.hk/en/eateries/3SRC/",
+   "order": "https://order.grove.hk/#/goodslist?query=eyJwYXJlbnQiOiI0Iiwic2hvcCI6IjIxMCIsInBhZ2UiOiIiLCJwaWNrTWVhbFR5cGUiOiIyIiwidGFibGVOYW1lIjoiIn0=",
+   "photos": [
+    "https://catering.hku.hk/cache/img/173b455b48a262f38d95dd92831ee009fc553a3c399d.jpg",
+    "https://catering.hku.hk/cache/img/173b455b48a2ab0195bbfd0ababee8cb44a16cb04103.jpg",
+    "https://catering.hku.hk/cache/img/173b455b48a26fe6f3b2e2500be024d1dc2c72bcbc52.jpg",
+    "https://catering.hku.hk/cache/img/173b455b48a290593b27492471cd78279aa1ed0c2dbe.jpg",
+    "https://catering.hku.hk/cache/img/173b455b48a2490d962540cd5e80cec79bbda495fb38.jpg",
+    "https://catering.hku.hk/cache/img/173b455b48a23e1171480a97ab7d6d5bcd4e8946da6e.jpg"
+   ],
+   "service": "Self-serviced",
+   "food": "Pasta, sandwiches, salads, pastries and beverages Contact cs@grove.hk info@grove.hk",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 19:00"
+    ],
+    [
+     "Saturday",
+     "Closed"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "sandwich-club-kiosk-sassoon": {
+   "page": "https://catering.hku.hk/en/eateries/6SRKiosk/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/ddcc0755f2f1793b66e763e05e7c63851036cdf95e28.jpg",
+    "https://catering.hku.hk/cache/img/ddcc0755f2f159170421e02893ecce74e2ecd42da9dd.jpg",
+    "https://catering.hku.hk/cache/img/ddcc0755f2f1a90d35f747cad3f5b28aa64be5f0dcef.jpg",
+    "https://catering.hku.hk/cache/img/ddcc0755f2f1b17baa5b46841b3be12b1caffe20c8c3.jpg",
+    "https://catering.hku.hk/cache/img/ddcc0755f2f15c4e8a5e247492c338e0ba6155e2e8f3.jpg"
+   ],
+   "service": "Over-counter takeaway (limited seats available in Assembly Hall during 11:00 - 15:00)",
+   "food": "Daily hot meals, salad, sandwiches, snacks, panini and coffee Contact NA",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 16:00"
+    ],
+    [
+     "Saturday",
+     "Closed"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "subway-sassoon": {
+   "page": "https://catering.hku.hk/en/eateries/FanPuiOutpost/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/26b0dedeb401e4e83a3a37b289c738df2ff06bf1ecf9.jpg",
+    "https://catering.hku.hk/cache/img/26b0dedeb401dd2b5d619912b99fb653cb29be3f6dc4.jpg",
+    "https://catering.hku.hk/cache/img/26b0dedeb401368a464578b07c808107b97df7fe9b42.jpg",
+    "https://catering.hku.hk/cache/img/26b0dedeb4019eb54fbb93001e9fa0f3bdd1b03ce991.jpg",
+    "https://catering.hku.hk/cache/img/26b0dedeb40118457955974e4bbf59245dcdf86723bb.jpg"
+   ],
+   "service": "Over counter takeaway",
+   "food": "Sandwiches, cookies, grab-n-go Contact 2577 1008",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:00 - 19:00"
+    ],
+    [
+     "Saturday",
+     "08:00 - 18:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "starbucks-kiosk-medicine": {
+   "page": "https://catering.hku.hk/en/eateries/FOMBCK/",
+   "order": "https://www.starbucks.com.hk/en/new-app-launch",
+   "photos": [
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa14799e45924b12457e36c389a25222f2c7.jpg",
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa144a97b47baa7d70a41e0132d59d8814db.jpg",
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa14033c35e3c206ca4157fb4db7e3d5070b.jpg",
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa14d358acb980613027771cef8d93ee088a.jpg",
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa140f8612a0176dee3bf3e2ba5ae3ab2b67.jpg",
+    "https://catering.hku.hk/cache/img/7f2fe1b5fa14b37c3f9fff5d06e666322f325edf3c27.jpg"
+   ],
+   "service": "Over the counter grab-n-go",
+   "food": "Salad, sandwiches, bakery, dessert, coffee and grab-n-go Contact 6695 3598",
+   "hours": [
+    [
+     "Monday - Friday",
+     "08:30 - 17:30"
+    ],
+    [
+     "Saturday",
+     "Closed"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "Closed"
+    ]
+   ]
+  },
+  "wholesome-hub": {
+   "page": "https://catering.hku.hk/en/eateries/LabBlockGF/",
+   "order": "https://odoui1.azurewebsites.net/shop?poiId=2266&secretKey=e112ba08-193e-4103-a11a-1f9aee2af5e0&channelToken=4d821128-0659-4d3e-8dbc-cb3a6665c096&service=preorder",
+   "photos": [
+    "https://catering.hku.hk/cache/img/30388873af41144d6836ac5ddd1a21fe516d0d0a9bb4.jpeg",
+    "https://catering.hku.hk/cache/img/30388873af41f2bae0640de8b249a462bfff6dc79ec9.jpg",
+    "https://catering.hku.hk/cache/img/30388873af41117248900f4320f0e3a48fc1215b3848.jpg",
+    "https://catering.hku.hk/cache/img/30388873af410b49ebc81ffa5a573e83af0bdeb8b106.jpg",
+    "https://catering.hku.hk/cache/img/30388873af41870ac2bf38cb20b7b4e121393d229957.jpg"
+   ],
+   "service": null,
+   "food": null,
+   "hours": []
+  },
+  "restaurant-1887": {
+   "page": "https://catering.hku.hk/en/eateries/1887/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/416c657e95c810651f031e5eb92953b2d7a52e0dd971.jpg",
+    "https://catering.hku.hk/cache/img/416c657e95c88ee7a25f3524a91517360b8ec41f4eb2.jpg",
+    "https://catering.hku.hk/cache/img/416c657e95c8af851fef4d5328ed2c7d765c539f6b12.jpg",
+    "https://catering.hku.hk/cache/img/416c657e95c81953528678785f3b6cee4500b61b00fd.jpg",
+    "https://catering.hku.hk/cache/img/416c657e95c8cf7118dcc24740f2fd398f55534e73ae.jpg"
+   ],
+   "service": null,
+   "food": null,
+   "hours": []
+  },
+  "vending-hub-cym": {
+   "page": "https://catering.hku.hk/en/eateries/CYMGF/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/31920e966e2fc92deb295e519e020b0b5e7501a18546.jpeg",
+    "https://catering.hku.hk/cache/img/31920e966e2f12f4409cdc8940f1777540e8f040a1f7.jpeg",
+    "https://catering.hku.hk/cache/img/31920e966e2fb180ed1c2a7d4d58cdf330e222271bc2.jpeg"
+   ],
+   "service": "Vending service Food & Drink Options Hot Japanese meal box, Chinese rice ball, Japanese rice ball, dessert, ready-to-eat chicken filet, snacks (cookies, dried fruit, nuts, potato chips, candy,etc...), canned beverages (soft drink, tea, coffee)",
+   "food": null,
+   "hours": [
+    [
+     "Monday - Friday",
+     "09:00 - 21:00"
+    ],
+    [
+     "Saturday",
+     "09:00 - 21:00"
+    ],
+    [
+     "Sunday & Public Holiday",
+     "09:00 - 21:00"
+    ]
+   ]
+  },
+  "senior-common-room": {
+   "page": "https://catering.hku.hk/en/eateries/SCR/",
+   "order": null,
+   "photos": [
+    "https://catering.hku.hk/cache/img/d06a1d97699f6c53a91264214ab10c55616d7859d4ca.jpg",
+    "https://catering.hku.hk/cache/img/d06a1d97699fecedd3cc3a6b03d5766a57166e3dda78.jpg",
+    "https://catering.hku.hk/cache/img/d06a1d97699fecd7a38d2749cfe9e8dc63288664061d.jpg"
+   ],
+   "service": null,
+   "food": null,
+   "hours": []
+  }
+ }
+}

@@ -23,13 +23,13 @@ const T = {
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet.',
-        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
+        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', inHere: 'In this building', back: 'Back to', orderOnline: 'Order online', cateringPage: 'Details (HKU Catering)', hours: 'Opening hours', photoBy: 'Photos: HKU Catering Services', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
         guess: 'Approximate position, not yet confirmed.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。',
-        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
+        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', inHere: '大樓設施', back: '返回', orderOnline: '網上點餐', cateringPage: '詳情（港大膳食服務）', hours: '營業時間', photoBy: '相片：港大膳食服務', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
         guess: '位置係估計，未經確認。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
@@ -1708,7 +1708,7 @@ function selectPlace(p, fly) {
 function selectBuilding(bid) {
   const code = S.bmeta[bid].id;
   // a building can belong to several places (e.g. a tower and its campus): pick the most specific
-  const p = S.places.places.filter((x) => x.buildings.includes(code)).sort((a, b) => a.buildings.length - b.buildings.length)[0];
+  const p = S.places.places.filter((x) => x.buildings.includes(code) && !x.in).sort((a, b) => a.buildings.length - b.buildings.length)[0];
   if (p) return selectPlace(p, false);
   S.selected = { bid, place: p || null, bids: [bid] };
   highlight([bid]);
@@ -1735,18 +1735,43 @@ function showInfo() {
   const cat = p && S.places.categories[p.cat];
   let html = `<button class="icon-btn close">${ICON.close}</button>`;
   if (p) {
-    html += `<h3>${esc(L(p.name))}</h3><div class="sub">${placeIcon(p, S.places.categories)}${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
-      ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}${p.guess ? `<p class="guess">⚠︎ ${tt('guess')}</p>` : ''}
-      <div class="acts"><a class="btn primary" href="${href('buildings', { b: p.id })}">${tt('guide')}</a>${p.floors?.length ? `<a class="btn" href="${href('buildings', { b: p.id })}">🗺 ${tt('floorPlans')} (${p.floors.length})</a>` : ''}</div>`;
+    // a facility (an eatery...): back to the building it is in, its photos, hours and order page (data/eateries.json)
+    const host = p.in && S.places.places.find((x) => x.id === p.in);
+    if (host) html += `<button class="back" data-go="${host.id}">‹ ${tt('back')} ${esc(L(host.short || host.name))}</button>`;
+    html += `<h3>${esc(L(p.name))}</h3><div class="sub">${placeIcon(p, S.places.categories)}${esc(L(cat))}${p.no ? ` · #${esc(p.no)}` : ''}${hgt && !host ? ` · ${tt('height')} ≈ ${hgt} m` : ''}</div>
+      ${p.cat === 'dining' ? '<div class="eatery"></div>' : ''}
+      ${L(p.desc) ? `<p>${esc(L(p.desc))}</p>` : '<p></p>'}${p.guess ? `<p class="guess">⚠︎ ${tt('guess')}</p>` : ''}`;
+    // a building's facilities: listed, each opens its own card
+    const fac = S.places.places.filter((x) => x.in === p.id);
+    if (fac.length) html += `<div class="facil"><h4>${tt('inHere')}</h4>${fac.map((f) => `<button data-go="${f.id}">${placeIcon(f, S.places.categories)}<span>${esc(L(f.name))}<small>${esc(L(f.desc).split(/。|\.\s/)[0])}</small></span><i>›</i></button>`).join('')}</div>`;
+    html += `<div class="acts">${host ? '' : `<a class="btn primary" href="${href('buildings', { b: p.id })}">${tt('guide')}</a>`}<span class="order"></span>${p.floors?.length ? `<a class="btn" href="${href('buildings', { b: p.id })}">🗺 ${tt('floorPlans')} (${p.floors.length})</a>` : ''}</div>`;
   } else {
     const b = S.bmeta[sel.bid];
     html += `<h3>${tt('unnamed')}</h3><div class="sub">${tt('height')} ≈ ${hgt} m · ${Math.round(b.base)}–${Math.round(b.top)} mPD</div>`;
   }
   d.innerHTML = html;
   d.querySelector('.close').addEventListener('click', clearSelection);
+  d.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { const q = S.places.places.find((x) => x.id === b.dataset.go); if (q) selectPlace(q, false); }));
+  if (p?.cat === 'dining') fillEatery(d, p);
   S.wrap.appendChild(d);
   S.info = d;
   S.wrap.classList.add('info-open');
+}
+
+// an eatery's card: its photos (on the Catering Services site), mode of service, food, opening hours, order page
+const HOURS_ZH = [[/Monday\s*-\s*Friday/i, '星期一至五'], [/Monday\s*-\s*Saturday/i, '星期一至六'], [/Saturday/i, '星期六'],
+  [/Sunday\s*&\s*Public Holidays?/i, '星期日及公眾假期'], [/Sunday/i, '星期日'], [/Public Holidays?/i, '公眾假期'], [/University Holidays?/i, '大學假期'], [/Closed/i, '休息'], [/ & /g, '及']];
+const hoursText = (t, days = true) => (getLang() === 'zh' ? HOURS_ZH.filter(([, zh]) => days || zh === '休息').reduce((s, [re, zh]) => s.replace(re, zh), t) : t);
+async function fillEatery(d, p) {
+  const all = await (S.eateriesP || (S.eateriesP = fetch('data/eateries.json').then((r) => r.json()).catch(() => ({ outlets: {} }))));
+  const e = all.outlets?.[p.id], box = d.querySelector('.eatery');
+  if (!e || !box || !d.isConnected) return;
+  box.innerHTML = (e.photos?.length ? `<div class="photos">${e.photos.map((u) => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join('')}</div><small class="credit">${tt('photoBy')}</small>` : '') +
+    (e.service || e.food ? `<p class="food">${esc([e.service, e.food].filter(Boolean).join(' · '))}</p>` : '') +
+    (e.hours?.length ? `<table class="hours"><caption>${tt('hours')}</caption>${e.hours.map(([a, b]) => `<tr><th>${esc(hoursText(a))}</th><td>${esc(hoursText(b, false))}</td></tr>`).join('')}</table>` : '');
+  box.querySelectorAll('img').forEach((im) => im.addEventListener('error', () => im.remove()));
+  d.querySelector('.order').innerHTML = (e.order ? `<a class="btn primary" href="${esc(e.order)}" target="_blank" rel="noopener">🛒 ${tt('orderOnline')}</a>` : '') +
+    `<a class="btn" href="${esc(e.page)}" target="_blank" rel="noopener">${tt('cateringPage')}</a>`;
 }
 
 /* ---------------- click ---------------- */

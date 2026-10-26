@@ -279,6 +279,26 @@ body.map-mode .page { max-width: none; padding: 0; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .area-label { color: #b7e4c7; text-shadow: 0 0 4px #000, 0 0 10px #000; } }
 [data-theme="dark"] .area-label.halls { color: #74c0fc; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .area-label.halls { color: #74c0fc; } }
+/* a building's facilities (eateries...), and an eatery's card */
+.map-info .back { border: 0; background: none; padding: 0; margin: 0 0 4px; font: inherit; font-size: 13px; color: var(--accent-text); cursor: pointer; }
+.map-info .facil { margin: 4px 0 12px; }
+.map-info .facil h4 { margin: 0 0 6px; font-size: 12.5px; color: var(--text-soft); font-weight: 650; }
+.map-info .facil button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 10px; padding: 7px 10px; margin-bottom: 5px; cursor: pointer; font: inherit; font-size: 14px; }
+.map-info .facil button:hover { background: var(--bg-hover); }
+.map-info .facil button span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.map-info .facil button small { font-size: 11.5px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-info .facil button i { font-style: normal; color: var(--text-soft); font-size: 18px; }
+.map-info { max-height: calc(100% - 100px); overflow-y: auto; }
+.map-info .photos { display: flex; gap: 6px; overflow-x: auto; margin: 10px -2px 2px; scroll-snap-type: x mandatory; }
+.map-info .photos img { height: 130px; width: auto; max-width: 85%; border-radius: 10px; object-fit: cover; scroll-snap-align: start; flex: none; background: var(--bg-hover); }
+.map-info .credit { display: block; font-size: 10.5px; color: var(--text-soft); margin-bottom: 4px; }
+.map-info .food { margin: 6px 0 4px; font-size: 13.5px; }
+.map-info .hours { border-collapse: collapse; font-size: 13px; margin: 6px 0 4px; }
+.map-info .hours caption { text-align: left; font-size: 12.5px; font-weight: 650; color: var(--text-soft); padding-bottom: 2px; }
+.map-info .hours th { text-align: left; font-weight: 500; padding: 1px 12px 1px 0; color: var(--text-soft); }
+.map-info .hours td { padding: 1px 0; }
+.map-info .order:empty { display: none; }
+.map-info .order { display: contents; }
 .map-info .guess { font-size: 12.5px; color: inherit; background: rgba(217,119,6,.1); border-radius: 8px; padding: 6px 8px; }
 .map-legend hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
 .map-legend .legend-h { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; opacity: .7; margin-bottom: 2px; }
