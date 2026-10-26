@@ -144,7 +144,8 @@ async function init() {
   const s = { wrap, labels: wrap.querySelector('.pin-labels'), areaLabels: wrap.querySelector('.area-labels'), pins: [], selected: null, terrain: [], pickables: [], bparts: [], infraMeshes: [], hl: [] };
 
   let renderer;
-  try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
+  // (stencil: HKU's buildings hide the MTR lines)
+  try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: true }); }
   catch (e) { wrap.querySelector('.box').innerHTML = tt('webgl'); s.ready = Promise.resolve(); return s; }
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -691,11 +692,12 @@ function makeAreas() {
       S.areaLines.add(line);
     }
     // MTR lines (data/mtr-lines.json, OpenStreetMap): their tracks where they are, deep under the ground, in a dark
-    // shade of the line's colour, seen faintly through the map
+    // shade of the line's colour, seen faintly through the map - but not through HKU's buildings
     for (const ml of S.mtrLines?.lines || []) for (const t of ml.tracks) {
       const a = { kind: 'mtr', colour: mtrShade(ml.colour), open: true, boundary: [] }, pos = [];
       for (let i = 0; i + 2 < t.length; i += 3) { a.boundary.push([t[i], t[i + 1]]); pos.push(t[i], t[i + 2], t[i + 1]); }
-      const line = new Line2(new LineGeometry().setPositions(pos), new LineMaterial({ color: areaColour(a), linewidth: 4, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false, fog: false }));
+      const line = new Line2(new LineGeometry().setPositions(pos), new LineMaterial({ color: areaColour(a), linewidth: 4, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false, fog: false,
+        stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc }));   // (not over HKU's buildings: hkuStencil)
       line.renderOrder = 1; line.userData.area = a; line.userData.built = line.userData.draped = true; line.userData.tiles = [];
       S.areaLines.add(line);
     }
@@ -815,7 +817,7 @@ function updatePins() {
     if (vis && !active) {
       if (!p.w && p.el.style.display !== 'none' && !p.el.classList.contains('compact')) { p.w = p.el.firstChild.offsetWidth; p.h = p.el.firstChild.offsetHeight; }
       const fw = p.w || 40 + 12 * L(p.place.short || p.place.name).length, fh = p.h || 26, pad = p.el.classList.contains('compact') ? 6 : 0;
-      const full = { x: x - fw / 2 - pad, y: y - 16 - fh - pad, w: fw + 2 * pad, h: fh + 2 * pad }, badge = { x: x - 13, y: y - 42, w: 26, h: 26 };
+      const full = { x: x - fw / 2 - pad, y: y - 16 - fh - pad, w: fw + 2 * pad, h: fh + 2 * pad }, bw = p.place.exit ? 8 + 20 * p.place.exit.length : 26, badge = { x: x - bw / 2, y: y - 42, w: bw, h: 26 };
       const hit = (r) => placed.some((q) => !(r.x + r.w < q.x || q.x + q.w < r.x || r.y + r.h < q.y || q.y + q.h < r.y));
       if (!S.allBadges && !hit(full)) placed.push(full);
       else if (!hit(badge)) { dot = true; placed.push(badge); }
@@ -1156,7 +1158,7 @@ async function loadPhotoBuildings(s, url) {
   const g = await photoLoader(s).loadAsync(url);
   g.scene.traverse((o) => {
     if (!o.isMesh) return;
-    o.material = cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) }));   // photo is already lit
+    o.material = hkuStencil(cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) })));   // photo is already lit
     o.castShadow = true;
   });
   return g.scene;
@@ -1449,7 +1451,7 @@ function dropBridges(t) {
    from OpenStreetMap) are extruded from the ground and get bids after the model's. */
 function makeExtraBuildings(s, list) {
   s.extras = [];
-  const mat = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+  const mat = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
   for (const e of list) {
     const ground = Math.min(...e.footprint.map(([x, z]) => groundHeightIn(s, x, z) ?? 80));
     const shape = new THREE.Shape(e.footprint.map(([x, z]) => new THREE.Vector2(x, -z)));
@@ -1489,14 +1491,20 @@ function insidePoly(x, z, poly) {
    turns the city simpler block by block. */
 const DECO_CELL = 150;
 const LOD_NEAR = MOBILE_MAP ? 500 : 700;   // m from the camera to a block's centre
-const BUILD_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+// HKU's buildings mark the stencil buffer where they are seen: the MTR lines, seen through the rest of the map, are not
+// drawn there
+function hkuStencil(m) {
+  m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp;
+  return m;
+}
+const BUILD_MAT = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
 // HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
 // in the photo base maps
-const BUILD_MAT_PLAIN = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true }));
+const BUILD_MAT_PLAIN = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
 // HKU buildings with a photo copy: a material per copy (s.photoSrc: 'core' = satellite-buildings.glb, else the tile of
 // its hku-photo.glb), hidden while that copy is shown (photoMatsShown) - whichever tile the white building comes in
 const PHOTO_MATS = new Map();
-const photoMat = (src) => PHOTO_MATS.get(src) || PHOTO_MATS.set(src, cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' }))).get(src);
+const photoMat = (src) => PHOTO_MATS.get(src) || PHOTO_MATS.set(src, hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })))).get(src);
 function photoMatsShown(s) {
   const photoB = !!s.basemap && s.basemap !== 'classic';
   for (const [src, m] of PHOTO_MATS) m.visible = !(photoB && (src === 'core' ? !!s.satBuildings : !!s.tiles.tiles.get(src)?.ph?.hkuPhoto));
