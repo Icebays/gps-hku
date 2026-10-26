@@ -1843,11 +1843,10 @@ function locate() {
     if (err.code === 1) { navigator.geolocation.clearWatch(S.meWatch); S.meWatch = null; }
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 });
 }
-/* you on the map: a blue ball ringed in white standing on the ground, and lying flat on the ground around it its
-   shadow, the beam the way you face and the GPS's accuracy. The ball and the beam are never hidden (drawn over
-   everything: under the campus's trees and buildings they were lost); the rest is hidden by what stands in front, yet
-   still shows faintly through (a ghost drawn over everything). On layer 1, so the x-ray view of a station's floors draws them over its
-   faded map too. */
+/* you on the map: a blue dot, the beam the way you face and the GPS's accuracy, lying flat on the ground (seen at the
+   map's tilt). The dot and the beam are never hidden (drawn over everything: under the campus's trees and buildings
+   they were lost); the accuracy circle is hidden by what stands in front, yet still shows faintly through (a ghost
+   drawn over everything). On layer 1, so the x-ray view of a station's floors draws them over its faded map too. */
 function meMarker() {
   if (S.me) return S.me;
   const tex = (draw) => {
@@ -1855,11 +1854,11 @@ function meMarker() {
     draw(c.getContext('2d'));
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
   };
-  // 256 px for the 96 px the marker takes on screen: the ball 20 px across with its ring, the beam reaching 48 px
-  const shadowTex = tex((g) => {
-    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 34);
-    gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  // 256 px for the 96 px the marker takes on screen: the dot 18 px across (radius 24 here), the beam reaching 48 px
+  const dotTex = tex((g) => {
+    g.shadowColor = 'rgba(0,0,0,.4)'; g.shadowBlur = 10;
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(128, 128, 24, 0, 7); g.fill(); g.shadowBlur = 0;
+    g.fillStyle = '#1a73e8'; g.beginPath(); g.arc(128, 128, 16, 0, 7); g.fill();
   });
   const beamTex = tex((g) => {
     const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
@@ -1880,17 +1879,7 @@ function meMarker() {
   };
   const acc = add(new THREE.Group(), flat(new THREE.CircleGeometry(1, 64)), new THREE.MeshBasicMaterial({ color: 0x1a73e8, opacity: 0.15 }), 20);
   const beam = add(new THREE.Group(), flat(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: beamTex }), 22, true);
-  add(mark, flat(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: shadowTex }), 24);
-  // the ball (8 px radius) and its white ring: a larger white ball's far side, seen round its edge (with no depth
-  // test, each ball's own far side is culled and the blue one, drawn after, covers the white)
-  const R = 8 / 96, ball = new THREE.SphereGeometry(R, 24, 16).translate(0, R * 1.3, 0);
-  for (const [geo, mat, order] of [
-    [ball.clone().scale(1.3, 1.3, 1.3), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), 30],
-    [ball, new THREE.MeshPhongMaterial({ color: 0x1a73e8, specular: 0x555555, shininess: 40, emissive: 0x0a2f66 }), 31],
-  ]) {
-    Object.assign(mat, { depthTest: false, depthWrite: false, fog: false });
-    const m = new THREE.Mesh(geo, mat); m.name = 'me'; m.renderOrder = order; m.layers.set(1); mark.add(m);
-  }
+  add(mark, flat(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: dotTex }), 24, true);
   mark.add(beam); obj.add(acc, mark); obj.visible = false;   // (until the first fix)
   S.scene.add(obj);
   return (S.me = { obj, mark, beam, acc, heading: null, compass: false });
