@@ -673,11 +673,13 @@ function cutScene(s) {
 const mtrShade = (c) => '#' + new THREE.Color(c).multiplyScalar(0.55).getHexString();   // an MTR line under the ground
 const areaColour = (a, dark) => (a.colour ? new THREE.Color(a.colour).getHex() : a.kind === 'halls' ? (dark ? 0x74c0fc : 0x4dabf7) : dark ? 0x7fd6a4 : 0x0f5132);
 const HALLS_NEAR = 1600;   // m: groups of residences are named within this (campuses always)
+// an area in pieces ("more": its other parts, each an outline and maybe a label) - drawn as one area per piece
+const areaParts = (a) => [a, ...(a.more || []).map((m) => ({ ...a, more: null, ...m }))];
 function makeAreas() {
   const areas = S.campus?.areas || [];
   if (!S.areaLines) {
     S.areaLines = new THREE.Group();
-    for (const a of areas) {
+    for (const a of areas.flatMap(areaParts)) {
       // a dashed line a few pixels wide at any distance (Line2), on the ground; groups of residences ("kind": "halls")
       // finer and light blue
       const halls = a.kind === 'halls';
@@ -703,7 +705,7 @@ function makeAreas() {
     S.scene.add(S.areaLines);
   }
   S.areaLabels.innerHTML = '';
-  S.areas = areas.map((a) => {
+  S.areas = areas.flatMap(areaParts).filter((a) => a.label).map((a) => {
     const [x, z] = a.label;
     const el = document.createElement('div'), halls = a.kind === 'halls';
     el.className = 'area-label' + (halls ? ' halls' : '');
