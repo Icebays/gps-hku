@@ -661,7 +661,7 @@ function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList
 const CUTTABLE = (m) => m && (m.isMeshLambertMaterial || m.isMeshBasicMaterial || m.isMeshStandardMaterial || m.isMeshPhongMaterial);
 function cutScene(s) {
   const walk = (o) => {
-    if (o.name?.startsWith('indoor-')) return;
+    if (o.name?.startsWith('indoor-') || o.name === 'me') return;   // (nor you on the map)
     if (o.isMesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (CUTTABLE(m)) cutify(m);
     o.children.forEach(walk);
   };
@@ -829,22 +829,16 @@ function updatePins() {
     if (vis || active) { p.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`; p.el.style.zIndex = active ? 999 : Math.round(1000 - d / 3); }
   }
   if (S.me?.pos) {
-    // the dot where you are; the beam the way you face, as it looks on screen (the map turned and tilted): from the
-    // dot towards a point 10 m ahead (model x east, z south)
-    const me = S.me;
-    _v.copy(me.pos).project(S.camera);
-    const sx = (_v.x * 0.5 + 0.5) * w, sy = (-_v.y * 0.5 + 0.5) * h, vis = _v.z < 1;
-    me.el.style.display = vis ? '' : 'none';
-    if (vis) {
-      me.el.style.transform = `translate(${sx}px, ${sy}px)`;
-      const beam = me.el.firstChild;
-      if (me.heading != null) {
-        const r = (me.heading * Math.PI) / 180;
-        _v.set(me.pos.x + 10 * Math.sin(r), me.pos.y, me.pos.z - 10 * Math.cos(r)).project(S.camera);
-        const a = Math.atan2((_v.x * 0.5 + 0.5) * w - sx, -((-_v.y * 0.5 + 0.5) * h - sy));
-        beam.style.display = ''; beam.style.transform = `rotate(${a}rad)`;
-      } else beam.style.display = 'none';
-    }
+    // the dot lies on the ground, the same size on screen at any distance (96 px across with its beam); the beam
+    // turns the way you face (heading: degrees from north, clockwise; model x east, z south)
+    const me = S.me, cam = S.camera;
+    me.obj.visible = true; me.obj.position.copy(me.pos);
+    const mpp = (2 * cam.position.distanceTo(me.pos) * Math.tan((cam.fov * Math.PI) / 360)) / h;   // metres per pixel there
+    me.mark.scale.setScalar(96 * mpp);
+    me.beam.visible = me.heading != null;
+    if (me.heading != null) me.beam.rotation.y = (-me.heading * Math.PI) / 180;
+    me.acc.visible = me.accuracy > 24 * mpp;   // (only when the circle reaches beyond the dot)
+    me.acc.scale.setScalar(me.accuracy || 1);
   }
 }
 
@@ -1831,7 +1825,7 @@ export function wgs84ToModel(lat, lon) {
 function locate() {
   if (!navigator.geolocation) return toast(tt('noGps'));
   startCompass();   // (in the tap itself: iOS only asks for the compass from a user gesture)
-  if (S.me?.pos) { const tg = S.me.pos.clone().setY(S.me.pos.y - 3); flyTo(behind(tg, 220, 200), tg); }
+  if (S.me?.pos) { const tg = S.me.pos.clone(); flyTo(behind(tg, 220, 200), tg); }
   if (S.meWatch != null) return;
   let first = true;
   S.meWatch = navigator.geolocation.watchPosition((pos) => {
@@ -1839,7 +1833,7 @@ function locate() {
     if (first && !S.tiles?.tileAt(x, z)) toast(tt('outside'));   // (beyond the map's tiles)
     const y = groundHeight(x, z) ?? 60;
     const me = meMarker();
-    me.pos = new THREE.Vector3(x, y + 3, z);
+    me.pos = new THREE.Vector3(x, y + 0.6, z); me.accuracy = Math.min(pos.coords.accuracy || 0, 300);
     // walking: the GPS heading, until (or unless) there is a compass
     if (pos.coords.heading != null && !isNaN(pos.coords.heading) && (pos.coords.speed ?? 0) > 0.7 && !me.compass) me.heading = pos.coords.heading;
     if (first) { first = false; const tg = new THREE.Vector3(x, y, z); flyTo(behind(tg, 220, 200), tg); }
@@ -1849,13 +1843,57 @@ function locate() {
     if (err.code === 1) { navigator.geolocation.clearWatch(S.meWatch); S.meWatch = null; }
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 });
 }
+/* you on the map: a blue ball ringed in white standing on the ground, and lying flat on the ground around it its
+   shadow, the beam the way you face and the GPS's accuracy. The ball and the beam are never hidden (drawn over
+   everything: under the campus's trees and buildings they were lost); the rest is hidden by what stands in front, yet
+   still shows faintly through (a ghost drawn over everything). On layer 1, so the x-ray view of a station's floors draws them over its
+   faded map too. */
 function meMarker() {
-  if (S.me) { if (!S.me.el.isConnected) S.wrap.appendChild(S.me.el); return S.me; }
-  const el = document.createElement('div');
-  el.className = 'me'; el.title = tt('you'); el.style.display = 'none';   // (until the first fix)
-  el.innerHTML = `<svg class="me-beam" viewBox="-50 -50 100 100" aria-hidden="true"><defs><radialGradient id="meBeam" cx="0" cy="0" r="50" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1a73e8" stop-opacity=".7"/><stop offset="1" stop-color="#1a73e8" stop-opacity="0"/></radialGradient></defs><path d="M0 0L-24-44A50 50 0 0 1 24-44Z" fill="url(#meBeam)"/></svg><b class="me-dot"></b>`;
-  S.wrap.appendChild(el);
-  return (S.me = { el, heading: null, compass: false });
+  if (S.me) return S.me;
+  const tex = (draw) => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    draw(c.getContext('2d'));
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  };
+  // 256 px for the 96 px the marker takes on screen: the ball 20 px across with its ring, the beam reaching 48 px
+  const shadowTex = tex((g) => {
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 34);
+    gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  });
+  const beamTex = tex((g) => {
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(26,115,232,.75)'); gr.addColorStop(1, 'rgba(26,115,232,0)');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(128, 128); g.arc(128, 128, 128, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); g.closePath(); g.fill();
+  });
+  const flat = (geo) => geo.rotateX(-Math.PI / 2);   // (lying on the ground; the texture's top to the north)
+  const obj = new THREE.Group(), mark = new THREE.Group();
+  const add = (parent, geo, mat, order, always = false) => {
+    for (const ghost of always ? [true] : [true, false]) {
+      const m = new THREE.Mesh(geo, mat.clone());
+      Object.assign(m.material, { transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+      if (ghost) { m.material.depthTest = false; if (!always) m.material.opacity *= 0.5; }
+      m.name = 'me'; m.renderOrder = order + (ghost ? 0 : 1); m.layers.set(1);
+      parent.add(m);
+    }
+    return parent;
+  };
+  const acc = add(new THREE.Group(), flat(new THREE.CircleGeometry(1, 64)), new THREE.MeshBasicMaterial({ color: 0x1a73e8, opacity: 0.15 }), 20);
+  const beam = add(new THREE.Group(), flat(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: beamTex }), 22, true);
+  add(mark, flat(new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: shadowTex }), 24);
+  // the ball (8 px radius) and its white ring: a larger white ball's far side, seen round its edge (with no depth
+  // test, each ball's own far side is culled and the blue one, drawn after, covers the white)
+  const R = 8 / 96, ball = new THREE.SphereGeometry(R, 24, 16).translate(0, R * 1.3, 0);
+  for (const [geo, mat, order] of [
+    [ball.clone().scale(1.3, 1.3, 1.3), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), 30],
+    [ball, new THREE.MeshPhongMaterial({ color: 0x1a73e8, specular: 0x555555, shininess: 40, emissive: 0x0a2f66 }), 31],
+  ]) {
+    Object.assign(mat, { depthTest: false, depthWrite: false, fog: false });
+    const m = new THREE.Mesh(geo, mat); m.name = 'me'; m.renderOrder = order; m.layers.set(1); mark.add(m);
+  }
+  mark.add(beam); obj.add(acc, mark); obj.visible = false;   // (until the first fix)
+  S.scene.add(obj);
+  return (S.me = { obj, mark, beam, acc, heading: null, compass: false });
 }
 function startCompass() {
   if (S.compassOn) return;
