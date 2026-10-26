@@ -22,6 +22,25 @@ export const REPO = 'https://github.com/Icebays/gps-hku';
 for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
 // two-finger moves never pinch the page; a quick second tap never double-tap-zooms it
 document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+/* On the map the page never moves (iOS scrolls or rubber-bands the page when a finger on a panel - the info card -
+   has nothing to scroll there): a one-finger move may only scroll a box that can still scroll that way (a long card,
+   the side bar, a strip of photos); anything else is cancelled. */
+let lastTouch = null;
+document.addEventListener('touchstart', (e) => { const t = e.touches[0]; lastTouch = t ? { x: t.clientX, y: t.clientY } : null; }, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  if (!document.body.classList.contains('map-mode') || e.touches.length !== 1 || !lastTouch) return;
+  const t = e.touches[0], dx = t.clientX - lastTouch.x, dy = t.clientY - lastTouch.y;
+  lastTouch = { x: t.clientX, y: t.clientY };
+  const vert = Math.abs(dy) >= Math.abs(dx);
+  for (let el = e.target; el && el !== document.body; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    if (vert && /auto|scroll/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1 &&
+      ((dy > 0 && el.scrollTop > 0) || (dy < 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1))) return;
+    if (!vert && /auto|scroll/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1 &&
+      ((dx > 0 && el.scrollLeft > 0) || (dx < 0 && el.scrollLeft + el.clientWidth < el.scrollWidth - 1))) return;
+  }
+  e.preventDefault();
+}, { passive: false });
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
   const now = Date.now();

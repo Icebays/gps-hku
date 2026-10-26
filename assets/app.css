@@ -102,7 +102,7 @@ body.map-mode .page { max-width: none; padding: 0; }
 html:has(body.map-mode) { overflow: hidden; overscroll-behavior: none; height: 100%; }
 body.map-mode { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
 body.map-mode .layout { min-height: 0; height: calc(100vh - var(--top-h)); height: calc(100dvh - var(--top-h)); overflow: hidden; }
-body.map-mode .sidebar { overscroll-behavior: contain; }
+body.map-mode .sidebar, body.map-mode .map-ui, body.map-mode .map-info .photos { overscroll-behavior: contain; }
 
 /* ---------- article ---------- */
 .page .crumb { font-size: 13px; color: var(--accent-text); font-weight: 600; margin-bottom: 4px; }
