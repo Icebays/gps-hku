@@ -826,9 +826,23 @@ function updatePins() {
     p.el.style.display = vis || active ? '' : 'none';
     if (vis || active) { p.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`; p.el.style.zIndex = active ? 999 : Math.round(1000 - d / 3); }
   }
-  if (S.me) {
-    _v.copy(S.me.pos).project(S.camera);
-    S.me.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * w}px, ${(-_v.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
+  if (S.me?.pos) {
+    // the dot where you are; the beam the way you face, as it looks on screen (the map turned and tilted): from the
+    // dot towards a point 10 m ahead (model x east, z south)
+    const me = S.me;
+    _v.copy(me.pos).project(S.camera);
+    const sx = (_v.x * 0.5 + 0.5) * w, sy = (-_v.y * 0.5 + 0.5) * h, vis = _v.z < 1;
+    me.el.style.display = vis ? '' : 'none';
+    if (vis) {
+      me.el.style.transform = `translate(${sx}px, ${sy}px)`;
+      const beam = me.el.firstChild;
+      if (me.heading != null) {
+        const r = (me.heading * Math.PI) / 180;
+        _v.set(me.pos.x + 10 * Math.sin(r), me.pos.y, me.pos.z - 10 * Math.cos(r)).project(S.camera);
+        const a = Math.atan2((_v.x * 0.5 + 0.5) * w - sx, -((-_v.y * 0.5 + 0.5) * h - sy));
+        beam.style.display = ''; beam.style.transform = `rotate(${a}rad)`;
+      } else beam.style.display = 'none';
+    }
   }
 }
 
@@ -1808,24 +1822,59 @@ export function wgs84ToModel(lat, lon) {
   const N = 816013.806 - 27.1647 * dl + 110734.208 * dp;
   return { x: E - ORIGIN.E, z: -(N - ORIGIN.N) };
 }
+/* Where you are and which way you face, as in Google Maps: a blue dot that follows you (watchPosition) with a beam
+   the way the phone points (its compass: iOS asks for permission on the tap of the locate button; Android's absolute
+   orientation), or, without a compass, the way you walk (GPS heading). The first fix flies the map there; tapping the
+   button again brings you back into view. */
 function locate() {
   if (!navigator.geolocation) return toast(tt('noGps'));
-  navigator.geolocation.getCurrentPosition((pos) => {
+  startCompass();   // (in the tap itself: iOS only asks for the compass from a user gesture)
+  if (S.me?.pos) { const tg = S.me.pos.clone().setY(S.me.pos.y - 3); flyTo(behind(tg, 220, 200), tg); }
+  if (S.meWatch != null) return;
+  let first = true;
+  S.meWatch = navigator.geolocation.watchPosition((pos) => {
     const { x, z } = wgs84ToModel(pos.coords.latitude, pos.coords.longitude);
-    if (Math.abs(x) > 760 || z < -320 || z > 320) toast(tt('outside'));
+    if (first && !S.tiles?.tileAt(x, z)) toast(tt('outside'));   // (beyond the map's tiles)
     const y = groundHeight(x, z) ?? 60;
-    if (!S.me) {
-      const el = document.createElement('div');
-      el.className = 'pin';
-      el.innerHTML = `<span style="background:#2563eb;color:#fff;border-color:transparent">● ${tt('you')}</span><i></i>`;
-      S.labels.appendChild(el);
-      S.me = { el };
-    }
-    S.me.pos = new THREE.Vector3(x, y + 3, z);
-    if (!S.me.el.isConnected) S.labels.appendChild(S.me.el);
-    const tg = new THREE.Vector3(x, y, z);
-    flyTo(behind(tg, 220, 200), tg);
-  }, () => toast(tt('noGps')), { enableHighAccuracy: true, timeout: 10000 });
+    const me = meMarker();
+    me.pos = new THREE.Vector3(x, y + 3, z);
+    // walking: the GPS heading, until (or unless) there is a compass
+    if (pos.coords.heading != null && !isNaN(pos.coords.heading) && (pos.coords.speed ?? 0) > 0.7 && !me.compass) me.heading = pos.coords.heading;
+    if (first) { first = false; const tg = new THREE.Vector3(x, y, z); flyTo(behind(tg, 220, 200), tg); }
+  }, (err) => {
+    // a fix that is late now and then is no reason to stop; no permission (or no fix at all yet) is
+    if (err.code === 1 || first) toast(tt('noGps'));
+    if (err.code === 1) { navigator.geolocation.clearWatch(S.meWatch); S.meWatch = null; }
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 });
+}
+function meMarker() {
+  if (S.me) { if (!S.me.el.isConnected) S.wrap.appendChild(S.me.el); return S.me; }
+  const el = document.createElement('div');
+  el.className = 'me'; el.title = tt('you'); el.style.display = 'none';   // (until the first fix)
+  el.innerHTML = `<svg class="me-beam" viewBox="-50 -50 100 100" aria-hidden="true"><defs><radialGradient id="meBeam" cx="0" cy="0" r="50" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1a73e8" stop-opacity=".7"/><stop offset="1" stop-color="#1a73e8" stop-opacity="0"/></radialGradient></defs><path d="M0 0L-24-44A50 50 0 0 1 24-44Z" fill="url(#meBeam)"/></svg><b class="me-dot"></b>`;
+  S.wrap.appendChild(el);
+  return (S.me = { el, heading: null, compass: false });
+}
+function startCompass() {
+  if (S.compassOn) return;
+  const on = (e) => {
+    // iOS: webkitCompassHeading (degrees from north, clockwise); others: the absolute alpha (counter-clockwise)
+    let h = e.webkitCompassHeading ?? (e.absolute || e.type === 'deviceorientationabsolute' ? 360 - e.alpha : null);
+    if (h == null || isNaN(h)) return;
+    h = (h + (screen.orientation?.angle || 0) + 360) % 360;   // (the phone held sideways)
+    const me = meMarker(); me.compass = true;
+    // smoothed, the short way round
+    if (me.heading == null) me.heading = h;
+    else { const d = ((h - me.heading + 540) % 360) - 180; me.heading = (me.heading + d * 0.25 + 360) % 360; }
+  };
+  const listen = () => {
+    S.compassOn = true;
+    if ('ondeviceorientationabsolute' in window) addEventListener('deviceorientationabsolute', on);
+    else addEventListener('deviceorientation', on);
+  };
+  const D = window.DeviceOrientationEvent;
+  if (D?.requestPermission) D.requestPermission().then((r) => { if (r === 'granted') listen(); }).catch(() => {});
+  else if (D) listen();
 }
 function groundHeight(x, z, targets = S.pickables) {
   if (!targets) return null;

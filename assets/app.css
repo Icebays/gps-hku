@@ -362,3 +362,7 @@ body.map-mode .sidebar { overscroll-behavior: contain; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .indoor-label.shelf { color: #d9b58c; } }
 :root[data-theme="dark"] .indoor-label.shelf { color: #d9b58c; }
 @media (max-width: 860px) { .map-floors { left: 8px; } .map-floors button { width: 40px; height: 34px; } }
+/* you: a blue dot, and a beam the way you face */
+.me { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 4; pointer-events: none; will-change: transform; }
+.me-dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-sizing: border-box; box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+.me-beam { position: absolute; left: -48px; top: -48px; width: 96px; height: 96px; transform-origin: 50% 50%; }
