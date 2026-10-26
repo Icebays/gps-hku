@@ -13,14 +13,18 @@ HKU is built on a hillside. A building's "G/F" can sit at a completely different
 
 ## What's inside
 
-- **3D campus map**: a model of the main campus and Centennial Campus. Tap a building to see its name, height and guide, or use GPS to see where you are.
-- **Walking routes**: routes drawn on the 3D terrain, with distance, climb and estimated walking time.
-- **Floor plans**: pan-and-zoom floor plans for each building, floor by floor.
+- **3D campus map**: the Main, Centennial, Sassoon Road and Pokfield campuses, the halls and the streets around them, streamed tile by tile like Google Earth (only what is on screen is loaded). HKU's buildings stand solid and the rest of the city see-through, so the campus reads at a glance. Choose the **classic map** or the **satellite view** (aerial photo, photo-textured buildings, 3D trees).
+- **Places**: every building on HKU's official campus map, with icons by kind; the campuses and the groups of halls outlined and named; search; pins fold into round badges when the map gets crowded.
+- **3D floor plans**: the Main Library, the Centennial Campus podium and the MTR stations HKU, Sai Ying Pun and Kennedy Town. Pick a building, then a floor: the building is cut open above it, and floors below ground are shown in an x-ray view through the faded map, with the lift shafts standing through the levels.
+- **MTR**: every exit with its exit code, as on the MTR's signs, and the Island Line underground at the depth of its tracks.
+- **Food & drink**: all of HKU Catering Services' restaurants, canteens and cafés. Tap a building to see what is in it, then an eatery for its photos, opening hours and online ordering.
+- **Getting around**: walking routes on the 3D terrain, lifts and step-free routes, GPS, the real sun and shadows, and the Hong Kong Observatory's weather and warnings.
+- **Phones first**: the gestures of Google and Apple Maps (pan, pinch, twist, two-finger tilt, double-tap zoom).
 - **Guides**: how University Street works, where the lifts go, and how to get here.
 
 ## This is a living guide
 
-GPS-HKU is built by students, for students. Some buildings are **not labelled on the map yet**; more are added as the guide grows.
+GPS-HKU is built by students, for students, and keeps growing. If a building is missing or labelled wrong, let us know.
 
 > [!NOTE]
 > GPS-HKU is an unofficial project and is not affiliated with The University of Hong Kong. For official information, check the HKU and Estates Office websites.

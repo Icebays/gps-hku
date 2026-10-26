@@ -1,22 +1,66 @@
 # GPS-HKU
 
-A 3D map, walking guide and floor plan guide to the University of Hong Kong. 香港大學 3D 地圖、步行及平面圖指南。
+A 3D map, walking guide and floor plan guide to the University of Hong Kong.
+香港大學 3D 地圖、步行及平面圖指南。
 
 **Live site:** https://icebays.github.io/gps-hku/
 
-- Static site, no build step — hosted on GitHub Pages.
-- 3D campus from Lands Department 3D Spatial Data (tiles 11-SW-7C, 11-SW-7D), optimised from ~120 MB to ~9 MB.
-- Bilingual (English / 繁體中文) Markdown content in `content/`.
-- Places, map pins and floor plans in `data/places.json`; walking routes in `data/routes.json`.
+HKU is built on a hillside: a building's "G/F" can sit far above or below the one next door, and buildings are joined
+by bridges, podiums and lift towers. GPS-HKU shows the campus as it really is, in 3D, from the Lands Department's
+survey data.
 
-## Publish
-Settings → Pages → Source: *Deploy from a branch* → Branch `main` / `(root)` → Save.
+## What it does
+
+- **3D map of HKU and the Western District**: the Main, Centennial, Sassoon Road and Pokfield campuses, the halls
+  and the streets around them, streamed tile by tile like Google Earth (only what is on screen is loaded). HKU's
+  buildings stand solid; the rest of the city is drawn see-through so the campus reads.
+- **Two looks**: a clean map (relief, contours, roads and markings) and a satellite view with the aerial photo, photo
+  textured HKU buildings and 3D trees.
+- **Places**: every building on HKU's official campus map, with icons by kind, the campuses and the groups of halls
+  outlined and named, search, and pins that fold into round badges when the map is crowded.
+- **Floor plans in 3D**: the Main Library, the Centennial Campus podium and the MTR stations (HKU, Sai Ying Pun,
+  Kennedy Town). The building is cut open above the floor shown; a station's floors below ground are shown in an
+  x-ray view through the faded map, with lift shafts standing through the levels.
+- **MTR**: every exit with its exit code as on the MTR's signs, and the Island Line drawn at the depth of its tracks.
+- **Eateries**: all of HKU Catering Services' restaurants, canteens and cafés on the map; a building's card lists
+  them, and each has its photos, opening hours and online ordering.
+- **Getting around**: walking routes on the 3D terrain, lifts and step-free routes, GPS, the real sun and shadows,
+  and the weather and warnings from the Hong Kong Observatory.
+- **Phones first**: Google / Apple Maps gestures (pan, pinch, twist, two-finger tilt, double-tap zoom), memory kept
+  low for iPhones. English and 繁體中文.
 
 ## Run locally
+
+A static site with no build step (three.js, no framework):
+
 ```bash
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-Buildings are labelled in `data/places.json`, routes in `data/routes.json` and floor plans under `data/indoor/` (see `tools/README.md`). Editing is by the maintainers only; the site has no public editing.
+To publish on GitHub Pages: Settings → Pages → Source: *Deploy from a branch* → `main` / `(root)`.
 
-3D Spatial Data © Lands Department, HKSAR Government. Unofficial project, not affiliated with HKU.
+## Where things are
+
+| | |
+|---|---|
+| `index.html`, `assets/` | the site: `app.js` (pages), `map.js` (3D map), `tiles.js` (tile streaming), `indoor.js` (floor plans), `roads.js`, `icons.js`, `weather.js` |
+| `content/en`, `content/zh` | the guide pages (Markdown) |
+| `data/places.json` | places: buildings, eateries, MTR exits, with their model building IDs |
+| `data/campus.json` | campus and hall-group outlines, HKU's buildings |
+| `data/indoor/` | floor plans |
+| `data/eateries.json`, `data/mtr-lines.json`, `data/routes.json` | eateries' details, MTR lines, walking routes |
+| `assets/tiles/`, `assets/model/` | the 3D tiles and models |
+| `tools/` | how all of the above is built from the source data (see `tools/README.md`) |
+
+The site is edited by its maintainers only; it has no public editing. When the site's modules change, bump the `?v=`
+version in `index.html`'s import map so phones never mix new and old files.
+
+## Data
+
+- 3D Spatial Data and 3D indoor maps (IMDF) © Lands Department, HKSAR Government
+- Buildings and places: HKU campus map (maps.hku.hk); eateries: HKU Catering Services (catering.hku.hk), photos
+  linked from there
+- MTR exits and lines, roads and paths: © OpenStreetMap contributors (ODbL)
+- Weather and warnings: Hong Kong Observatory
+
+GPS-HKU is an unofficial student project and is not affiliated with The University of Hong Kong or the MTR Corporation.

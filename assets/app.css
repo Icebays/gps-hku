@@ -97,6 +97,12 @@ button { font: inherit; color: inherit; }
 body.map-mode .layout { grid-template-columns: var(--side-w) minmax(0, 1fr); }
 body.map-mode .toc { display: none; }
 body.map-mode .page { max-width: none; padding: 0; }
+/* the map: the page itself never scrolls (or bounces, or pulls to refresh) - only the map moves; the side bar still
+   scrolls inside itself */
+html:has(body.map-mode) { overflow: hidden; overscroll-behavior: none; height: 100%; }
+body.map-mode { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+body.map-mode .layout { min-height: 0; height: calc(100vh - var(--top-h)); height: calc(100dvh - var(--top-h)); overflow: hidden; }
+body.map-mode .sidebar { overscroll-behavior: contain; }
 
 /* ---------- article ---------- */
 .page .crumb { font-size: 13px; color: var(--accent-text); font-weight: 600; margin-bottom: 4px; }
