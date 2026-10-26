@@ -458,7 +458,7 @@ function setSky(s) {
   drawMapFeatures(dark);
   s.roads?.userData.setTheme(dark);
   for (const t of s.tiles?.tiles.values() || []) t.feat?.marks?.userData.setTheme(dark);
-  s.areaLines?.children.forEach((l) => [l, l.userData.ghost].forEach((m) => m.material.color.set(areaColour(l.userData.area, dark))));
+  s.areaLines?.children.forEach((l) => [l, l.userData.ghost].forEach((m) => m?.material.color.set(areaColour(l.userData.area, dark))));
   ROAD_MAT.color.set(dark ? 0x4d535b : 0xa7acb3);
   BRIDGE_MAT.color.set(dark ? 0x7a7d7b : 0xd9d5cc);
   setTreeTheme(s, dark);
@@ -670,6 +670,7 @@ function cutScene(s) {
 
 /* ---------------- campus areas ---------------- */
 // outlines: campuses green, groups of residences light blue (and a little lighter on the dark map)
+const mtrShade = (c) => '#' + new THREE.Color(c).multiplyScalar(0.55).getHexString();   // an MTR line under the ground
 const areaColour = (a, dark) => (a.colour ? new THREE.Color(a.colour).getHex() : a.kind === 'halls' ? (dark ? 0x74c0fc : 0x4dabf7) : dark ? 0x7fd6a4 : 0x0f5132);
 const HALLS_NEAR = 1600;   // m: groups of residences are named within this (campuses always)
 function makeAreas() {
@@ -689,16 +690,13 @@ function makeAreas() {
       drapeArea(line);
       S.areaLines.add(line);
     }
-    // MTR lines (data/mtr-lines.json, OpenStreetMap): their tracks on the ground above them, in the line's colour,
-    // solid and wider, and faintly through what stands over them
+    // MTR lines (data/mtr-lines.json, OpenStreetMap): their tracks where they are, deep under the ground, in a dark
+    // shade of the line's colour, seen faintly through the map
     for (const ml of S.mtrLines?.lines || []) for (const t of ml.tracks) {
-      const a = { kind: 'mtr', colour: ml.colour, open: true, boundary: t.reduce((o, v, i) => (i % 2 ? o : [...o, [v, t[i + 1]]]), []) };
-      const line = new Line2(new LineGeometry(), new LineMaterial({ color: areaColour(a), linewidth: 4.5, transparent: true, opacity: 0.85, fog: false }));
-      line.renderOrder = 2; line.userData.area = a;
-      const ghost = new Line2(line.geometry, line.material.clone());
-      ghost.material.depthTest = false; ghost.material.opacity = 0.35; ghost.renderOrder = 3;
-      line.userData.ghost = ghost; line.add(ghost);
-      drapeArea(line);
+      const a = { kind: 'mtr', colour: mtrShade(ml.colour), open: true, boundary: [] }, pos = [];
+      for (let i = 0; i + 2 < t.length; i += 3) { a.boundary.push([t[i], t[i + 1]]); pos.push(t[i], t[i + 2], t[i + 1]); }
+      const line = new Line2(new LineGeometry().setPositions(pos), new LineMaterial({ color: areaColour(a), linewidth: 4, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false, fog: false }));
+      line.renderOrder = 1; line.userData.area = a; line.userData.built = line.userData.draped = true; line.userData.tiles = [];
       S.areaLines.add(line);
     }
     S.scene.add(S.areaLines);
@@ -719,9 +717,9 @@ function makeAreas() {
   for (const ml of S.mtrLines?.lines || []) {
     const t = [...ml.tracks].sort((a, b) => b.length - a.length)[0]; if (!t) continue;
     for (const f of [0.3, 0.7]) {
-      const i = 2 * Math.floor((t.length / 2 - 1) * f), x = t[i], z = t[i + 1];
+      const i = 3 * Math.floor((t.length / 3 - 1) * f), x = t[i], z = t[i + 1];
       const el = document.createElement('div');
-      el.className = 'area-label mtr'; el.style.color = ml.colour;
+      el.className = 'area-label mtr'; el.style.color = mtrShade(ml.colour);
       el.innerHTML = `${esc(L(ml.name).replace(/^(MTR |港鐵)/, ''))}<small>${esc(getLang() === 'zh' ? ml.name.en.replace(/^MTR /, '') : ml.name.zh.replace(/^港鐵/, ''))}</small>`;
       S.areaLabels.appendChild(el);
       S.areas.push({ el, mtr: true, near: HALLS_NEAR * 1.5, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 10) + 12, z) });
@@ -856,8 +854,10 @@ const INFRA_MAT = infraMaterial();   // bridges of the 3D data (where the drawn 
    and down to zoom out; a plain double-tap zooms in. Runs in the capture phase so the map controls
    never see the second touch. */
 function oneFingerZoom(el, camera, controls) {
-  const touches = new Set();
-  let lastTap = null, drag = null;
+  // a double-tap is two taps: one finger each time, short and still - the fingers lifted after a pinch or a pan are
+  // not taps (they used to start a zoom drag, and a second finger then left the map controls switched off)
+  const touches = new Map();
+  let lastTap = null, drag = null, multi = false;
   const dist = () => camera.position.distanceTo(controls.target);
   const setDist = (d) => {
     d = Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
@@ -865,11 +865,13 @@ function oneFingerZoom(el, camera, controls) {
     camera.position.copy(controls.target).add(off);
     controls.update();
   };
+  const release = () => { drag = null; controls.enabled = true; };
   el.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'touch') return;
-    touches.add(e.pointerId);
-    if (touches.size > 1) { drag = null; return; }
     const now = performance.now();
+    if (!touches.size) multi = false;
+    touches.set(e.pointerId, { t: now, x: e.clientX, y: e.clientY });
+    if (touches.size > 1) { multi = true; lastTap = null; if (drag) release(); return; }
     if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
       drag = { id: e.pointerId, y: e.clientY, d0: dist(), moved: false };
       e.stopImmediatePropagation(); e.preventDefault();
@@ -886,17 +888,19 @@ function oneFingerZoom(el, camera, controls) {
   }, { capture: true });
   const end = (e) => {
     if (e.pointerType !== 'touch') return;
-    touches.delete(e.pointerId);
+    const t0 = touches.get(e.pointerId); touches.delete(e.pointerId);
     if (drag && e.pointerId === drag.id) {
       if (!drag.moved) setDist(drag.d0 * 0.5);   // double-tap without dragging: zoom in
-      drag = null; lastTap = null; controls.enabled = true;
+      release(); lastTap = null;
       e.stopImmediatePropagation();
       return;
     }
-    lastTap = { t: performance.now(), x: e.clientX, y: e.clientY };
+    const now = performance.now();
+    lastTap = !multi && t0 && now - t0.t < 300 && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) < 12 ? { t: now, x: e.clientX, y: e.clientY } : null;
+    if (!touches.size && drag) release();   // (never leave the controls off)
   };
   el.addEventListener('pointerup', end, { capture: true });
-  el.addEventListener('pointercancel', (e) => { touches.delete(e.pointerId); if (drag) { drag = null; controls.enabled = true; } }, { capture: true });
+  el.addEventListener('pointercancel', (e) => { if (e.pointerType !== 'touch') return; touches.delete(e.pointerId); lastTap = null; if (drag) release(); }, { capture: true });
 }
 
 /* Two-finger gestures (phones), as in Google / Apple Maps: pinch zooms and twist rotates about the
@@ -965,13 +969,15 @@ function twoFingerGestures(wrap, s) {
     const t = two(), t0 = g.t0;
     if (!g.mode) {
       const va = { x: t.a.x - t0.a.x, y: t.a.y - t0.a.y }, vb = { x: t.b.x - t0.b.x, y: t.b.y - t0.b.y };
-      if (Math.max(Math.hypot(va.x, va.y), Math.hypot(vb.x, vb.y)) < 12) return;
-      // tilt when the fingers move up / down together more than they spread or twist (all in px)
+      if (Math.max(Math.hypot(va.x, va.y), Math.hypot(vb.x, vb.y)) < 16) return;
+      // tilt when the fingers move up / down together (each mostly vertically) more than they spread or twist (px):
+      // two fingers pushed up rarely stay exactly parallel, so this allows them to drift apart a little
       let turn = t.ang - t0.ang;
       if (turn > Math.PI) turn -= 2 * Math.PI; else if (turn < -Math.PI) turn += 2 * Math.PI;
       const cy = (va.y + vb.y) / 2, cx = (va.x + vb.x) / 2;
-      const tilt = Math.sign(va.y) === Math.sign(vb.y) && Math.abs(cy) > 1.5 * Math.abs(cx) &&
-        Math.abs(cy) > 1.3 * Math.max(Math.abs(t.d - t0.d), (Math.abs(turn) * t0.d) / 2);
+      const vert = (v) => Math.abs(v.y) > 0.8 * Math.abs(v.x);
+      const tilt = Math.sign(va.y) === Math.sign(vb.y) && vert(va) && vert(vb) && Math.abs(cy) > 1.2 * Math.abs(cx) &&
+        Math.abs(cy) > 0.8 * Math.max(Math.abs(t.d - t0.d), (Math.abs(turn) * t0.d) / 2);
       g.mode = tilt ? 'tilt' : 'pinch';
     }
     if (g.mode === 'tilt') {

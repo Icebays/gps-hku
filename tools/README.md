@@ -224,5 +224,6 @@ level), and the levels of one storey (the IMDF ordinal: all the exits' ground le
 selector (`groups`), shown together. The lifts stand as glass shafts from their lowest level to their highest
 (`shafts`: lift units one above the other). Every plan opens at its top floor. A floor below ground is shown in the
 x-ray view (`map.js`): the whole map faded to 19 % and the plan drawn over it; above ground the buildings, roads and
-trees are cut away above the floor. The MTR lines are drawn on the ground above their tunnels, in the line's colour.
+trees are cut away above the floor. The MTR lines are drawn at the depth of their tracks (rail level, 1 m under the stations' platforms, straight between
+them), in a dark shade of the line's colour, seen faintly through the map.
 Needs `shapely`, `pyproj` and `pyshp`.
