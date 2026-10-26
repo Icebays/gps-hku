@@ -3,10 +3,12 @@
 
     python3 tools/build_station_plans.py "<IMDF folder>" <plan id> [<IMDF folder> <plan id> ...]
       -> data/indoor/<plan id>.json, and data/indoor/index.json: the station's places in data/places.json
-         (its 'mtr-<plan id>' place and its exits, each opening at its own exit's street level)
+         (its 'mtr-<plan id>' place and its exits)
 
-Each IMDF level is a floor at its own height (mPD): the platform, the concourse, and each exit's levels (named by the
-exit: 'A1-G' is exit A1's ground level). Drawn as the other plans are: the paid area and the kinds of units in
+Each IMDF level is drawn at its own height (mPD) - the platform, the concourse, each exit's levels (named by the exit:
+'A1-G' is exit A1's ground level) - and the levels of one storey (IMDF ordinal: all the exits' ground levels, say)
+are one floor of the selector ('groups'), shown together. The lifts stand as shafts from their lowest level to their
+highest ('shafts'). Drawn as the other plans are: the paid area and the kinds of units in
 colour (platforms, escalators and stairs, shops, toilets, staff rooms), the tracks and lift shafts dark, walls round
 the rooms and the floor's edge with the doors (openings) left open, steps across stairs and escalators, the
 platforms' and shops' names (English and Chinese), and symbols for the exits, gates, lifts, escalators, toilets,
@@ -94,7 +96,7 @@ def build(folder, plan_id):
         if not fl:
             nm = name(p.get('name')) or {'en': key}
             fl = floors[key] = {'id': key, 'tag': '+'.join(exits), 'short': short, 'name': {'en': nm.get('en', key), 'zh': nm.get('zh') or nm.get('en', key)},
-                                'y': y, 'levels': [], 'exits': exits}
+                                'y': y, 'ord': int(p.get('ordinal') or 0), 'levels': [], 'exits': exits}
         fl['levels'].append(lid)
     by_level = {}
     for k, fl in floors.items():
@@ -158,9 +160,45 @@ def build(folder, plan_id):
                  'areas': {k: flat_polys(unary_union(v).intersection(slab)) for k, v in A.items() if v},
                  'solids': {}, 'tables': [], 'chairs': [], 'walls': flat_lines(walls if walls.geom_type != 'GeometryCollection' else unary_union([g for g in walls.geoms if 'Line' in g.geom_type])),
                  'screens': [], 'doors': [l for d in door_lines for l in flat_lines(d)], 'stairs': hatches, 'thin': [], 'ink': [], 'steps': [],
-                 'labels': labels, 'icons': icons, 'exits': fl['exits']}
+                 'labels': labels, 'icons': icons, 'exits': fl['exits'], 'ord': fl['ord']}
         floor['walls'] = [w for w in floor['walls'] if len(w) >= 4]
         out.append(floor)
+    # the selector's floors: the levels of one storey (IMDF ordinal) together - the platform, the concourse, all the
+    # exits' ground levels... - each drawn at its own height
+    by_ord = {}
+    for f in out: by_ord.setdefault(f['ord'], []).append(f)
+    groups = []
+    for o, fs in sorted(by_ord.items(), key=lambda kv: -kv[0]):
+        shorts = {f['short'] for f in fs}
+        gid = shorts.pop() if len(shorts) == 1 else 'G' if o == 0 else f'L{o}' if o > 0 else f'BL{-o}'
+        while any(g['id'] == gid for g in groups): gid += "'"
+        nm = fs[0]['name'] if len(fs) == 1 else {k: ' / '.join(dict.fromkeys(f['name'][k] for f in sorted(fs, key=lambda f: f['y']))) for k in ('en', 'zh')}
+        groups.append({'id': gid, 'ord': o, 'name': nm, 'floors': [f['id'] for f in sorted(fs, key=lambda f: f['y'])]})
+        for f in fs: f['group'] = gid
+    # lift shafts in 3D: each lift (its units on different levels, one above the other) from its lowest level to above
+    # its highest
+    us = []
+    for u in F['unit']:
+        if u['p'].get('category') != 'elevator' or not u['g'] or u['p'].get('level_id') not in levels: continue
+        g = poly(u['g'])
+        if 0.5 < g.area < 60: us.append((levels[u['p']['level_id']]['g']['c'][0][0][0][2], g))
+    parent = list(range(len(us)))
+    def root(i):
+        while parent[i] != i: parent[i] = parent[parent[i]]; i = parent[i]
+        return i
+    for i in range(len(us)):
+        for j in range(i + 1, len(us)):
+            a, b = us[i][1], us[j][1]
+            if a.intersects(b) and a.intersection(b).area > 0.5 * min(a.area, b.area): parent[root(i)] = root(j)
+    lifts = {}
+    for i, u in enumerate(us): lifts.setdefault(root(i), []).append(u)
+    shafts = []
+    for grp in lifts.values():
+        ys = [y for y, _ in grp]
+        if max(ys) - min(ys) < 2: continue   # (a lift on one level only: drawn as its floor's void)
+        foot = unary_union([g for _, g in grp]).convex_hull.simplify(0.1)
+        if foot.geom_type != 'Polygon' or foot.area > 60: continue
+        shafts.append({'ring': [R(v) for xy in list(foot.exterior.coords)[:-1] for v in xy], 'y0': R(min(ys)), 'y1': R(max(ys) + 3)})
     venue = F['venue'][0]['p'] if F.get('venue') else {}
     vn = name(venue.get('name')) or {'en': plan_id}
     plat = next((f for f in out if f['short'] == 'P'), out[0])
@@ -168,9 +206,9 @@ def build(folder, plan_id):
     centre = [R(sum(px[0::2]) / len(px[0::2])), R(sum(px[1::2]) / len(px[1::2]))]
     d = {'place': plan_id, 'name': vn, 'centre': centre,
          'source': {'en': 'Floor plans: Lands Department, HKSAR - 3D indoor map of the station (IMDF)', 'zh': '平面圖：地政總署車站三維室內地圖（IMDF）', 'url': 'https://www.landsd.gov.hk/'},
-         'default': next((f['id'] for f in out if f['short'] == 'C'), out[0]['id']), 'floors': out}
+         'default': groups[0]['id'], 'groups': groups, 'shafts': shafts, 'floors': out}
     json.dump(d, open(os.path.join(OUT, plan_id + '.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
-    print(plan_id, vn.get('en'), len(out), 'floors:', ', '.join(f"{f['id']} {f['y']:g}" for f in out),
+    print(plan_id, vn.get('en'), len(out), 'levels in', len(groups), 'floors:', ', '.join(f"{g['id']} ({len(g['floors'])})" for g in groups), len(shafts), 'lift shafts',
           '|', os.path.getsize(os.path.join(OUT, plan_id + '.json')) // 1000, 'kB')
     return d
 
@@ -180,16 +218,10 @@ if __name__ == '__main__':
     places = json.load(open('data/places.json'))['places']
     for folder, plan_id in zip(args[0::2], args[1::2]):
         d = build(folder, plan_id)
-        # the station's own place, and each of its exits opening at its street level (that exit's Ground Level)
+        # the station's own place and its exits (the plan opens at its top floor, as every plan)
         index['mtr-' + plan_id] = plan_id + '.json'
         station = re.sub(r' Station$', '', d['name']['en'])
         for p in places:
-            if p.get('icon') != 'mtr' or station.lower() not in p['name']['en'].lower(): continue
-            for code in p.get('exit', []):
-                fs = [f for f in d['floors'] if code in f['exits']]
-                if not fs: continue
-                g = next((f for f in fs if re.search(r'(?<!Upper )Ground Level', f['name']['en'])), None) or next((f for f in fs if 'Ground' in f['name']['en']), None) \
-                    or min(fs, key=lambda f: abs(f['y'] - 10))
-                index[p['id']] = {'file': plan_id + '.json', 'floor': g['id']}
-                break
+            if p.get('icon') == 'mtr' and station.lower() in p['name']['en'].lower() and any(code in f['exits'] for code in p.get('exit', []) for f in d['floors']):
+                index[p['id']] = plan_id + '.json'
     json.dump(index, open(os.path.join(OUT, 'index.json'), 'w'), ensure_ascii=False, indent=1)

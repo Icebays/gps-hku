@@ -219,8 +219,10 @@ python3 tools/build_station_plans.py "<HKU Station folder>" hku-station "<Sai Yi
 python3 tools/build_mtr_lines.py                           # data/mtr-lines.json: the Island Line's tracks (OpenStreetMap)
 ```
 
-Each IMDF level is a floor at its own height (mPD); an exit's levels are named by the exit (`A1-G`: exit A1's ground
-level), and each exit place in `data/places.json` opens the plan at its own street level (`index.json` entries
-`{ "file", "floor" }`). Floors below ground cut a wider pit into the ground (its bottom dark), so they can be seen
-at an angle; while one is shown everything over it is cut away, roads, bridges and trees too. The MTR lines are drawn
-on the ground above their tunnels, in the line's colour. Needs `shapely`, `pyproj` and `pyshp`.
+Each IMDF level is drawn at its own height (mPD); an exit's levels are named by the exit (`A1-G`: exit A1's ground
+level), and the levels of one storey (the IMDF ordinal: all the exits' ground levels, say) are one floor of the
+selector (`groups`), shown together. The lifts stand as glass shafts from their lowest level to their highest
+(`shafts`: lift units one above the other). Every plan opens at its top floor. A floor below ground is shown in the
+x-ray view (`map.js`): the whole map faded to 19 % and the plan drawn over it; above ground the buildings, roads and
+trees are cut away above the floor. The MTR lines are drawn on the ground above their tunnels, in the line's colour.
+Needs `shapely`, `pyproj` and `pyshp`.

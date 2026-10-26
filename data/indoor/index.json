@@ -8,62 +8,20 @@
  "cheng-yu-tung-tower": "centennial-podium.json",
  "run-run-shaw-tower": "centennial-podium.json",
  "mtr-hku-station": "hku-station.json",
- "mtr-exit-a": {
-  "file": "hku-station.json",
-  "floor": "A1-G"
- },
- "mtr-exit-c1": {
-  "file": "hku-station.json",
-  "floor": "C1-G"
- },
- "mtr-exit-b1": {
-  "file": "hku-station.json",
-  "floor": "B1-G"
- },
- "mtr-exit-b2": {
-  "file": "hku-station.json",
-  "floor": "B2-G"
- },
- "mtr-exit-c2": {
-  "file": "hku-station.json",
-  "floor": "C2-G"
- },
+ "mtr-exit-a": "hku-station.json",
+ "mtr-exit-c1": "hku-station.json",
+ "mtr-exit-b1": "hku-station.json",
+ "mtr-exit-b2": "hku-station.json",
+ "mtr-exit-c2": "hku-station.json",
  "mtr-sai-ying-pun-station": "sai-ying-pun-station.json",
- "mtr-sai-ying-pun-a1": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "A1-UG"
- },
- "mtr-sai-ying-pun-a2": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "A2-G"
- },
- "mtr-sai-ying-pun-b1": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "B1-G"
- },
- "mtr-sai-ying-pun-b2": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "B2-R1"
- },
- "mtr-sai-ying-pun-b3": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "B3-G"
- },
- "mtr-sai-ying-pun-c": {
-  "file": "sai-ying-pun-station.json",
-  "floor": "C-UG2"
- },
+ "mtr-sai-ying-pun-a1": "sai-ying-pun-station.json",
+ "mtr-sai-ying-pun-a2": "sai-ying-pun-station.json",
+ "mtr-sai-ying-pun-b1": "sai-ying-pun-station.json",
+ "mtr-sai-ying-pun-b2": "sai-ying-pun-station.json",
+ "mtr-sai-ying-pun-b3": "sai-ying-pun-station.json",
+ "mtr-sai-ying-pun-c": "sai-ying-pun-station.json",
  "mtr-kennedy-town-station": "kennedy-town-station.json",
- "mtr-kennedy-town-a": {
-  "file": "kennedy-town-station.json",
-  "floor": "A-G"
- },
- "mtr-kennedy-town-b": {
-  "file": "kennedy-town-station.json",
-  "floor": "B-G"
- },
- "mtr-kennedy-town-c": {
-  "file": "kennedy-town-station.json",
-  "floor": "C-G"
- }
+ "mtr-kennedy-town-a": "kennedy-town-station.json",
+ "mtr-kennedy-town-b": "kennedy-town-station.json",
+ "mtr-kennedy-town-c": "kennedy-town-station.json"
 }

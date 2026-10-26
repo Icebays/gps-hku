@@ -154,6 +154,7 @@ async function init() {
   const scene = new THREE.Scene();
   s.scene = scene;
   const camera = new THREE.PerspectiveCamera(45, 1, 2, 8000);
+  camera.layers.enable(1);   // layer 1: the floor plans (assets/indoor.js), drawn on their own in the x-ray view
   s.camera = camera;
   const controls = new MapControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
@@ -171,6 +172,7 @@ async function init() {
   s.hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f7a, 1.6);
   s.sun = new THREE.DirectionalLight(0xffffff, 2.2);
   scene.add(s.hemi, s.sun, s.sun.target);
+  s.hemi.layers.enable(1); s.sun.layers.enable(1);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;   // re-rendered only when the view or the sun moves (fitShadow)
@@ -1890,6 +1892,24 @@ function toast(msg) {
   d.textContent = msg; S.wrap.appendChild(d); setTimeout(() => d.remove(), 2500);
 }
 
+/* X-ray view, for a floor plan below ground (a station): the map faded to XRAY_ALPHA over the sky colour, then the
+   plan (layer 1) drawn whole over it, so it reads through the ground and the buildings above it */
+const XRAY_ALPHA = 0.19;
+function xray(s) {
+  const r = s.renderer, cam = s.camera;
+  if (!s.fade) {
+    s.fade = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+    s.fadeScene = new THREE.Scene(); s.fadeScene.add(s.fade); s.fadeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+  s.fade.material.color.copy(s.scene.background); s.fade.material.opacity = 1 - XRAY_ALPHA;
+  r.autoClear = false;
+  cam.layers.set(0); r.render(s.scene, cam);   // (a colour background clears the screen first, as always)
+  r.render(s.fadeScene, s.fadeCam);
+  const bg = s.scene.background; s.scene.background = null;   // (else it would clear the faded map away)
+  r.clearDepth(); cam.layers.set(1); r.render(s.scene, cam);
+  s.scene.background = bg; cam.layers.enable(0); r.autoClear = true;
+}
+
 /* ---------------- frame ---------------- */
 function frame(now) {
   if (!S.running) return;
@@ -1911,7 +1931,7 @@ function frame(now) {
   }
   fitShadow(S);
   S.indoor?.update();
-  S.renderer.render(S.scene, S.camera);
+  if (S.xray) xray(S); else S.renderer.render(S.scene, S.camera);
   if (S.compass) S.compass.style.transform = `rotate(${(S.controls.getAzimuthalAngle() * 180) / Math.PI}deg)`;
   updatePins();
 }

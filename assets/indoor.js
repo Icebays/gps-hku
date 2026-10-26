@@ -40,11 +40,11 @@ if (uCutOn > 0.5 && vCutW.y > uCutY) {
 
 /* ---------- look ---------- */
 const THEME = {
-  light: { pit: 0x6f7773, slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, areaR: 0xe4def4, void: 0x9aa39e,
+  light: { shaft: 0x8fa5ba, shaftEdge: 0x4b5f73, slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, areaR: 0xe4def4, void: 0x9aa39e,
     shelf: 0xd8c09f, shelfDark: 0xb08d68, shelfG: 0x9cc285, column: 0xc3cac6, wallFill: 0x9aa49f, counter: 0xefc98f,
     bench: 0x9aa4a0, stool: 0x9aa4a0, armchair: 0xf0a24a, seat: 0x9aa4a0, top: 0xd9e8f1, leg: 0x7d8783, chair: 0x6f8f86,
     wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8, step: 0xc9d8d4, screen: 0xa9c3cc, ink: 0x7d8783 },
-  dark: { pit: 0x161a18, slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, areaR: 0x3b3752, void: 0x141816,
+  dark: { shaft: 0x6c8aa6, shaftEdge: 0x9fb6cc, slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, areaR: 0x3b3752, void: 0x141816,
     shelf: 0x7d6a54, shelfDark: 0x5e4c3a, shelfG: 0x4f6e43, column: 0x5f6863, wallFill: 0x8a958f, counter: 0x8a7350,
     bench: 0x5d6762, stool: 0x5d6762, armchair: 0xa86c34, seat: 0x5d6762, top: 0x47606e, leg: 0x8a948f, chair: 0x5f8077,
     wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b, step: 0x55625e, screen: 0x4f6670, ink: 0x8f9a94 },
@@ -207,7 +207,7 @@ function tableGeo(tables) {
 export function createIndoor(S) {
   const wrap = S.wrap;
   const labelBox = document.createElement('div'); labelBox.className = 'labels indoor-labels'; wrap.appendChild(labelBox);
-  const st = { index: null, data: {}, place: null, floor: null, group: null, labels: [], ui: null, theme: null };
+  const st = { index: null, data: {}, place: null, floor: null, shown: null, under: [], labels: [], views: {}, shafts: null, ui: null, theme: null };
   const mats = {};
   const mat = (k, lit, extra = {}) => {
     const key = k + (lit ? 'L' : 'B');
@@ -225,20 +225,18 @@ export function createIndoor(S) {
   }
   const loadIndex = () => st.index || (st.index = fetch('data/indoor/index.json').then((r) => r.json()).catch(() => ({})));
 
-  function cutMask(d, cur, pad = 0) {
+  function cutMask(d, cur) {
     // the outlines of this floor and the floors above it, 1.5 m wider, as the top-down cut mask: the building is cut
     // open where the plan is drawn and where floors above it stand, so a neighbouring part the plans only cover lower
-    // down (the west building, on G/F and 1/F) stays whole, roof and all, when the floor shown is above it.
-    // A floor deep below ground (a station, pad > 0): its own outline only, pad metres wider, so it can be seen at an
-    // angle down the pit and not just straight down through a slot the width of a passage
-    const floors = pad ? [cur] : d.floors.filter((fl) => fl.y >= cur.y - 0.1);
+    // down (the west building, on G/F and 1/F) stays whole, roof and all, when the floor shown is above it
+    const floors = d.floors.filter((fl) => fl.y >= cur.y - 0.1);
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
     for (const fl of floors) for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) {
       x0 = Math.min(x0, p[0][i]); x1 = Math.max(x1, p[0][i]); z0 = Math.min(z0, p[0][i + 1]); z1 = Math.max(z1, p[0][i + 1]);
     }
-    x0 -= 4 + pad; z0 -= 4 + pad; x1 += 4 + pad; z1 += 4 + pad;
-    const R = pad > 12 ? 2 : 4, cv = document.createElement('canvas'); cv.width = Math.ceil((x1 - x0) * R); cv.height = Math.ceil((z1 - z0) * R);
-    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = (3 + 2 * pad) * R; g.lineJoin = 'round';
+    x0 -= 4; z0 -= 4; x1 += 4; z1 += 4;
+    const R = 4, cv = document.createElement('canvas'); cv.width = Math.ceil((x1 - x0) * R); cv.height = Math.ceil((z1 - z0) * R);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = 3 * R; g.lineJoin = 'round';
     for (const fl of floors) for (const p of fl.slab) {
       g.beginPath();
       for (let i = 0; i < p[0].length; i += 2) g[i ? 'lineTo' : 'moveTo']((p[0][i] - x0) * R, (p[0][i + 1] - z0) * R);
@@ -294,9 +292,25 @@ export function createIndoor(S) {
       el.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">${ICONS[k] || ''}</svg>`;
       labels.push({ el, pos: new THREE.Vector3(x, fl.y + LIFT + 0.3, z), h: 1, k: 'icon' });
     }
+    g.traverse((o) => o.layers.set(1));   // (layer 1: drawn over the faded map when the floor is below ground)
     return { group: g, labels };
   }
   const built = (fl) => (fl._built = fl._built || build(fl));
+  // lift shafts (a station's 'shafts'): glass columns from the lowest level a lift serves to above its highest
+  function shaftsOf(d) {
+    if (d._shafts !== undefined) return d._shafts;
+    if (!d.shafts?.length) return (d._shafts = null);
+    const g = new THREE.Group(); g.name = 'indoor-shafts';
+    const glass = mats.shaftB || (mats.shaftB = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
+    const edge = mats.shaftEdgeLn || (mats.shaftEdgeLn = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.7 }));
+    for (const sh of d.shafts) {
+      const geo = new THREE.ExtrudeGeometry(shapes([sh.ring]), { depth: sh.y1 - sh.y0, bevelEnabled: false, curveSegments: 1 }).rotateX(-Math.PI / 2).translate(0, sh.y0, 0);
+      const m = new THREE.Mesh(geo, glass); m.renderOrder = 6; g.add(m);
+      g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edge));
+    }
+    g.traverse((o) => o.layers.set(1));
+    return (d._shafts = g);
+  }
   // floors below that show through atria (open holes in the floor), down to two levels
   function below(d, fl) {
     const out = [], sorted = [...d.floors].sort((a, b) => b.y - a.y);
@@ -309,11 +323,22 @@ export function createIndoor(S) {
     return out;
   }
   function detach() {
-    if (!st.group) return;
-    S.scene.remove(st.group.group); st.group.labels.forEach((l) => l.el.remove());
-    (st.under || []).forEach((u) => S.scene.remove(u.group));
-    if (st.pit) { S.scene.remove(st.pit); st.pit.geometry.dispose(); st.pit = null; if (S.ground) S.ground.visible = true; }
-    st.group = null; st.under = [];
+    if (st.shafts) { S.scene.remove(st.shafts); st.shafts = null; }
+    if (!st.shown) return;
+    for (const b of [...st.shown, ...(st.under || [])]) S.scene.remove(b.group);
+    st.labels.forEach((l) => l.el.remove());
+    st.shown = null; st.under = []; st.labels = [];
+  }
+  // a selector entry's floors: a station's storey - its levels at their own heights - or the one floor
+  const members = (d, id) => {
+    const g = d.groups?.find((x) => x.id === id);
+    return g ? g.floors.map((f) => d.floors.find((x) => x.id === f)).filter(Boolean) : d.floors.filter((f) => f.id === id);
+  };
+  const entries = (d) => d.groups || [...d.floors].sort((a, b) => b.y - a.y);   // top first
+  function bounds(fls) {   // centre and size of floors, for the camera
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const fl of fls) for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) { x0 = Math.min(x0, p[0][i]); x1 = Math.max(x1, p[0][i]); z0 = Math.min(z0, p[0][i + 1]); z1 = Math.max(z1, p[0][i + 1]); }
+    return { center: new THREE.Vector3((x0 + x1) / 2, Math.min(...fls.map((f) => f.y)), (z0 + z1) / 2), size: Math.max(x1 - x0, z1 - z0) };
   }
 
   function show(floorId) {
@@ -321,39 +346,32 @@ export function createIndoor(S) {
     detach();
     st.floor = floorId;
     st.ui?.querySelectorAll('[data-floor]').forEach((b) => b.classList.toggle('on', b.dataset.floor === String(floorId)));
-    if (floorId == null) { CUT_U.uCutOn.value = 0; S.onIndoor?.(null); return; }
-    const fl = d.floors.find((f) => f.id === floorId); if (!fl) return;
-    built(fl);
-    if (!fl._c) {   // centre and size of the floor, for the camera
-      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-      for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) { x0 = Math.min(x0, p[0][i]); x1 = Math.max(x1, p[0][i]); z0 = Math.min(z0, p[0][i + 1]); z1 = Math.max(z1, p[0][i + 1]); }
-      fl._c = { center: new THREE.Vector3((x0 + x1) / 2, fl.y, (z0 + z1) / 2), size: Math.max(x1 - x0, z1 - z0) };
+    if (floorId == null) { CUT_U.uCutOn.value = 0; S.xray = false; S.onIndoor?.(null); return; }
+    const fls = members(d, floorId); if (!fls.length) return;
+    st.shown = fls.map(built);
+    st.shown.forEach((b) => S.scene.add(b.group));
+    st.under = fls.length === 1 ? below(d, fls[0]).map(built) : []; st.under.forEach((u) => S.scene.add(u.group));
+    st.labels = st.shown.flatMap((b) => b.labels); st.labels.forEach((l) => labelBox.appendChild(l.el));
+    st.shafts = shaftsOf(d); if (st.shafts) S.scene.add(st.shafts);
+    const v = (st.views[st.place + '|' + floorId] = st.views[st.place + '|' + floorId] || { id: floorId, _c: bounds(fls) });
+    // below ground (a station's platform, concourse...): no cutting - the whole map fades (map.js x-ray view) and the
+    // floor is drawn over it; above ground the buildings are cut open above the lowest of the floors shown
+    if (v.deep == null) v.deep = fls.some((f) => { const c = bounds([f]).center, gy = S.tiles?.heightAt(c.x, c.z); return gy != null && gy > f.y + 3; });
+    if (v.deep) { CUT_U.uCutOn.value = 0; S.xray = true; }
+    else {
+      const low = fls.reduce((a, b) => (b.y < a.y ? b : a));
+      low._cut = low._cut || cutMask(d, low);
+      CUT_U.uCutMap.value = low._cut.tex; CUT_U.uCutBox.value.copy(low._cut.box);
+      CUT_U.uCutOn.value = 1; CUT_U.uCutY.value = low.y + 0.25; S.xray = false;
     }
-    st.group = fl._built;
-    S.scene.add(st.group.group);
-    st.under = below(d, fl).map(built); st.under.forEach((u) => S.scene.add(u.group));
-    st.group.labels.forEach((l) => labelBox.appendChild(l.el));
-    // below ground (a station): a wider pit, its bottom dark round the plan
-    if (fl._deep == null) { const gy = S.tiles?.heightAt(fl._c.center.x, fl._c.center.z); fl._deep = gy != null && gy > fl.y + 3 ? gy - fl.y : 0; }
-    const pad = fl._deep ? Math.min(30, 4 + fl._deep * 0.6) : 0;
-    fl._cut = fl._cut || cutMask(d, fl, pad);
-    if (fl._deep) {
-      const B = fl._cut.box, m = 40 + fl._deep;
-      st.pit = new THREE.Mesh(new THREE.PlaneGeometry(B.z + 2 * m, B.w + 2 * m).rotateX(-Math.PI / 2), mat('pit', false));
-      st.pit.position.set(B.x + B.z / 2, fl.y + LIFT - 0.3, B.y + B.w / 2); st.pit.name = 'indoor-pit';
-      S.scene.add(st.pit);
-      if (S.ground) S.ground.visible = false;   // (the flat ground beyond the terrain would show through the pit's sides)
-    }
-    CUT_U.uCutMap.value = fl._cut.tex; CUT_U.uCutBox.value.copy(fl._cut.box);
-    CUT_U.uCutOn.value = 1; CUT_U.uCutY.value = fl.y + 0.25;
     paint();
-    S.onIndoor?.(fl);
+    S.onIndoor?.(v);
   }
 
   function selector(d) {
     st.ui?.remove();
     const ui = document.createElement('div'); ui.className = 'map-ui map-floors';
-    const sorted = [...d.floors].sort((a, b) => b.y - a.y);
+    const sorted = entries(d);
     ui.innerHTML = `<button data-floor="" title="${getLang() === 'zh' ? '外觀' : 'Outside view'}" class="out"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M3 21h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
       // (a station's exit levels: the exit above the level, 'A1' over 'G')
       sorted.map((f) => `<button data-floor="${f.id}" title="${esc(L(f.name))}"${f.tag ? ' class="tag"' : ''}>${f.tag ? `<small>${esc(f.tag)}</small>${esc(f.short)}` : esc(f.id)}</button>`).join('') +
@@ -388,17 +406,18 @@ export function createIndoor(S) {
     if (st.place !== placeId) close();
     st.place = placeId;
     selector(d);
-    show(floorId && d.floors.some((f) => f.id === floorId) ? floorId : entry.floor || d.default || d.floors[0].id);
+    // (a shared link's floor, else the top floor: the plan opens from the top, the user goes down)
+    show(floorId && members(d, floorId).length ? floorId : entries(d)[0].id);
     return true;
   }
   function close() {
-    detach();
+    detach(); S.xray = false;
     st.ui?.remove(); st.ui = null; st.place = null; st.floor = null; CUT_U.uCutOn.value = 0;
   }
 
   const _v = new THREE.Vector3();
   function update() {
-    if (!st.group) return;
+    if (!st.shown) return;
     place();
     const w = wrap.clientWidth, h = wrap.clientHeight, cam = S.camera;
     // view direction across the floor, for the cutaway walls
@@ -407,7 +426,7 @@ export function createIndoor(S) {
     const pxPerM = (d) => h / 2 / (d * Math.tan((cam.fov * Math.PI) / 360));
     const placed = [];
     // symbols first, then room names, zones, shelf marks (biggest first)
-    const order = st.group.labels.map((l) => ({ l, d: cam.position.distanceTo(l.pos) }))
+    const order = st.labels.map((l) => ({ l, d: cam.position.distanceTo(l.pos) }))
       .sort((a, b) => (a.l.k === 'icon' ? -2 : a.l.r ? -1 : 0) - (b.l.k === 'icon' ? -2 : b.l.r ? -1 : 0) || b.l.h - a.l.h);
     for (const { l, d } of order) {
       _v.copy(l.pos).project(cam);
