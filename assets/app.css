@@ -264,6 +264,9 @@ body.map-mode .page { max-width: none; padding: 0; }
 .area-labels { z-index: 2; }
 .area-label { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); text-align: center; font-weight: 800; font-size: 20px; letter-spacing: .08em; color: #0f5132; text-shadow: 0 0 4px #fff, 0 0 10px #fff, 0 0 2px #fff; white-space: nowrap; opacity: .9; will-change: transform; }
 .area-label small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+/* MTR lines' names along them (in the line's colour) */
+.area-label.mtr { font-size: 13px; font-weight: 800; letter-spacing: .04em; opacity: 1; }
+.area-label.mtr small { font-size: 9.5px; letter-spacing: .06em; text-transform: none; }
 /* groups of residences: smaller, light blue, a serif italic - never mistaken for a campus */
 .area-label.halls { font-family: Georgia, 'Noto Serif TC', 'Songti TC', serif; font-style: italic; font-weight: 700; font-size: 14px; letter-spacing: .02em; color: #1971c2; opacity: 1; }
 .area-label.halls small { font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: none; }
@@ -310,6 +313,8 @@ body.map-mode .page { max-width: none; padding: 0; }
 .map-floors button { width: 42px; height: 36px; flex: none; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); cursor: pointer; font: inherit; font-size: 14px; font-weight: 650; display: grid; place-items: center; }
 .map-floors button:hover { background: var(--bg-hover); }
 .map-floors button.on { background: var(--accent); color: #fff; }
+.map-floors button.tag { display: flex; flex-direction: column; justify-content: center; line-height: 1.05; font-size: 12px; }
+.map-floors button.tag small { font-size: 9.5px; font-weight: 700; opacity: .75; }
 .map-floors button.out.on { background: var(--bg-hover); color: var(--text); }
 .map-floors .src { display: block; text-align: center; font-size: 12px; line-height: 22px; color: var(--text-soft); text-decoration: none; }
 .indoor-labels { z-index: 3; }
@@ -321,6 +326,9 @@ body.map-mode .page { max-width: none; padding: 0; }
 .indoor-icon { position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; color: #fff; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.25); will-change: transform; }
 .indoor-icon.wc-m { background: #3d6fb5; } .indoor-icon.wc-f { background: #b8457a; } .indoor-icon.lift { background: #4b5563; }
 .indoor-icon.exit { background: #15803d; } .indoor-icon.opac { background: #c2410c; } .indoor-icon.dict { background: #8d5524; }
+.indoor-icon.wc-a { background: #2563eb; } .indoor-icon.escalator { background: #4b5563; } .indoor-icon.gate { background: #0f766e; }
+.indoor-icon.aed { background: #dc2626; } .indoor-icon.info { background: #2563eb; } .indoor-icon.ticket { background: #7c3aed; }
+.indoor-icon.mtr-exit { background: #00944f; border-radius: 3px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .indoor-label.shelf { color: #d9b58c; } }
 :root[data-theme="dark"] .indoor-label.shelf { color: #d9b58c; }
 @media (max-width: 860px) { .map-floors { left: 8px; } .map-floors button { width: 40px; height: 34px; } }

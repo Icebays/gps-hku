@@ -188,6 +188,7 @@ async function init() {
   s.indoor = createIndoor(s);
   s.onIndoor = (fl) => {
     setParam('floor', fl ? fl.id : null);
+    if (fl) cutScene(s);
     s.hlHidden = !!fl;   // the gold highlight would hide the plan
     s.hl.forEach((m) => (m.visible = !fl)); (s.hlx || []).forEach((m) => (m.visible = !fl));
     // bring the floor into view (closer than the building overview), keeping the heading
@@ -251,7 +252,9 @@ async function init() {
     loadOverlay(),
     fetch('assets/model/satellite-buildings.json').then((r) => r.json()).catch(() => []),
     fetch('data/indoor/index.json').then((r) => r.json()).catch(() => ({})),
-  ]).then(([, bjson, campus, , photoIds, indoorIndex]) => {
+    fetch('data/mtr-lines.json').then((r) => r.json()).catch(() => null),
+  ]).then(([, bjson, campus, , photoIds, indoorIndex, mtrLines]) => {
+    s.mtrLines = mtrLines;
     s.withFloors = new Set(Object.keys(indoorIndex).filter((k) => !k.startsWith('_')));   // places with 3D floor plans
     clearInterval(tick);
     s.campus = campus;
@@ -650,9 +653,22 @@ function cycleBasemap() {
 }
 function toggleLayers() { S.legend.hidden = !S.legend.hidden; S.legend.classList.toggle('show', !S.legend.hidden); }
 
+// a floor shown cuts away what stands over it (cutify: the buildings and terrain have it from the start); for floors
+// below ground - a station - the rest too: roads, bridges, trees, the ground plane. Again while a floor is shown, for
+// what streams in (cutify does each material once; the plans' own meshes and the lines are left as they are)
+const CUTTABLE = (m) => m && (m.isMeshLambertMaterial || m.isMeshBasicMaterial || m.isMeshStandardMaterial || m.isMeshPhongMaterial);
+function cutScene(s) {
+  const walk = (o) => {
+    if (o.name?.startsWith('indoor-')) return;
+    if (o.isMesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (CUTTABLE(m)) cutify(m);
+    o.children.forEach(walk);
+  };
+  walk(s.scene);
+}
+
 /* ---------------- campus areas ---------------- */
 // outlines: campuses green, groups of residences light blue (and a little lighter on the dark map)
-const areaColour = (a, dark) => (a.kind === 'halls' ? (dark ? 0x74c0fc : 0x4dabf7) : dark ? 0x7fd6a4 : 0x0f5132);
+const areaColour = (a, dark) => (a.colour ? new THREE.Color(a.colour).getHex() : a.kind === 'halls' ? (dark ? 0x74c0fc : 0x4dabf7) : dark ? 0x7fd6a4 : 0x0f5132);
 const HALLS_NEAR = 1600;   // m: groups of residences are named within this (campuses always)
 function makeAreas() {
   const areas = S.campus?.areas || [];
@@ -671,6 +687,18 @@ function makeAreas() {
       drapeArea(line);
       S.areaLines.add(line);
     }
+    // MTR lines (data/mtr-lines.json, OpenStreetMap): their tracks on the ground above them, in the line's colour,
+    // solid and wider, and faintly through what stands over them
+    for (const ml of S.mtrLines?.lines || []) for (const t of ml.tracks) {
+      const a = { kind: 'mtr', colour: ml.colour, open: true, boundary: t.reduce((o, v, i) => (i % 2 ? o : [...o, [v, t[i + 1]]]), []) };
+      const line = new Line2(new LineGeometry(), new LineMaterial({ color: areaColour(a), linewidth: 4.5, transparent: true, opacity: 0.85, fog: false }));
+      line.renderOrder = 2; line.userData.area = a;
+      const ghost = new Line2(line.geometry, line.material.clone());
+      ghost.material.depthTest = false; ghost.material.opacity = 0.35; ghost.renderOrder = 3;
+      line.userData.ghost = ghost; line.add(ghost);
+      drapeArea(line);
+      S.areaLines.add(line);
+    }
     S.scene.add(S.areaLines);
   }
   S.areaLabels.innerHTML = '';
@@ -685,18 +713,31 @@ function makeAreas() {
     S.areaLabels.appendChild(el);
     return { el, halls, near: halls ? HALLS_NEAR : Infinity, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 60) + (halls ? 25 : 40), z) };
   });
+  // the lines' names along them: a third and two thirds along their longest track
+  for (const ml of S.mtrLines?.lines || []) {
+    const t = [...ml.tracks].sort((a, b) => b.length - a.length)[0]; if (!t) continue;
+    for (const f of [0.3, 0.7]) {
+      const i = 2 * Math.floor((t.length / 2 - 1) * f), x = t[i], z = t[i + 1];
+      const el = document.createElement('div');
+      el.className = 'area-label mtr'; el.style.color = ml.colour;
+      el.innerHTML = `${esc(L(ml.name).replace(/^(MTR |港鐵)/, ''))}<small>${esc(getLang() === 'zh' ? ml.name.en.replace(/^MTR /, '') : ml.name.zh.replace(/^港鐵/, ''))}</small>`;
+      S.areaLabels.appendChild(el);
+      S.areas.push({ el, mtr: true, near: HALLS_NEAR * 1.5, pos: new THREE.Vector3(x, (groundHeight(x, z, S.terrain) ?? 10) + 12, z) });
+    }
+  }
 }
 
 // an area's outline on the ground: on the terrain meshes once the tiles under it are in (until then the 10 m height
 // grid); frame() re-drapes the outlines still waiting for their terrain
 function drapeArea(line) {
   const a = line.userData.area, xs = a.boundary.map((p) => p[0]), zs = a.boundary.map((p) => p[1]);
-  const tiles = [...S.tiles.tiles.values()].filter(({ info: { extent: e } }) => e[0] < Math.max(...xs) && e[1] > Math.min(...xs) && e[2] < Math.max(...zs) && e[3] > Math.min(...zs));
+  const tiles = line.userData.tiles || (line.userData.tiles = [...S.tiles.tiles.values()].filter(({ info: { extent: e } }) => e[0] < Math.max(...xs) && e[1] > Math.min(...xs) && e[2] < Math.max(...zs) && e[3] > Math.min(...zs)));
   const ready = tiles.every((t) => t.terrain);
   if (!ready && line.userData.built) return;   // (still waiting)
   const h = ready ? heightIndex(tiles.map((t) => t.terrain.full)) : null;
   const pts = [];
   a.boundary.forEach((p, i) => {
+    if (a.open && i === a.boundary.length - 1) return;   // (a line, not an outline: no closing edge)
     const q = a.boundary[(i + 1) % a.boundary.length];
     const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
     for (let k = 0; k < n; k++) {
@@ -704,7 +745,8 @@ function drapeArea(line) {
       pts.push(x, (Number.isFinite(y) ? y : S.tiles.heightAt(x, z) ?? 60) + 1.5, z);
     }
   });
-  pts.push(pts[0], pts[1], pts[2]);   // closed
+  if (a.open) { const [x, z] = a.boundary.at(-1), y = h?.(x, z); pts.push(x, (Number.isFinite(y) ? y : S.tiles.heightAt(x, z) ?? 60) + 1.5, z); }
+  else pts.push(pts[0], pts[1], pts[2]);   // closed
   line.geometry.dispose(); line.geometry = new LineGeometry().setPositions(pts);
   line.computeLineDistances(); line.userData.ghost.geometry = line.geometry;
   line.userData.built = true; line.userData.draped = ready;
@@ -729,7 +771,7 @@ function makePins() {
   S.labels.innerHTML = ''; S.pins = [];
   const byArea = new Set((S.campus?.areas || []).map((a) => a.place).filter(Boolean));   // (named by their area)
   for (const p of S.places.places) {
-    if (S.hiddenCats?.has(p.cat) || byArea.has(p.id)) continue;
+    if (S.hiddenCats?.has(p.cat) || byArea.has(p.id) || p.pin === false) continue;
     const pos = placeAnchor(p); if (!pos) continue;
     const el = document.createElement('div');
     el.className = 'pin' + (p.cat === 'landmark' || p.cat === 'transport' ? '' : ' small') + (S.selected?.place?.id === p.id ? ' active' : '');
@@ -747,10 +789,12 @@ function updatePins() {
   const w = S.wrap.clientWidth, h = S.wrap.clientHeight;
   // groups of residences go with the residences' category (legend)
   const noHalls = !!S.hiddenCats?.has('hall');
-  S.areaLines?.children.forEach((l) => { if (l.userData.area.kind === 'halls') l.visible = !noHalls; });
+  // (and the MTR lines, drawn on the ground above their tunnels, give way to a floor plan shown)
+  const plan = S.indoor?.floor != null;
+  S.areaLines?.children.forEach((l) => { const k = l.userData.area.kind; if (k === 'halls') l.visible = !noHalls; else if (k === 'mtr') l.visible = !plan; });
   for (const a of S.areas || []) {
     _v.copy(a.pos).project(S.camera);
-    const vis = !(a.halls && noHalls) && _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 && S.camera.position.distanceTo(a.pos) < a.near;
+    const vis = !(a.halls && noHalls) && !(a.mtr && plan) && _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 && S.camera.position.distanceTo(a.pos) < a.near;
     a.el.style.display = vis ? '' : 'none';
     if (vis) a.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * w}px, ${(-_v.y * 0.5 + 0.5) * h}px) translate(-50%, -50%)`;
   }
@@ -1860,7 +1904,9 @@ function frame(now) {
   if (S.trees) for (const c of S.trees.children) c.visible = cam.distanceTo(c.userData.center) < FEATURE_NEAR + c.userData.radius;
   if (S.tiles && (S.photoTick = (S.photoTick || 0) + 1) % 20 === 0) {
     managePhotos(S);
-    const wait = S.areaLines?.children.find((l) => !l.userData.draped);   // one outline at a time
+    if (S.indoor?.floor != null) cutScene(S);
+    // one outline at a time, the first whose tiles' terrain is in (a long line may wait for tiles off screen)
+    const wait = S.areaLines?.children.find((l) => !l.userData.draped && l.userData.tiles?.every((t) => t.terrain));
     if (wait) drapeArea(wait);
   }
   fitShadow(S);

@@ -209,3 +209,18 @@ floor) go through `tools/build_indoor_raster.py`, which writes the same format. 
 model: 2/F to the surveyed sections of the podium and towers, the others to 2/F through the columns, cores and atria
 they share. The ink is traced into floor lines. Walls stand only round the classrooms, found from their red numbers
 and matched to their seat counts. The atria and the footprint come from the model. Needs `scikit-image` as well.
+
+The MTR stations (HKU, Sai Ying Pun, Kennedy Town) come from the Lands Department's 3D indoor maps (IMDF: levels,
+units, openings, amenities, sections, occupants; GeoJSON or shapefiles, read by `tools/imdf.py`):
+
+```bash
+python3 tools/build_station_plans.py "<HKU Station folder>" hku-station "<Sai Ying Pun Station folder>" sai-ying-pun-station \
+  "<Kennedy Town Station folder>" kennedy-town-station      # data/indoor/<id>.json + index.json entries
+python3 tools/build_mtr_lines.py                           # data/mtr-lines.json: the Island Line's tracks (OpenStreetMap)
+```
+
+Each IMDF level is a floor at its own height (mPD); an exit's levels are named by the exit (`A1-G`: exit A1's ground
+level), and each exit place in `data/places.json` opens the plan at its own street level (`index.json` entries
+`{ "file", "floor" }`). Floors below ground cut a wider pit into the ground (its bottom dark), so they can be seen
+at an angle; while one is shown everything over it is cut away, roads, bridges and trees too. The MTR lines are drawn
+on the ground above their tunnels, in the line's colour. Needs `shapely`, `pyproj` and `pyshp`.

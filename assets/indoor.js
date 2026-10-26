@@ -40,11 +40,11 @@ if (uCutOn > 0.5 && vCutW.y > uCutY) {
 
 /* ---------- look ---------- */
 const THEME = {
-  light: { slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, areaR: 0xe4def4, void: 0x9aa39e,
+  light: { pit: 0x6f7773, slab: 0xfbf8f1, areaY: 0xf4e7c3, areaG: 0xdcebc9, areaC: 0xcfe9e6, areaN: 0xe4e6e3, areaP: 0xf5ddd2, areaR: 0xe4def4, void: 0x9aa39e,
     shelf: 0xd8c09f, shelfDark: 0xb08d68, shelfG: 0x9cc285, column: 0xc3cac6, wallFill: 0x9aa49f, counter: 0xefc98f,
     bench: 0x9aa4a0, stool: 0x9aa4a0, armchair: 0xf0a24a, seat: 0x9aa4a0, top: 0xd9e8f1, leg: 0x7d8783, chair: 0x6f8f86,
     wall: 0x9aa49f, ghost: 0x9aa49f, door: 0x9aa5a0, stairs: 0x5aa39b, thin: 0xb5bcb8, step: 0xc9d8d4, screen: 0xa9c3cc, ink: 0x7d8783 },
-  dark: { slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, areaR: 0x3b3752, void: 0x141816,
+  dark: { pit: 0x161a18, slab: 0x2a302d, areaY: 0x4a4330, areaG: 0x34452f, areaC: 0x2c4746, areaN: 0x393d3b, areaP: 0x4a3832, areaR: 0x3b3752, void: 0x141816,
     shelf: 0x7d6a54, shelfDark: 0x5e4c3a, shelfG: 0x4f6e43, column: 0x5f6863, wallFill: 0x8a958f, counter: 0x8a7350,
     bench: 0x5d6762, stool: 0x5d6762, armchair: 0xa86c34, seat: 0x5d6762, top: 0x47606e, leg: 0x8a948f, chair: 0x5f8077,
     wall: 0x8a958f, ghost: 0x8a958f, door: 0x6f7a74, stairs: 0x5aa39b, thin: 0x56605b, step: 0x55625e, screen: 0x4f6670, ink: 0x8f9a94 },
@@ -89,11 +89,23 @@ const ICONS = {
   printer: '<path d="M7 9V4h10v5M7 17H5a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 5 9h14a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 19 17h-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 14h10v6H7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
   opac: '<rect x="3.5" y="4.5" width="17" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 20h6M12 15.5V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="11" cy="9.6" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12.7 11.3l2.3 2.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   dict: '<path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H17M9 8.5h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  // MTR stations (tools/build_station_plans.py)
+  'wc-a': '<circle cx="10.5" cy="4.3" r="2" fill="currentColor"/><path d="M10.5 7.5v6h4.6l2.4 5.2M10.5 10.6h4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11.3a5 5 0 1 0 6.9 6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  escalator: '<path d="M3 18.5h4.2l9.2-10.5H21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="4.6" r="1.8" fill="currentColor"/><path d="M10 7.6v4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  gate: '<path d="M5 4v16M19 4v16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M8 12h8M13 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  aed: '<path d="M12 20.5s-8-4.9-8-10.7A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 8 2.4c0 5.8-8 10.7-8 10.7z" fill="currentColor"/><path d="M12.8 9.6l-2.6 3.8h3l-2 3.6" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  info: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 10.5v6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="7.3" r="1.3" fill="currentColor"/>',
+  ticket: '<path d="M3.5 7.5h17v3a1.8 1.8 0 0 0 0 3.6v3h-17v-3a1.8 1.8 0 0 0 0-3.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 8.5v7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.5 1.5"/>',
+  // the MTR's exit sign (出), as on the map's exit pins
+  'mtr-exit': '<path transform="translate(-3 0.5) scale(0.3)" fill="currentColor" d="M44.4 14h11.2v48.8H44.4zM24 16.8h10.8v8.4H24zM65.2 16.8H76v8.4H65.2zM24 25.2h52v10.4H24zM24 41.2h10.8v12H24zM65.2 41.2H76v12H65.2zM24 53.2h52v9.6H24z"/>',
 };
 const ICON_NAME = {
   'wc-m': { en: 'Male toilet', zh: '男洗手間' }, 'wc-f': { en: 'Female toilet', zh: '女洗手間' }, lift: { en: 'Lift', zh: '升降機' },
   exit: { en: 'Fire exit', zh: '走火通道' }, printer: { en: 'Multi-function printer', zh: '多功能打印機' },
   opac: { en: 'Library catalogue (OPAC)', zh: '館藏目錄電腦 (OPAC)' }, dict: { en: 'Dictionary stand', zh: '字典架' },
+  'wc-a': { en: 'Accessible toilet', zh: '暢通易達洗手間' }, escalator: { en: 'Escalator', zh: '扶手電梯' }, gate: { en: 'Fare gates', zh: '入閘機' },
+  aed: { en: 'Defibrillator (AED)', zh: '自動心臟除顫器' }, info: { en: 'Customer service / enquiry', zh: '客務中心／查詢' },
+  ticket: { en: 'Ticket machine', zh: '售票機' }, 'mtr-exit': { en: 'Station exit', zh: '車站出口' },
 };
 const T = (o) => o[getLang()] || o.en;
 
@@ -213,18 +225,21 @@ export function createIndoor(S) {
   }
   const loadIndex = () => st.index || (st.index = fetch('data/indoor/index.json').then((r) => r.json()).catch(() => ({})));
 
-  function cutMask(d, cur) {
+  function cutMask(d, cur, pad = 0) {
     // the outlines of this floor and the floors above it, 1.5 m wider, as the top-down cut mask: the building is cut
     // open where the plan is drawn and where floors above it stand, so a neighbouring part the plans only cover lower
-    // down (the west building, on G/F and 1/F) stays whole, roof and all, when the floor shown is above it
+    // down (the west building, on G/F and 1/F) stays whole, roof and all, when the floor shown is above it.
+    // A floor deep below ground (a station, pad > 0): its own outline only, pad metres wider, so it can be seen at an
+    // angle down the pit and not just straight down through a slot the width of a passage
+    const floors = pad ? [cur] : d.floors.filter((fl) => fl.y >= cur.y - 0.1);
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-    for (const fl of d.floors) for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) {
+    for (const fl of floors) for (const p of fl.slab) for (let i = 0; i < p[0].length; i += 2) {
       x0 = Math.min(x0, p[0][i]); x1 = Math.max(x1, p[0][i]); z0 = Math.min(z0, p[0][i + 1]); z1 = Math.max(z1, p[0][i + 1]);
     }
-    x0 -= 4; z0 -= 4; x1 += 4; z1 += 4;
-    const R = 4, cv = document.createElement('canvas'); cv.width = Math.ceil((x1 - x0) * R); cv.height = Math.ceil((z1 - z0) * R);
-    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = 3 * R; g.lineJoin = 'round';
-    for (const fl of d.floors) if (fl.y >= cur.y - 0.1) for (const p of fl.slab) {
+    x0 -= 4 + pad; z0 -= 4 + pad; x1 += 4 + pad; z1 += 4 + pad;
+    const R = pad > 12 ? 2 : 4, cv = document.createElement('canvas'); cv.width = Math.ceil((x1 - x0) * R); cv.height = Math.ceil((z1 - z0) * R);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = (3 + 2 * pad) * R; g.lineJoin = 'round';
+    for (const fl of floors) for (const p of fl.slab) {
       g.beginPath();
       for (let i = 0; i < p[0].length; i += 2) g[i ? 'lineTo' : 'moveTo']((p[0][i] - x0) * R, (p[0][i + 1] - z0) * R);
       g.closePath(); g.fill(); g.stroke();
@@ -270,7 +285,7 @@ export function createIndoor(S) {
     for (const l of fl.labels) {
       const el = document.createElement('div');
       el.className = 'indoor-label ' + l.k + (l.r ? ' r' : '');   // r: a room (shaded on the plan), shown as a sign
-      el.innerHTML = esc(l.t).replace(/\n/g, '<br>');
+      el.innerHTML = esc((getLang() === 'zh' && l.zh) || l.t).replace(/\n/g, '<br>');   // (zh: the plans that name both)
       labels.push({ el, pos: new THREE.Vector3(l.x, fl.y + LIFT + 0.3, l.z), h: l.h, k: l.k, r: l.r });
     }
     for (const [k, x, z] of fl.icons) {
@@ -297,6 +312,7 @@ export function createIndoor(S) {
     if (!st.group) return;
     S.scene.remove(st.group.group); st.group.labels.forEach((l) => l.el.remove());
     (st.under || []).forEach((u) => S.scene.remove(u.group));
+    if (st.pit) { S.scene.remove(st.pit); st.pit.geometry.dispose(); st.pit = null; if (S.ground) S.ground.visible = true; }
     st.group = null; st.under = [];
   }
 
@@ -317,7 +333,17 @@ export function createIndoor(S) {
     S.scene.add(st.group.group);
     st.under = below(d, fl).map(built); st.under.forEach((u) => S.scene.add(u.group));
     st.group.labels.forEach((l) => labelBox.appendChild(l.el));
-    fl._cut = fl._cut || cutMask(d, fl);
+    // below ground (a station): a wider pit, its bottom dark round the plan
+    if (fl._deep == null) { const gy = S.tiles?.heightAt(fl._c.center.x, fl._c.center.z); fl._deep = gy != null && gy > fl.y + 3 ? gy - fl.y : 0; }
+    const pad = fl._deep ? Math.min(30, 4 + fl._deep * 0.6) : 0;
+    fl._cut = fl._cut || cutMask(d, fl, pad);
+    if (fl._deep) {
+      const B = fl._cut.box, m = 40 + fl._deep;
+      st.pit = new THREE.Mesh(new THREE.PlaneGeometry(B.z + 2 * m, B.w + 2 * m).rotateX(-Math.PI / 2), mat('pit', false));
+      st.pit.position.set(B.x + B.z / 2, fl.y + LIFT - 0.3, B.y + B.w / 2); st.pit.name = 'indoor-pit';
+      S.scene.add(st.pit);
+      if (S.ground) S.ground.visible = false;   // (the flat ground beyond the terrain would show through the pit's sides)
+    }
     CUT_U.uCutMap.value = fl._cut.tex; CUT_U.uCutBox.value.copy(fl._cut.box);
     CUT_U.uCutOn.value = 1; CUT_U.uCutY.value = fl.y + 0.25;
     paint();
@@ -329,7 +355,8 @@ export function createIndoor(S) {
     const ui = document.createElement('div'); ui.className = 'map-ui map-floors';
     const sorted = [...d.floors].sort((a, b) => b.y - a.y);
     ui.innerHTML = `<button data-floor="" title="${getLang() === 'zh' ? '外觀' : 'Outside view'}" class="out"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M3 21h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
-      sorted.map((f) => `<button data-floor="${f.id}" title="${esc(L(f.name))}">${esc(f.id)}</button>`).join('') +
+      // (a station's exit levels: the exit above the level, 'A1' over 'G')
+      sorted.map((f) => `<button data-floor="${f.id}" title="${esc(L(f.name))}"${f.tag ? ' class="tag"' : ''}>${f.tag ? `<small>${esc(f.tag)}</small>${esc(f.short)}` : esc(f.id)}</button>`).join('') +
       `<a class="src" href="${d.source?.url || '#'}" target="_blank" rel="noopener" title="${esc(L(d.source || {}))}">ⓘ</a>`;
     ui.addEventListener('click', (e) => {
       const b = e.target.closest('[data-floor]'); if (!b) return;
@@ -347,10 +374,13 @@ export function createIndoor(S) {
   }
 
   async function open(placeId, floorId) {
-    const idx = await loadIndex();
-    if (!idx[placeId]) return false;
+    const idx = await loadIndex(), entry = idx[placeId];
+    if (!entry) return false;
+    // an entry is the plan's file, or { file, floor }: a place that opens the plan at its own floor (a station's exit)
+    const file = entry.file || entry;
     if (!st.data[placeId]) {
-      const d = await fetch('data/indoor/' + idx[placeId]).then((r) => r.json()).catch(() => null);
+      st.files = st.files || {};   // (places sharing a plan share its data: a station's exits)
+      const d = await (st.files[file] || (st.files[file] = fetch('data/indoor/' + file).then((r) => r.json()).catch(() => (delete st.files[file], null))));
       if (!d) return false;
       st.data[placeId] = d;
     }
@@ -358,7 +388,7 @@ export function createIndoor(S) {
     if (st.place !== placeId) close();
     st.place = placeId;
     selector(d);
-    show(floorId && d.floors.some((f) => f.id === floorId) ? floorId : d.default || d.floors[0].id);
+    show(floorId && d.floors.some((f) => f.id === floorId) ? floorId : entry.floor || d.default || d.floors[0].id);
     return true;
   }
   function close() {
