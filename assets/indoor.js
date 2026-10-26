@@ -345,7 +345,7 @@ export function createIndoor(S) {
     const d = st.data[st.place]; if (!d) return;
     detach();
     st.floor = floorId;
-    st.ui?.querySelectorAll('[data-floor]').forEach((b) => b.classList.toggle('on', b.dataset.floor === String(floorId)));
+    st.ui?.querySelectorAll('[data-floor]').forEach((b) => b.classList.toggle('on', b.dataset.floor === String(floorId ?? '')));   // (none: the outside view's)
     if (floorId == null) { CUT_U.uCutOn.value = 0; S.xray = false; S.onIndoor?.(null); return; }
     const fls = members(d, floorId); if (!fls.length) return;
     st.shown = fls.map(built);
@@ -406,8 +406,8 @@ export function createIndoor(S) {
     if (st.place !== placeId) close();
     st.place = placeId;
     selector(d);
-    // (a shared link's floor, else the top floor: the plan opens from the top, the user goes down)
-    show(floorId && members(d, floorId).length ? floorId : entries(d)[0].id);
+    // the building as it is, with the floor selector beside it: the user picks a floor (a shared link's floor opens)
+    show(floorId && members(d, floorId).length ? floorId : null);
     return true;
   }
   function close() {

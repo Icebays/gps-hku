@@ -14,7 +14,7 @@ SITE = 'https://catering.hku.hk'
 OUTLETS = {   # page code on the site -> place id
     'FSCACR': 'juying-tai', 'mlc': 'urban-coffee-roaster', 'CCOutletB': 'tamjai-samgor', 'cymc': 'so330',
     'CCOutletC': 'asian-gourmet', 'CCOutletA': 'alfafa-bistro', 'cymr': 'cym-canteen', 'hkdaily': 'hong-kong-daily',
-    'COII': 'subway-centennial', 'COIII': 'sandwich-club-kiosk-centennial', 'halalcorner': '27-kebab-house',
+    'COII': 'subway-run-run-shaw', 'COIII': 'sandwich-club-kiosk-run-run-shaw', 'halalcorner': '27-kebab-house',
     'UR': 'union-restaurant', 'COBG03': 'starbucks-composite', 'COBG02': 'tai-tai-foodtopia', 'COBG01': 'oori-hansik',
     'COBG05': 'vending-nook', 'CCOutletD': 'bijas-vegetarian', 'bridge': 'the-good-bridge', '3SRC': 'grove',
     '6SRKiosk': 'sandwich-club-kiosk-sassoon', 'FanPuiOutpost': 'subway-sassoon', 'FOMBCK': 'starbucks-kiosk-medicine',

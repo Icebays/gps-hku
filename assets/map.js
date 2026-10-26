@@ -162,9 +162,8 @@ async function init() {
   controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 25; controls.maxDistance = 1800;
   controls.zoomToCursor = true; controls.screenSpacePanning = false;
   s.controls = controls;
-  oneFingerZoom(renderer.domElement, camera, controls);
-  controls.touches.TWO = null;   // two fingers: twoFingerGestures() below
-  twoFingerGestures(wrap, s);
+  controls.touches.ONE = controls.touches.TWO = null;   // touches: touchGestures() below (the controls keep the mouse)
+  touchGestures(wrap, s);
   // facing south, the way the HKU campus map is drawn (the hill behind, the harbour at your back)
   s.home = { pos: new THREE.Vector3(-90, 400, -400), target: new THREE.Vector3(-100, 80, -40) };
   if (innerWidth < innerHeight) s.home.pos = s.home.target.clone().add(s.home.pos.clone().sub(s.home.target).multiplyScalar(1.7));
@@ -852,68 +851,17 @@ function infraMaterial() {
 }
 const INFRA_MAT = infraMaterial();   // bridges of the 3D data (where the drawn roads don't cover them)
 
-/* One-finger zoom (phones), as in Google / Apple Maps: double-tap and hold, then drag up to zoom in
-   and down to zoom out; a plain double-tap zooms in. Runs in the capture phase so the map controls
-   never see the second touch. */
-function oneFingerZoom(el, camera, controls) {
-  // a double-tap is two taps: one finger each time, short and still - the fingers lifted after a pinch or a pan are
-  // not taps (they used to start a zoom drag, and a second finger then left the map controls switched off)
-  const touches = new Map();
-  let lastTap = null, drag = null, multi = false;
-  const dist = () => camera.position.distanceTo(controls.target);
-  const setDist = (d) => {
-    d = Math.min(controls.maxDistance, Math.max(controls.minDistance, d));
-    const off = camera.position.clone().sub(controls.target).setLength(d);
-    camera.position.copy(controls.target).add(off);
-    controls.update();
-  };
-  const release = () => { drag = null; controls.enabled = true; };
-  el.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') return;
-    const now = performance.now();
-    if (!touches.size) multi = false;
-    touches.set(e.pointerId, { t: now, x: e.clientX, y: e.clientY });
-    if (touches.size > 1) { multi = true; lastTap = null; if (drag) release(); return; }
-    if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
-      drag = { id: e.pointerId, y: e.clientY, d0: dist(), moved: false };
-      e.stopImmediatePropagation(); e.preventDefault();
-      controls.enabled = false;
-      el.setPointerCapture?.(e.pointerId);
-    }
-  }, { capture: true });
-  el.addEventListener('pointermove', (e) => {
-    if (!drag || e.pointerId !== drag.id) return;
-    const dy = e.clientY - drag.y;
-    if (Math.abs(dy) > 6) drag.moved = true;
-    setDist(drag.d0 * Math.exp(dy * 0.008));   // up = closer (zoom in), down = farther (zoom out)
-    e.stopImmediatePropagation();
-  }, { capture: true });
-  const end = (e) => {
-    if (e.pointerType !== 'touch') return;
-    const t0 = touches.get(e.pointerId); touches.delete(e.pointerId);
-    if (drag && e.pointerId === drag.id) {
-      if (!drag.moved) setDist(drag.d0 * 0.5);   // double-tap without dragging: zoom in
-      release(); lastTap = null;
-      e.stopImmediatePropagation();
-      return;
-    }
-    const now = performance.now();
-    lastTap = !multi && t0 && now - t0.t < 300 && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) < 12 ? { t: now, x: e.clientX, y: e.clientY } : null;
-    if (!touches.size && drag) release();   // (never leave the controls off)
-  };
-  el.addEventListener('pointerup', end, { capture: true });
-  el.addEventListener('pointercancel', (e) => { if (e.pointerType !== 'touch') return; touches.delete(e.pointerId); lastTap = null; if (drag) release(); }, { capture: true });
-}
-
-/* Two-finger gestures (phones), as in Google / Apple Maps: pinch zooms and twist rotates about the
-   point between the fingers, and that point stays under them while they move (so they also pan); two
-   fingers dragged up or down together tilt the view. Lifting one finger carries on as a one-finger pan.
-   Every move is applied from the camera as it was when the gesture started (not step by step), so
-   nothing drifts or shakes. Listens on the whole map (labels included) in the capture phase; while a
-   two-finger gesture is on, the map controls never see the touches move. */
-function twoFingerGestures(wrap, s) {
+/* Touch gestures (phones), as in Google / Apple Maps, all in one place (the map controls keep the mouse only: two
+   handlers and the controls taking the same touches used to leave one of them stuck):
+   - one finger pans: the ground point under it stays under it;
+   - double-tap and hold, then drag up / down: zoom in / out (a plain double-tap zooms in);
+   - two fingers: pinch zooms and twist rotates about the point between them, which stays under them (so they pan
+     too); dragged up or down together they tilt the view. Lifting one finger carries on as a one-finger pan.
+   Every move is applied from the camera as it was when the gesture (or its current part) started, so nothing drifts.
+   Listens on the whole map (labels included) in the capture phase. */
+function touchGestures(wrap, s) {
   const pts = new Map();
-  let g = null, block = false;
+  let g = null, lastTap = null, multi = false;
   const Y = new THREE.Vector3(0, 1, 0), plane = new THREE.Plane(), ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
   const cam = s.camera, c = s.controls;
   const aim = () => { cam.lookAt(c.target); cam.updateMatrixWorld(); };   // what controls.update() would do
@@ -943,31 +891,46 @@ function twoFingerGestures(wrap, s) {
     const dv = P.clone().sub(Q).setY(0);
     cam.position.add(dv); c.target.add(dv); aim();
   };
+  const setDist = (d) => {
+    d = Math.min(c.maxDistance, Math.max(c.minDistance, d));
+    const off = cam.position.clone().sub(c.target).setLength(d);
+    cam.position.copy(c.target).add(off); aim();
+  };
   const stopInertia = () => { c._sphericalDelta?.set(0, 0, 0); c._panOffset?.set(0, 0, 0); if ('_scale' in c) c._scale = 1; };
-  const start = () => {
-    stopInertia();
+  // (re)start the gesture for the fingers down now
+  const start = (zoom) => {
+    stopInertia(); s.anim = null;
     const base = { pos0: cam.position.clone(), tgt0: c.target.clone() };
-    if (pts.size === 2) {
+    if (pts.size >= 2) {
       const t = two();
       g = { ...base, P: grab(t.mx, t.my), mode: null, t0: t, phi0: new THREE.Spherical().setFromVector3(cam.position.clone().sub(c.target)).phi };
-    } else if (pts.size === 1 && block) {
+    } else if (pts.size === 1) {
       const [p] = pts.values();
-      g = { ...base, P: grab(p.x, p.y), mode: 'pan' };
+      g = zoom ? { ...base, mode: 'zoom', y0: p.y, d0: cam.position.distanceTo(c.target), moved: false } : { ...base, P: grab(p.x, p.y), mode: 'pan' };
     } else g = null;
   };
   wrap.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') return;
-    if (e.isPrimary) { pts.clear(); block = false; g = null; }   // first finger of a new touch: forget any lost ones
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pts.size === 2) { block = true; start(); }
+    if (e.pointerType !== 'touch' || e.target.closest?.('.map-ui')) return;
+    if (e.isPrimary || !pts.size) { pts.clear(); multi = false; }   // first finger of a new touch: forget any lost ones
+    if (pts.size >= 2) return;   // (a third finger: ignored)
+    const now = e.timeStamp;   // (when it happened, not when it is handled: a busy phone handles events late)
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY, t: now, x0: e.clientX, y0: e.clientY });
+    if (pts.size === 2) { multi = true; lastTap = null; start(); return; }
+    // a second tap right after a tap, at the same place: double-tap zoom
+    const dbl = lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40;
+    start(dbl);
   }, { capture: true });
   wrap.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
-    if (block) e.stopPropagation();
     const p = pts.get(e.pointerId);
     p.x = e.clientX; p.y = e.clientY;
     if (!g) return;
     if (g.mode === 'pan') { keepUnder(g.P, p.x, p.y); return; }
+    if (g.mode === 'zoom') {
+      const dy = p.y - g.y0; if (Math.abs(dy) > 6) g.moved = true;
+      setDist(g.d0 * Math.exp(dy * 0.008));   // up = closer (zoom in), down = farther (zoom out)
+      return;
+    }
     const t = two(), t0 = g.t0;
     if (!g.mode) {
       const va = { x: t.a.x - t0.a.x, y: t.a.y - t0.a.y }, vb = { x: t.b.x - t0.b.x, y: t.b.y - t0.b.y };
@@ -999,8 +962,16 @@ function twoFingerGestures(wrap, s) {
   }, { capture: true });
   const end = (e) => {
     if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
-    pts.delete(e.pointerId);
-    if (pts.size === 0) { block = false; g = null; stopInertia(); } else start();
+    const p = pts.get(e.pointerId); pts.delete(e.pointerId);
+    const now = e.timeStamp;
+    if (g?.mode === 'zoom') {
+      if (!g.moved) setDist(g.d0 * 0.5);   // double-tap without dragging: zoom in
+      lastTap = null;
+    } else {
+      // a tap: one finger, short and still (the fingers lifted after a pinch or a pan are not)
+      lastTap = e.type === 'pointerup' && !multi && now - p.t < 300 && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 12 ? { t: now, x: e.clientX, y: e.clientY } : null;
+    }
+    if (pts.size) start(); else { g = null; multi = false; stopInertia(); }
   };
   // on window: a finger may be lifted outside the map (over a panel or the header)
   window.addEventListener('pointerup', end, { capture: true });

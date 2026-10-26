@@ -222,7 +222,7 @@ python3 tools/build_mtr_lines.py                           # data/mtr-lines.json
 Each IMDF level is drawn at its own height (mPD); an exit's levels are named by the exit (`A1-G`: exit A1's ground
 level), and the levels of one storey (the IMDF ordinal: all the exits' ground levels, say) are one floor of the
 selector (`groups`), shown together. The lifts stand as glass shafts from their lowest level to their highest
-(`shafts`: lift units one above the other). Every plan opens at its top floor. A floor below ground is shown in the
+(`shafts`: lift units one above the other). A plan opens as the building with the floor selector beside it; the user picks a floor. A floor below ground is shown in the
 x-ray view (`map.js`): the whole map faded to 19 % and the plan drawn over it; above ground the buildings, roads and
 trees are cut away above the floor. The MTR lines are drawn at the depth of their tracks (rail level, 1 m under the stations' platforms, straight between
 them), in a dark shade of the line's colour, seen faintly through the map.
