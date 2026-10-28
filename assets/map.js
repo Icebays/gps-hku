@@ -464,6 +464,10 @@ function setSky(s) {
   setTreeTheme(s, dark);
   s.indoor?.paint();
   INFRA_U.uDeck.value.set(dark ? 0x4d535b : 0xa7acb3); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
+  // buildings: dark on the dark drawn map; the satellite map keeps them light (the colour tints their photo colours)
+  const bc = dark && s.basemap !== 'real' ? BUILD_DARK : BUILD_LIGHT;
+  for (const m of [BUILD_MAT, BUILD_MAT_PLAIN, EXTRA_MAT, DECO_MAT, ...PHOTO_MATS.values()]) m.color.set(bc);
+  s.shadowKey = null;
 }
 
 /* ---------------- sun ----------------
@@ -1432,7 +1436,7 @@ function dropBridges(t) {
    from OpenStreetMap) are extruded from the ground and get bids after the model's. */
 function makeExtraBuildings(s, list) {
   s.extras = [];
-  const mat = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
+  const mat = EXTRA_MAT;
   for (const e of list) {
     const ground = Math.min(...e.footprint.map(([x, z]) => groundHeightIn(s, x, z) ?? 80));
     const shape = new THREE.Shape(e.footprint.map(([x, z]) => new THREE.Vector2(x, -z)));
@@ -1478,14 +1482,16 @@ function hkuStencil(m) {
   m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp;
   return m;
 }
-const BUILD_MAT = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
+const BUILD_LIGHT = 0xf1eee8, BUILD_DARK = 0x454b48;   // the buildings' colour: light map / dark map (setSky)
+const BUILD_MAT = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: BUILD_LIGHT, flatShading: true })));
 // HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
 // in the photo base maps
-const BUILD_MAT_PLAIN = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true })));
+const BUILD_MAT_PLAIN = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: BUILD_LIGHT, flatShading: true })));
+const EXTRA_MAT = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: BUILD_LIGHT, flatShading: true })));   // makeExtraBuildings
 // HKU buildings with a photo copy: a material per copy (s.photoSrc: 'core' = satellite-buildings.glb, else the tile of
 // its hku-photo.glb), hidden while that copy is shown (photoMatsShown) - whichever tile the white building comes in
 const PHOTO_MATS = new Map();
-const photoMat = (src) => PHOTO_MATS.get(src) || PHOTO_MATS.set(src, hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, vertexColors: S?.basemap === 'real' })))).get(src);
+const photoMat = (src) => PHOTO_MATS.get(src) || PHOTO_MATS.set(src, hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: BUILD_MAT.color.getHex(), flatShading: true, vertexColors: S?.basemap === 'real' })))).get(src);
 function photoMatsShown(s) {
   const photoB = !!s.basemap && s.basemap !== 'classic';
   for (const [src, m] of PHOTO_MATS) m.visible = !(photoB && (src === 'core' ? !!s.satBuildings : !!s.tiles.tiles.get(src)?.ph?.hkuPhoto));
@@ -1512,7 +1518,7 @@ function setSolid(s, mesh, A) {
   let o = 0; keys.forEach((k, i) => { g.addGroup(o, by.get(k).length, i); o += by.get(k).length; });
   mesh.material = keys.map((k) => (k ? photoMat(k) : BUILD_MAT_PLAIN));
 }
-const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: 0xf1eee8, flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
+const DECO_MAT = cutify(new THREE.MeshLambertMaterial({ color: BUILD_MAT.color.getHex(), flatShading: true, transparent: true, opacity: DECO_OPACITY, depthWrite: false }));
 function addPart(s, mesh, tile) {
   mesh.material = BUILD_MAT; mesh.castShadow = mesh.receiveShadow = true;
   const part = { mesh, tile, all: mesh.geometry.index, hl: new Map(), cells: [] };
