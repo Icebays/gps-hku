@@ -1,5 +1,11 @@
 # GPS-HKU
 
+[![Live site](https://img.shields.io/badge/live-icebays.github.io%2Fgps--hku-0f4c3a?style=for-the-badge&logo=googlemaps&logoColor=white)](https://icebays.github.io/gps-hku/)
+[![Copyright: all rights reserved](https://img.shields.io/badge/copyright-all%20rights%20reserved-c62828?style=for-the-badge)](LICENSE)
+[![three.js](https://img.shields.io/badge/three.js-3D-000000?style=for-the-badge&logo=threedotjs&logoColor=white)](https://threejs.org/)
+[![English · 繁體中文](https://img.shields.io/badge/English%20%C2%B7%20%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87-1971c2?style=for-the-badge)](https://icebays.github.io/gps-hku/)
+[![Last commit](https://img.shields.io/github/last-commit/icebays/gps-hku?style=for-the-badge)](https://github.com/icebays/gps-hku/commits/main)
+
 A 3D map, walking guide and floor plan guide to the University of Hong Kong.
 香港大學 3D 地圖、步行及平面圖指南。
 
