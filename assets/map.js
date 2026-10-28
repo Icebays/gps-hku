@@ -9,6 +9,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { loadPlaces, loadRoutes, isPinned, L, href, esc, getLang, REPO } from './app.js';
 import { heightIndex, buildRoads, loadLampGeometry } from './roads.js';
 import { mountWeather } from './weather.js';
+import { createSky, palette as skyPalette } from './sky.js';
 import { createIndoor, cutify } from './indoor.js';
 import { createTiles } from './tiles.js';
 import { catIcon, placeIcon, floorsBadge, exitTiles } from './icons.js';
@@ -172,6 +173,7 @@ async function init() {
   s.hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f7a, 1.6);
   s.sun = new THREE.DirectionalLight(0xffffff, 2.2);
   scene.add(s.hemi, s.sun, s.sun.target);
+  s.sky = createSky(); s.sky.group.visible = false; scene.add(s.sky.group);   // satellite map only (applySky)
   s.hemi.layers.enable(1); s.sun.layers.enable(1);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -464,6 +466,7 @@ function setSky(s) {
   setTreeTheme(s, dark);
   s.indoor?.paint();
   INFRA_U.uDeck.value.set(dark ? 0x4d535b : 0xa7acb3); INFRA_U.uSide.value.set(dark ? 0x5a5e5c : 0xd6d1c7);
+  applySky(s);
   // buildings: dark on the dark drawn map; the satellite map keeps them light (the colour tints their photo colours)
   const bc = dark && s.basemap !== 'real' ? BUILD_DARK : BUILD_LIGHT;
   for (const m of [BUILD_MAT, BUILD_MAT_PLAIN, EXTRA_MAT, DECO_MAT, ...PHOTO_MATS.values()]) m.color.set(bc);
@@ -483,6 +486,7 @@ const SHADOW_U = {
   uShadowTexel: { value: 1 / 2048 },
   uShadowCol: { value: new THREE.Color(0.62, 0.66, 0.76) },   // shade is a little blue
   uSunTint: { value: new THREE.Color(1, 1, 1) },
+  uSkyLight: { value: new THREE.Color(1, 1, 1) },   // the sky's light on unlit surfaces, shade or sun (satellite map: applySky)
 };
 const TERRAIN_SHADOW = { value: 1 };
 const ONE = { value: 1 };
@@ -503,7 +507,7 @@ function shadowify(m, k = ONE) {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 uniform sampler2D uShadowMap;
 uniform float uShadowOn, uShadowDark, uShadowTexel, uShadowK;
-uniform vec3 uShadowCol, uSunTint;
+uniform vec3 uShadowCol, uSunTint, uSkyLight;
 varying vec4 vShadowCoord;
 float shDepth(vec2 uv) { return dot(texture2D(uShadowMap, uv), vec4(255.0 / 256.0 / vec3(1.0, 256.0, 65536.0), 1.0 / 16777216.0)); }
 float sunLit() {
@@ -514,10 +518,23 @@ float sunLit() {
   vec2 e = min(c.xy, 1.0 - c.xy);
   return mix(1.0, lit / 9.0, smoothstep(0.0, 0.06, min(e.x, e.y)));   // fade out at the shadow map's edge
 }`).replace('#include <opaque_fragment>', `#include <opaque_fragment>
-gl_FragColor.rgb *= mix(vec3(1.0), mix(mix(vec3(1.0), uShadowCol, uShadowDark), uSunTint, sunLit()), uShadowK);`);
+gl_FragColor.rgb *= uSkyLight * mix(vec3(1.0), mix(mix(vec3(1.0), uShadowCol, uShadowDark), uSunTint, sunLit()), uShadowK);`);
   };
   m.customProgramCacheKey = () => (prev ? prev.toString() : '') + '|shadow';
   m.needsUpdate = true;
+  return m;
+}
+// the sky's light on the photo models (already lit by the real sun: only tinted)
+function skyLit(m) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev.call(m, sh, r);
+    sh.uniforms.uSkyLight = SHADOW_U.uSkyLight;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uSkyLight;')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.rgb *= uSkyLight;');
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => key() + '|sky';
   return m;
 }
 const HKU_LATLON = [22.283, 114.137];
@@ -537,6 +554,7 @@ function updateSun(s) {
   const ss = THREE.MathUtils.smoothstep, deg = el / (Math.PI / 180);
   const day = ss(deg, -2, 8), low = 1 - ss(deg, 4, 30), clear = s.weatherClear ?? 1;
   const real = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+  s.sunTrue = real; s.sunDeg = deg;
   // light from at least 12 degrees up (long dawn shadows are mostly noise); at night a soft light from above
   const dir = deg > 12 ? real : new THREE.Vector3(real.x, 0, real.z).normalize().multiplyScalar(Math.cos(0.21)).setY(Math.sin(0.21));
   s.sunDir = day > 0 ? dir.lerp(new THREE.Vector3(-0.42, 0.83, 0.35).normalize(), 1 - day).normalize() : new THREE.Vector3(-0.42, 0.83, 0.35).normalize();
@@ -550,7 +568,28 @@ function updateSun(s) {
   SHADOW_U.uShadowOn.value = on ? 1 : 0;
   SHADOW_U.uShadowDark.value = 0.8 * day * clear;
   SHADOW_U.uSunTint.value.setRGB(1, 1 - 0.05 * low * day, 1 - 0.13 * low * day);
+  applySky(s);
   s.shadowKey = null;
+}
+// the satellite map's sky (sky.js): its colours for the sun's height and the weather, and the light it casts - on the
+// lit buildings and trees (sunlight, hemisphere light) and as a tint on the photo ground, roads and buildings
+const HEMI_GROUND = new THREE.Color(0x8a8f7a);
+function applySky(s) {
+  if (!s.sky) return;
+  const real = s.basemap === 'real';
+  s.sky.group.visible = real;
+  if (!real) { SHADOW_U.uSkyLight.value.setRGB(1, 1, 1); s.hemi.color.setRGB(1, 1, 1); s.hemi.groundColor.copy(HEMI_GROUND); return; }
+  const w = s.weatherSky || { cloud: 1 - (s.weatherClear ?? 1), rain: 0 };
+  const p = skyPalette(s.sunDeg ?? 45, w.cloud, w.rain);
+  s.sky.set(p, s.sunTrue || new THREE.Vector3(0, 1, 0), w.cloud, w.rain);
+  // the photo surfaces: the sky's light and some of the sun's colour (the lit buildings get the sun itself)
+  SHADOW_U.uSkyLight.value.setRGB(1, 1, 1).lerp(p.light, 0.4).multiply(p.amb);
+  s.sun.color.copy(p.light);
+  s.hemi.color.copy(SHADOW_U.uSkyLight.value); s.hemi.groundColor.copy(HEMI_GROUND).multiply(SHADOW_U.uSkyLight.value);
+  // the haze: the horizon's colour, closer in rain
+  s.scene.background = p.horizon.clone();
+  s.scene.fog = new THREE.Fog(p.horizon.clone(), 1200 * (1 - 0.45 * w.rain), 3800 * (1 - 0.35 * w.rain));
+  TERRAIN_U.uMist.value.copy(p.horizon);
 }
 // fit the sun's shadow camera around what is being looked at; redraw the shadow map only when it changes
 function fitShadow(s) {
@@ -638,8 +677,8 @@ function buildUI() {
 
   ui('map-credit', '3D Spatial Data © Lands Department, HKSAR · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
   S.info = null; S.routePanel = null;
-  // weather + HKO warnings (bottom left); cloud and rain soften the sun's shadows
-  S.weather = mountWeather(S.wrap, { lang: getLang(), onSky: (clear) => { if (S.weatherClear !== clear) { S.weatherClear = clear; updateSun(S); } } });
+  // weather + HKO warnings (bottom left); cloud and rain soften the sun's shadows and make the satellite map's sky
+  S.weather = mountWeather(S.wrap, { lang: getLang(), onSky: (clear, sky) => { S.weatherClear = clear; S.weatherSky = sky; updateSun(S); } });
 }
 
 // layers button: switch the base map, classic <-> satellite
@@ -1134,7 +1173,7 @@ async function loadPhotoRoads(s, url) {
   g.scene.traverse((o) => {
     if (!o.isMesh) return;
     const bridge = /bridge/i.test(o.name || o.parent?.name || '');
-    o.material = new THREE.MeshBasicMaterial({ map: photoMap(o), polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    o.material = skyLit(new THREE.MeshBasicMaterial({ map: photoMap(o), polygonOffset: !bridge, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
     o.renderOrder = bridge ? 0 : 2;
   });
   return g.scene;
@@ -1143,7 +1182,7 @@ async function loadPhotoBuildings(s, url) {
   const g = await photoLoader(s).loadAsync(url);
   g.scene.traverse((o) => {
     if (!o.isMesh) return;
-    o.material = hkuStencil(cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) })));   // photo is already lit
+    o.material = skyLit(hkuStencil(cutify(new THREE.MeshBasicMaterial({ map: photoMap(o) }))));   // photo is already lit
     o.castShadow = true;
   });
   return g.scene;
@@ -2024,6 +2063,7 @@ function frame(now) {
     if (wait) drapeArea(wait);
   }
   fitShadow(S);
+  if (S.sky.group.visible) S.sky.update(S.camera, (now || performance.now()) / 1000, S.scene.fog);
   S.indoor?.update();
   if (S.xray) xray(S); else S.renderer.render(S.scene, S.camera);
   if (S.compass) S.compass.style.transform = `rotate(${(S.controls.getAzimuthalAngle() * 180) / Math.PI}deg)`;

@@ -48,6 +48,14 @@ const WX = {
   84: ['fog', '薄霧', 'Mist', 0.4], 85: ['fog', '煙霞', 'Haze', 0.5], 90: ['hot', '熱', 'Hot', 1], 91: ['hot', '暖', 'Warm', 1],
   92: ['cold', '涼', 'Cool', 1], 93: ['cold', '冷', 'Cold', 1],
 };
+// HKO weather icon numbers -> [how much of the sky is cloud (0..1), how hard it rains (0..1)] for the satellite
+// map's sky (sky.js); the rain is raised to the rainfall measured in the district and to a rainstorm warning in force
+const SKY = {
+  50: [0, 0], 51: [0.3, 0], 52: [0.5, 0], 53: [0.55, 0.12], 54: [0.65, 0.22], 60: [0.8, 0], 61: [1, 0], 62: [1, 0.2], 63: [1, 0.45],
+  64: [1, 0.8], 65: [1, 0.85], 70: [0, 0], 71: [0, 0], 72: [0, 0], 73: [0, 0], 74: [0, 0], 75: [0, 0], 76: [0.75, 0], 77: [0.25, 0],
+  80: [0.35, 0], 81: [0, 0], 82: [0.4, 0], 83: [0.9, 0], 84: [0.7, 0], 85: [0.5, 0], 90: [0.05, 0], 91: [0.15, 0], 92: [0.25, 0], 93: [0.3, 0],
+};
+const RAINSTORM = { WRAINA: 0.75, WRAINR: 0.9, WRAINB: 1 };
 
 /* ---------- warning badges: rounded square, colour by warning, glyph in white (or dark on yellow) ---------- */
 const G = {
@@ -102,7 +110,8 @@ const get = (type, lang) => fetch(`${API}?dataType=${type}&lang=${lang}`, { cach
 const pick = (list, names) => { for (const n of names) { const d = list?.find((x) => x.place === n); if (d) return d; } return list?.[0]; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-/* Mount the widget into the map; onSky(clear 0..1) is told how clear the sky is (for the sun's shadows). */
+/* Mount the widget into the map; onSky(clear 0..1, { cloud, rain }) is told how clear the sky is (for the sun's
+   shadows) and how much cloud and rain there is (0..1 each, for the satellite map's sky). */
 export function mountWeather(wrap, { lang = 'zh', onSky } = {}) {
   const zh = lang !== 'en', api = zh ? 'tc' : 'en';
   wrap.querySelector('.map-weather')?.remove();
@@ -132,7 +141,11 @@ export function mountWeather(wrap, { lang = 'zh', onSky } = {}) {
         <a class="wx-src" href="https://www.hko.gov.hk/${zh ? 'tc' : 'en'}/wxinfo/currwx/current.htm" target="_blank" rel="noopener">${zh ? '香港天文台' : 'Hong Kong Observatory'} · ${time}</a>
       </div>`;
     el.hidden = false;
-    onSky?.(wx[3]);
+    // rain: the icon's, or the past hour's rainfall in the district (20 mm and more = the heaviest), or a rainstorm warning
+    const [cloud, iconRain] = SKY[code] || [1 - wx[3], 0];
+    const mm = Number(rain?.max) || 0;
+    const rainK = Math.min(1, Math.max(iconRain, mm >= 0.5 ? 0.1 + mm / 22 : 0, ...warns.map((w) => RAINSTORM[w.code] || 0)));
+    onSky?.(wx[3], { cloud: Math.max(cloud, rainK > 0 ? 0.9 : 0), rain: rainK });
   };
   el.addEventListener('click', (e) => {
     if (!e.target.closest('.wx-now')) return;
