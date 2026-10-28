@@ -24,13 +24,13 @@ const T = {
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet.',
-        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', inHere: 'In this building', back: 'Back to', orderOnline: 'Order online', cateringPage: 'Details (HKU Catering)', hours: 'Opening hours', photoBy: 'Photos: HKU Catering Services', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
+        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', inHere: 'In this building', back: 'Back to', orderOnline: 'Order online', closeOrder: 'Close', orderFallback: 'Page not showing? Open it in a new tab', cateringPage: 'Details (HKU Catering)', hours: 'Opening hours', photoBy: 'Photos: HKU Catering Services', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
         guess: 'Approximate position, not yet confirmed.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。',
-        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', inHere: '大樓設施', back: '返回', orderOnline: '網上點餐', cateringPage: '詳情（港大膳食服務）', hours: '營業時間', photoBy: '相片：港大膳食服務', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
+        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', inHere: '大樓設施', back: '返回', orderOnline: '網上點餐', closeOrder: '關閉', orderFallback: '未能顯示？於新分頁開啟', cateringPage: '詳情（港大膳食服務）', hours: '營業時間', photoBy: '相片：港大膳食服務', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
         guess: '位置係估計，未經確認。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
@@ -1796,8 +1796,23 @@ async function fillEatery(d, p) {
     (e.service || e.food ? `<p class="food">${esc([e.service, e.food].filter(Boolean).join(' · '))}</p>` : '') +
     (e.hours?.length ? `<table class="hours"><caption>${tt('hours')}</caption>${e.hours.map(([a, b]) => `<tr><th>${esc(hoursText(a))}</th><td>${esc(hoursText(b, false))}</td></tr>`).join('')}</table>` : '');
   box.querySelectorAll('img').forEach((im) => im.addEventListener('error', () => im.remove()));
-  d.querySelector('.order').innerHTML = (e.order ? `<a class="btn primary" href="${esc(e.order)}" target="_blank" rel="noopener">🛒 ${tt('orderOnline')}</a>` : '') +
+  d.querySelector('.order').innerHTML = (e.order ? `<button class="btn primary order-open">🛒 ${tt('orderOnline')}</button>` : '') +
     `<a class="btn" href="${esc(e.page)}" target="_blank" rel="noopener">${tt('cateringPage')}</a>`;
+  d.querySelector('.order-open')?.addEventListener('click', () => openOrder(d, p, e.order));
+}
+// the order page opens inside the card (the card grows to hold it), with a button to close it again; the link below
+// is for an ordering site that refuses to be shown inside another page
+function openOrder(d, p, url) {
+  d.querySelector('.order-view')?.remove();
+  const v = document.createElement('div');
+  v.className = 'order-view';
+  v.innerHTML = `<div class="order-bar"><b>🛒 ${tt('orderOnline')} · ${esc(L(p.name))}</b><button class="btn order-close">✕ ${tt('closeOrder')}</button></div>
+    <iframe src="${esc(url)}" title="${esc(tt('orderOnline'))}" allow="payment; clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    <a class="order-out" href="${esc(url)}" target="_blank" rel="noopener">${tt('orderFallback')}</a>`;
+  v.querySelector('.order-close').addEventListener('click', () => { v.remove(); d.classList.remove('ordering'); });
+  d.appendChild(v);
+  d.classList.add('ordering');
+  d.scrollTop = 0;
 }
 
 /* ---------------- click ---------------- */
