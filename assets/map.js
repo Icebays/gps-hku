@@ -24,13 +24,13 @@ const T = {
         locate: 'My location (GPS)', layers: 'Change map layer', routes: 'Walking routes', unnamed: 'Unlabelled building',
         height: 'Height', guide: 'Building guide', floorPlans: 'Floor plans',
         outside: 'You appear to be outside the mapped area.', noGps: 'Location not available.', noRoutes: 'No routes yet.',
-        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', inHere: 'In this building', back: 'Back to', orderOnline: 'Order online', closeOrder: 'Close', scanTable: 'Scan table QR', scanHint: 'Point the camera at the QR code on your table', scanNotUrl: 'Not an ordering QR code - try again', scanUnknown: 'This QR code opens', scanOpen: 'Open', scanNoCam: 'The camera could not start (allow camera access)', scanTab: 'This restaurant\'s order page opens only in a new tab', openTab: 'Open in a new tab', cateringPage: 'Details (HKU Catering)', hours: 'Opening hours', photoBy: 'Photos: HKU Catering Services', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
+        min: 'min', notPinned: 'not on map yet', floors3d: 'Floor plans', inHere: 'In this building', back: 'Back to', orderOnline: 'Order online', closeOrder: 'Close', scanTable: 'Scan table QR', scanHint: 'Point the camera at the QR code on your table', scanNotUrl: 'Not an ordering QR code - try again', scanDone: 'Table QR code read', scanUnknown: 'This QR code opens', openOrderPage: 'Open the order page', scanNoCam: 'The camera could not start (allow camera access)', cateringPage: 'Details (HKU Catering)', hours: 'Opening hours', photoBy: 'Photos: HKU Catering Services', webgl: 'Your browser could not start 3D (WebGL).', you: 'You',
         guess: 'Approximate position, not yet confirmed.', basemap: 'Map style', classic: 'Classic', hybrid: 'Classic + real buildings', real: 'Satellite', filter: 'Show / hide places' },
   zh: { loading: '正在載入 3D 校園…', find: '搜尋大樓或地點…', reset: '重設視角', top: '俯視 / 3D', north: '朝北',
         locate: '我的位置（GPS）', layers: '更換圖層', routes: '步行路線', unnamed: '未命名大樓',
         height: '高度', guide: '大樓指南', floorPlans: '平面圖',
         outside: '你似乎不在地圖範圍內。', noGps: '無法取得位置。', noRoutes: '暫未有路線。',
-        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', inHere: '大樓設施', back: '返回', orderOnline: '網上點餐', closeOrder: '關閉', scanTable: '掃描枱號', scanHint: '請對準枱上的 QR Code', scanNotUrl: '這不是點餐 QR Code，請再試', scanUnknown: '這個 QR Code 會開啟', scanOpen: '開啟', scanNoCam: '未能開啟相機（請允許使用相機）', scanTab: '此餐廳的點餐頁只能於新分頁開啟', openTab: '於新分頁開啟', cateringPage: '詳情（港大膳食服務）', hours: '營業時間', photoBy: '相片：港大膳食服務', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
+        min: '分鐘', notPinned: '尚未標示', floors3d: '分層平面圖', inHere: '大樓設施', back: '返回', orderOnline: '網上點餐', closeOrder: '關閉', scanTable: '掃描枱號', scanHint: '請對準枱上的 QR Code', scanNotUrl: '這不是點餐 QR Code，請再試', scanDone: '已讀取枱號 QR Code', scanUnknown: '這個 QR Code 會開啟', openOrderPage: '開啟點餐頁', scanNoCam: '未能開啟相機（請允許使用相機）', cateringPage: '詳情（港大膳食服務）', hours: '營業時間', photoBy: '相片：港大膳食服務', webgl: '你的瀏覽器無法啟動 3D（WebGL）。', you: '你',
         guess: '位置係估計，未經確認。', basemap: '地圖樣式', classic: '經典', hybrid: '經典＋真實大樓', real: '衛星圖像', filter: '顯示／隱藏地點' },
 };
 const tt = (k) => T[getLang()][k] ?? k;
@@ -1796,50 +1796,20 @@ async function fillEatery(d, p) {
     (e.service || e.food ? `<p class="food">${esc([e.service, e.food].filter(Boolean).join(' · '))}</p>` : '') +
     (e.hours?.length ? `<table class="hours"><caption>${tt('hours')}</caption>${e.hours.map(([a, b]) => `<tr><th>${esc(hoursText(a))}</th><td>${esc(hoursText(b, false))}</td></tr>`).join('')}</table>` : '');
   box.querySelectorAll('img').forEach((im) => im.addEventListener('error', () => im.remove()));
-  const framed = e.order && !NO_FRAME.test(new URL(e.order).hostname);
-  d.querySelector('.order').innerHTML = (e.order ? (framed ? `<button class="btn primary order-open">🛒 ${tt('orderOnline')}</button>`
-    : `<a class="btn primary" href="${esc(e.order)}" target="_blank" rel="noopener">🛒 ${tt('orderOnline')} ↗</a>`) : '') +
+  d.querySelector('.order').innerHTML = (e.order ? `<a class="btn primary" href="${esc(e.order)}" target="_blank" rel="noopener">🛒 ${tt('orderOnline')}</a>` : '') +
     (e.order ? `<button class="btn order-scan">📷 ${tt('scanTable')}</button>` : '') +
     `<a class="btn" href="${esc(e.page)}" target="_blank" rel="noopener">${tt('cateringPage')}</a>`;
-  d.querySelector('.order-open')?.addEventListener('click', () => openOrder(d, p, e.order));
   d.querySelector('.order-scan')?.addEventListener('click', () => openScan(d, p));
 }
-// ordering pages that cannot work inside the card (checked on a phone, Oct 2026), opened in a new tab instead: Eats365
-// (So330) and self-order.app (Alfafa Bistro) refuse to be shown inside another page; iDimSum (Tamjai Samgor) loses its
-// QR session in a frame; Starbucks' link is gone (it orders in its app only)
-const NO_FRAME = /(^|\.)(eats365pos\.com|self-order\.app|idimsum\.com|starbucks\.com\.hk)$/;
-// the order page opens inside the card (the card grows to hold it), with a button to close it again
-function openOrder(d, p, url) {
-  dropView(d);
-  const v = document.createElement('div');
-  v.className = 'order-view';
-  v.innerHTML = `<div class="order-bar"><b>🛒 ${tt('orderOnline')} · ${esc(L(p.name))}</b><button class="btn order-close">✕ ${tt('closeOrder')}</button></div>
-    <iframe src="${esc(url)}" title="${esc(tt('orderOnline'))}" allow="payment; clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
-  v.querySelector('.order-close').addEventListener('click', () => { v.remove(); d.classList.remove('ordering'); });
-  d.appendChild(v);
-  d.classList.add('ordering');
-  d.scrollTop = 0;
-}
-/* Paying: the ordering site hands the payment to the whole window - the customer then pays on the restaurant's own page
-   (its real address in the address bar; Alipay and bank apps open from there). GPS-HKU cannot see where its frame goes,
-   so the ordering site says so: parent.postMessage({ type: 'gps-hku:pay', url }, 'https://icebays.github.io') (or it
-   navigates window.top itself). Only the open order frame is listened to, and only https addresses are followed. */
-addEventListener('message', (e) => {
-  const f = S?.info?.querySelector('.order-view iframe');
-  if (!f || e.source !== f.contentWindow || e.data?.type !== 'gps-hku:pay') return;
-  let u = null;
-  try { u = new URL(e.data.url); } catch (err) { return; }
-  if (u.protocol === 'https:') location.href = u.href;
-});
-// the card's order / scan view: gone (and the camera off)
+// the card's scan view: gone (and the camera off)
 function dropView(d) {
   const v = d?.querySelector('.order-view');
   v?.stop?.(); v?.remove();
 }
-/* A table's QR code, scanned in the card: its link (the table's own, so the order goes to that table) opens in the
-   card like the order button's. The camera's frames are read by the browser's BarcodeDetector where it has one, else by
-   jsQR (vendor/jsqr, loaded on first use: Safari has no BarcodeDetector). Links of the known ordering sites open at
-   once; another site's is shown first. */
+/* A table's QR code, scanned in the card: its link (the table's own, so the order goes to that table) is then opened in
+   a new page with a tap, like the order button's (a page cannot be opened without one). The camera's frames are read by
+   the browser's BarcodeDetector where it has one, else by jsQR (vendor/jsqr, loaded on first use: Safari has none).
+   A link that is not one of the known ordering sites' shows its site's name first. */
 const ORDER_SITES = /(^|\.)(order\.place|oorihansik\.com|grove\.hk|taitaiteaology\.com|idimsum\.com|azurewebsites\.net|aigens\.com|eats365pos\.com|self-order\.app)$/;
 let jsQRP = null;
 const loadJsQR = () => jsQRP || (jsQRP = new Promise((res, rej) => {
@@ -1858,18 +1828,19 @@ function openScan(d, p) {
   v.stop = () => { alive = false; stream?.getTracks().forEach((t) => t.stop()); };
   v.querySelector('.order-close').addEventListener('click', () => { dropView(d); d.classList.remove('ordering'); });
   d.appendChild(v); d.classList.add('ordering'); d.scrollTop = 0;
-  // a link read: open it (in the card, or - for a site that refuses frames - by a tap, in a new tab)
+  // a link read: the button to open it
   const found = (text) => {
     let u = null;
     try { u = new URL(text.trim()); } catch (e) {}
     if (!u || !/^https?:$/.test(u.protocol)) { msg.textContent = tt('scanNotUrl'); return false; }
+    // the frame it was read in stays on screen (the camera goes off)
+    const snap = document.createElement('canvas');
+    snap.width = video.videoWidth; snap.height = video.videoHeight; snap.getContext('2d').drawImage(video, 0, 0);
+    video.replaceWith(snap);
     v.stop();
-    const go = () => {
-      if (!NO_FRAME.test(u.hostname)) return openOrder(d, p, u.href);
-      msg.innerHTML = `${tt('scanTab')}<br><a class="btn primary" href="${esc(u.href)}" target="_blank" rel="noopener">🛒 ${tt('openTab')} ↗</a>`;
-    };
-    if (ORDER_SITES.test(u.hostname)) go();
-    else { msg.innerHTML = `${tt('scanUnknown')} <b>${esc(u.hostname)}</b><br><button class="btn primary">${tt('scanOpen')}</button>`; msg.querySelector('button').addEventListener('click', go); }
+    msg.innerHTML = `${ORDER_SITES.test(u.hostname) ? tt('scanDone') : `${tt('scanUnknown')} <b>${esc(u.hostname)}</b>`}<br>
+      <a class="btn primary" href="${esc(u.href)}" target="_blank" rel="noopener">🛒 ${tt('openOrderPage')}</a>`;
+    msg.querySelector('a').addEventListener('click', () => setTimeout(() => { dropView(d); d.classList.remove('ordering'); }, 300));
     return true;
   };
   (async () => {
