@@ -371,5 +371,10 @@ body.map-mode .sidebar, body.map-mode .map-ui, body.map-mode .map-info .photos {
 .map-info .order-view iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 @media (max-width: 860px) { .map-info.ordering { width: auto; height: calc(100% - 70px); } }
 .map-info .order-close { font-family: inherit; }
-.map-info .order-tab { font-size: 12.5px; padding: 5px 9px; }
+.map-info .scan-box { position: relative; flex: 1; min-height: 0; border-radius: 10px; overflow: hidden; background: #000; }
+.map-info .scan-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.map-info .scan-box i { position: absolute; left: 50%; top: 50%; width: min(64%, 260px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid rgba(255,255,255,.92); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0,0,0,.38); }
+.map-info .scan-msg { margin: 0; font-size: 13.5px; text-align: center; line-height: 1.6; }
+.map-info .scan-msg .btn { margin-top: 6px; font-family: inherit; }
+.map-info .order-scan { font-family: inherit; }
 
