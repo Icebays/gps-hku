@@ -9,46 +9,120 @@
 A 3D map, walking guide and floor plan guide to the University of Hong Kong.
 香港大學 3D 地圖、步行及平面圖指南。
 
-**Live site:** https://icebays.github.io/gps-hku/
+**Live site 網站:** https://icebays.github.io/gps-hku/ · **[English](#english)** · **[中文](#中文)**
 
-HKU is built on a hillside: a building's "G/F" can sit far above or below the one next door, and buildings are joined
-by bridges, podiums and lift towers. GPS-HKU shows the campus as it really is, in 3D, from the Lands Department's
-survey data.
-
-## Promo video
-
+## Promo video 宣傳片
 
 https://github.com/user-attachments/assets/64d3104e-427e-4a7b-9d8e-738cbeb77997
 
 Captured from the live site. The rainstorm and thunderstorm warnings in the weather shot are demo data, not a real
 day's weather. Original music; sound effects from [Mixkit](https://mixkit.co/license/#sfxFree).
+影片於網站實機拍攝；天氣鏡頭中的暴雨及雷暴警告為示範資料，並非當日真實天氣。原創配樂，音效來自 Mixkit。
 
-## What it does
+---
 
-- **3D map of HKU and the Western District**: the Main, Centennial, Sassoon Road and Pokfield campuses, the halls
-  and the streets around them, streamed tile by tile like Google Earth (only what is on screen is loaded). HKU's
-  buildings stand solid; the rest of the city is drawn see-through so the campus reads.
-- **Three looks**: a clean map (relief, contours, roads and markings), the same map in dark mode (grey buildings on a
-  dark ground), and a satellite view with the aerial photo, photo textured HKU buildings and 3D trees.
-- **A real sky** in the satellite view: blue by day, then golden hour, sunset, blue hour and night, from the sun's
-  real position over HKU; clouds and rain from the Hong Kong Observatory's current weather (none on a sunny day, more as
-  it clouds over, grey rain clouds and rain as heavy as the past hour's rainfall). The sky's light falls on the
-  buildings and the ground: warm at sunset, blue at dusk.
-- **Places**: every building on HKU's official campus map, with icons by kind, the campuses and the groups of halls
-  outlined and named, search, and pins that fold into round badges when the map is crowded.
-- **Floor plans in 3D**: the Main Library, the Centennial Campus podium and the MTR stations (HKU, Sai Ying Pun,
-  Kennedy Town). The building is cut open above the floor shown; a station's floors below ground are shown in an
-  x-ray view through the faded map, with lift shafts standing through the levels.
-- **MTR**: every exit with its exit code as on the MTR's signs, and the Island Line drawn at the depth of its tracks.
-- **Eateries**: all of HKU Catering Services' restaurants, canteens and cafés on the map; a building's card lists
-  them, and each has its photos, opening hours and online ordering (the restaurant's own order page). A table-QR
-  scanner on the card reads the code on your table with the phone's camera and opens that table's order page.
-- **Getting around**: walking routes on the 3D terrain, lifts and step-free routes, GPS, the real sun and shadows,
-  and the weather and warnings from the Hong Kong Observatory.
-- **Phones first**: Google / Apple Maps gestures (pan, pinch, twist, two-finger tilt, double-tap zoom), memory kept
-  low for iPhones. English and 繁體中文.
+## English
 
-## Run locally
+### Why GPS-HKU
+
+HKU is built on a hillside. A building's "G/F" can sit far above or below the one next door, the old Main Campus and
+Centennial Campus are joined by bridges, podiums, lift towers and the two-level University Street, and the MTR station
+lies deep under the hill. A flat campus map cannot show any of that. GPS-HKU shows the campus as it really is, in 3D,
+built from the Lands Department's survey data, so you can see which floor is the ground, where a bridge leads, and
+which lift takes you up the hill.
+
+### What you can do
+
+**Explore HKU in 3D**
+- The Main, Centennial and Sassoon Road campuses, the Pokfield Campus (under construction), the halls and the streets
+  around them, streamed tile by tile like Google Earth: only what is on screen is downloaded.
+- HKU's buildings stand solid; the rest of the city is drawn see-through, so the campus reads at a glance.
+- Heights are shown in metres above Principal Datum (mPD), Hong Kong's height reference, so you can compare how high
+  up the hill two buildings sit.
+
+**Three looks**
+- **Map**: a clean map with relief, 10 m contour lines, roads, footpaths and road markings.
+- **Dark mode**: the same map at night, with grey buildings on a dark ground.
+- **Satellite**: the aerial photo, photo-textured HKU buildings, photo roads and a 3D tree canopy.
+
+**A real sky (satellite view)**
+- The sky follows the sun's real position over HKU: blue by day, then golden hour, sunset, blue hour and night.
+- Clouds and rain follow the Hong Kong Observatory's current weather: none on a sunny day, more cloud as it clouds
+  over, grey rain clouds and rain as heavy as the past hour's rainfall in Central & Western (or a rainstorm warning).
+- The sky's light falls on the buildings and the ground: warm at sunset, blue at dusk, dark at night.
+
+**Sun, shadows and weather**
+- The sun stands where it really is right now; buildings, bridges and trees cast soft shadows, and cloud and rain
+  soften them.
+- The weather widget (bottom left) shows the temperature, humidity and local rainfall, and every warning in force:
+  typhoon signals, rainstorm (amber, red, black), thunderstorm, very hot or cold weather, strong monsoon, fire danger,
+  landslip, flooding, frost and tsunami. It refreshes every 10 minutes.
+
+**Find places**
+- 160 places: every building on HKU's official campus map, plus libraries, halls, eateries, MTR exits and landmarks,
+  with icons by kind.
+- The campuses and the groups of halls (the Jockey Club Student Villages, the Sassoon Road Halls, the Pokfulam Road
+  Residences and more) are outlined and named on the ground.
+- Search by English or Chinese name, or by the number on HKU's campus map; the map flies to the place and lights it
+  up in gold. Press `/` to jump to the search box.
+- Pins fold into round badges when the map is crowded, and categories can be shown or hidden.
+
+**Floor plans in 3D**
+- The **Main Library** (Old & New Wing, G/F–6/F), the **Centennial Campus** podium (CPD LG/F–4/F, with every
+  classroom's number and seats), and the MTR stations **HKU**, **Sai Ying Pun** and **Kennedy Town**.
+- Pick a floor and the building is cut open above it: study areas, bookshelves, tables, stairs, toilets, lifts, fire
+  exits and printers are drawn at their real height.
+- A station's floors below ground are shown in an x-ray view through the faded map, with the platform, concourse,
+  fare gates, escalators, exits and lift shafts.
+
+**MTR**
+- Every exit of HKU, Sai Ying Pun and Kennedy Town stations with its exit code as on the MTR's signs, and the Island
+  Line drawn at the depth of its tracks.
+
+**Eateries**
+- All 26 of HKU Catering Services' restaurants, canteens and cafés on the map; a building's card lists the ones in it.
+- Each has its photos, mode of service, food, opening hours and a link to its details.
+- **Order online**: 14 of them take online orders; the button opens the restaurant's own order page.
+- **Scan table QR**: sitting at a table? Tap *Scan table QR* on the card, point the camera at the QR code on your
+  table, and open that table's order page.
+
+**You on the map**
+- 🎯 shows your GPS position as a blue dot lying on the ground, with a beam that turns with the way you face.
+  Your location never leaves your phone.
+
+**Guides**
+- Handbook pages in English and Chinese: getting to HKU, Upper & Lower University Street, lifts and step-free routes,
+  the building directory, floor plans, walking routes and map controls.
+- Walking routes are drawn on the 3D terrain with distance, climb and walking time. They are added by the maintainers
+  after walking them; none are published yet.
+
+**Share and use anywhere**
+- The page address follows what you look at (`#/en/map?place=main-library&floor=2`), so a shared link opens the same
+  place and floor.
+- Phones first: Google / Apple Maps gestures (pan, pinch, twist, two-finger tilt, double-tap zoom), memory kept low
+  for iPhones. English and 繁體中文, light and dark.
+
+### Map controls
+
+| Action | Mouse | Touch |
+|---|---|---|
+| Move around | Left-drag | One-finger drag |
+| Rotate / tilt | Right-drag (or Ctrl + drag) | Twist two fingers to rotate; push two fingers up or down to tilt |
+| Zoom | Scroll wheel | Pinch, or double-tap and hold then drag; double-tap zooms in |
+| Select a building | Click | Tap |
+
+| Button | What it does |
+|---|---|
+| 🧭 Compass | North up; tap again to face south |
+| ↺ Reset | Back to the starting view, facing south like HKU's campus map |
+| ◇ Top / 3D | Top-down "floor plan" view or tilted 3D view |
+| 🎯 Location | Your GPS position and heading |
+| ⤴ Routes | Walking routes |
+| Layers | Map, map with real buildings, or satellite |
+| Filter | Show or hide place categories |
+| ☾ (top bar) | Light or dark mode |
+
+### Run locally
 
 A static site with no build step (three.js, no framework):
 
@@ -56,9 +130,9 @@ A static site with no build step (three.js, no framework):
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-To publish on GitHub Pages: Settings → Pages → Source: *Deploy from a branch* → `main` / `(root)`.
+It is published with GitHub Pages (Settings → Pages → *Deploy from a branch* → `main` / `(root)`).
 
-## Where things are
+### Where things are
 
 | | |
 |---|---|
@@ -76,22 +150,143 @@ To publish on GitHub Pages: Settings → Pages → Source: *Deploy from a branch
 The site is edited by its maintainers only; it has no public editing. When the site's modules change, bump the `?v=`
 version in `index.html`'s import map so phones never mix new and old files.
 
-## Data
+### Data sources
 
 - 3D Spatial Data and 3D indoor maps (IMDF) © Lands Department, HKSAR Government
 - Buildings and places: HKU campus map (maps.hku.hk); eateries: HKU Catering Services (catering.hku.hk), photos
   linked from there
+- Floor plans: redrawn from HKU Libraries' floor plans and the HKU Examinations Office's CPD classroom plans
 - MTR exits and lines, roads and paths: © OpenStreetMap contributors (ODbL)
 - Weather and warnings: Hong Kong Observatory
 - QR reading: [jsQR](https://github.com/cozmo/jsQR) (Apache-2.0)
 
 GPS-HKU is an unofficial student project and is not affiliated with The University of Hong Kong or the MTR Corporation.
 
-## Copyright
+---
+
+## 中文
+
+### 為甚麼要有 GPS-HKU
+
+港大依山而建。一座大樓的「地下」可能比隔壁高出或低出好幾層；舊主校園與百周年校園之間靠天橋、平台、升降機塔及上下兩層的大學街連接；港鐵站更深藏山底。一張平面地圖表達不到這些。GPS-HKU 以地政總署的測量數據，按真實比例把校園以 3D 呈現，讓你一眼看清哪一層才是地面、天橋通往哪裏、哪部升降機能帶你上山。
+
+### 功能
+
+**以 3D 探索港大**
+- 主校園、百周年校園、沙宣道校園、蒲飛路校園（興建中）、各宿舍及周邊街道，像 Google Earth 一樣按畫面逐塊載入，只下載看得見的部分。
+- 港大建築以實體顯示，其他建築則半透明，校園一目了然。
+- 高度以主水平基準以上米數（mPD）標示，方便比較兩座建築在山坡上的高低。
+
+**三種外觀**
+- **地圖**：簡潔地圖，有地勢陰影、每 10 米等高線、道路、行人路及路面標記。
+- **深色模式**：同一地圖的夜間版，深色地面配灰色建築。
+- **衛星**：航空照片、附相片紋理的港大建築、相片路面及立體樹冠。
+
+**真實天空（衛星模式）**
+- 天空跟隨太陽於港大上空的真實位置：日間藍天，之後是金黃時刻、日落、藍調時刻及夜晚。
+- 雲及雨跟隨香港天文台的即時天氣：晴天無雲，轉陰時雲量增加，下雨時有灰色雨雲，雨勢按中西區過去一小時雨量（或暴雨警告）而定。
+- 天色會照在建築及地面上：日落偏暖、黃昏偏藍、入夜變暗。
+
+**太陽、影子及天氣**
+- 太陽位於此刻的真實位置；建築、天橋及樹木投下柔和影子，有雲或下雨時影子會變淡。
+- 左下角的天氣顯示氣溫、濕度、本區雨量及所有生效中的警告：熱帶氣旋警告信號、暴雨（黃、紅、黑）、雷暴、酷熱或寒冷天氣、強烈季候風、火災危險、山泥傾瀉、水浸、霜凍及海嘯。每 10 分鐘更新。
+
+**搜尋地點**
+- 共 160 個地點：港大官方校園地圖上的所有建築，以及圖書館、宿舍、餐廳、港鐵出口及地標，按類別配以圖示。
+- 各校園及宿舍群（賽馬會舍堂村及學生村、沙宣道舍堂、薄扶林道宿舍等）於地面上以框線圈出並標示名稱。
+- 可以中文或英文名稱、或港大校園地圖上的編號搜尋；地圖會飛到該處並以金色標示。按 `/` 即可跳到搜尋框。
+- 地點較密時，標籤會收起成圓形圖示；各類別可自行顯示或隱藏。
+
+**3D 樓層平面圖**
+- **總圖書館**（舊翼及新翼，G 至 6 樓）、**百周年校園**平台（CPD LG 至 4 樓，附每個課室的編號及座位數），以及港鐵**香港大學站**、**西營盤站**及**堅尼地城站**。
+- 選擇樓層後，建築會在該層以上剖開：自修區、書架、桌椅、樓梯、洗手間、升降機、走火通道及打印機均按真實高度繪出。
+- 車站的地底樓層以 X 光方式透過淡化的地圖顯示，包括月台、大堂、閘機、扶手電梯、出口及升降機井。
+
+**港鐵**
+- 香港大學站、西營盤站及堅尼地城站的每個出口，按港鐵指示牌標示出口編號；港島綫按路軌的真實深度繪出。
+
+**餐廳**
+- 港大膳食服務的全部 26 間餐廳、飯堂及咖啡店都在地圖上；大樓的資料卡會列出其中的餐廳。
+- 每間都有相片、服務模式、食物種類、營業時間及詳情連結。
+- **網上點餐**：其中 14 間提供網上點餐，按鈕會開啟餐廳自己的點餐頁面。
+- **掃描枱號**：坐低後，在資料卡按「掃描枱號」，用相機對準枱上的 QR Code，即可開啟該枱的點餐頁面。
+
+**你的位置**
+- 🎯 以平放在地面的藍點顯示你的 GPS 位置，並有隨你面向而轉動的光束。位置資料不會離開你的手機。
+
+**指南**
+- 中英文指南：前往港大的方法、上下大學街、升降機及無障礙路線、建築目錄、樓層平面圖、步行路線及地圖操作。
+- 步行路線會繪在 3D 地形上，附距離、爬升高度及步行時間。路線由維護者實地走過後才加入，目前尚未發佈。
+
+**分享及隨處使用**
+- 網址會跟隨你正在看的地方（例如 `#/zh/map?place=main-library&floor=2`），分享連結即可開啟同一地點及樓層。
+- 以手機為先：支援 Google / Apple 地圖手勢（拖動、雙指縮放、旋轉、雙指傾斜、雙擊放大），並為 iPhone 控制記憶體用量。提供英文及繁體中文、淺色及深色模式。
+
+### 地圖操作
+
+| 動作 | 滑鼠 | 觸控 |
+|---|---|---|
+| 移動 | 左鍵拖動 | 單指拖動 |
+| 旋轉／傾斜 | 右鍵拖動（或 Ctrl + 拖動） | 雙指扭動旋轉；雙指一同向上或向下推以傾斜 |
+| 縮放 | 滾輪 | 雙指開合，或雙擊後按住再拖動；雙擊放大 |
+| 選擇建築 | 點擊 | 輕按 |
+
+| 按鈕 | 功能 |
+|---|---|
+| 🧭 指南針 | 北向上；再按一次面向南 |
+| ↺ 重設 | 返回起始視角，如港大校園地圖般面向南 |
+| ◇ 平面／3D | 由上而下的「平面圖」視角或傾斜 3D 視角 |
+| 🎯 位置 | 你的 GPS 位置及面向 |
+| ⤴ 路線 | 步行路線 |
+| 圖層 | 地圖、地圖加真實建築或衛星 |
+| 篩選 | 顯示或隱藏地點類別 |
+| ☾（頂欄） | 淺色或深色模式 |
+
+### 在本機運行
+
+純靜態網站，無需建置（three.js，無框架）：
+
+```bash
+python3 -m http.server 8000   # 然後開啟 http://localhost:8000
+```
+
+網站以 GitHub Pages 發佈（Settings → Pages → *Deploy from a branch* → `main` / `(root)`）。
+
+### 檔案位置
+
+| | |
+|---|---|
+| `index.html`、`assets/` | 網站：`app.js`（頁面）、`map.js`（3D 地圖）、`tiles.js`（分塊載入）、`indoor.js`（平面圖）、`sky.js`（衛星模式天空）、`roads.js`、`icons.js`、`weather.js` |
+| `content/en`、`content/zh` | 指南頁面（Markdown） |
+| `data/places.json` | 地點：建築、餐廳、港鐵出口及其模型建築編號 |
+| `data/campus.json` | 校園及宿舍群範圍、港大建築 |
+| `data/indoor/` | 樓層平面圖 |
+| `data/eateries.json`、`data/mtr-lines.json`、`data/routes.json` | 餐廳資料、港鐵綫、步行路線 |
+| `assets/tiles/`、`assets/model/` | 3D 分塊及模型 |
+| `tools/` | 以上各項如何由原始數據製作（見 `tools/README.md`） |
+| `vendor/` | three.js、marked、jsQR（瀏覽器沒有內置 QR 讀取時用於掃描枱號） |
+| `promo/` | 宣傳片 |
+
+網站只由維護者編輯，不設公開編輯。網站模組更新時，請同時更新 `index.html` import map 內的 `?v=` 版本號，避免手機混用新舊檔案。
+
+### 資料來源
+
+- 三維空間數據及三維室內地圖（IMDF）© 香港特別行政區政府地政總署
+- 建築及地點：港大校園地圖（maps.hku.hk）；餐廳：港大膳食服務（catering.hku.hk），相片連結自該網站
+- 樓層平面圖：按港大圖書館平面圖及港大考試處 CPD 課室平面圖重繪
+- 港鐵出口及路綫、道路及小徑：© OpenStreetMap 貢獻者（ODbL）
+- 天氣及警告：香港天文台
+- QR 讀取：[jsQR](https://github.com/cozmo/jsQR)（Apache-2.0）
+
+GPS-HKU 為非官方學生項目，與香港大學及香港鐵路有限公司並無關連。
+
+---
+
+## Copyright 版權
 
 © 2026 icebays. All rights reserved. GPS-HKU is not open source: no part of it may be copied, modified, shared or
 used without my prior written permission, and commercial use is not permitted. Ask first by opening an
 [issue](https://github.com/icebays/gps-hku/issues). Third-party material keeps its own terms. See [LICENSE](LICENSE).
 
-版權所有，保留一切權利。未經事先書面許可，不得複製、修改、分發或使用本項目任何部分，亦不允許商業用途；使用前請先查詢。詳見
-[LICENSE](LICENSE)。
+版權所有，保留一切權利。GPS-HKU 並非開源項目：未經本人事先書面許可，不得複製、修改、分發或使用本項目任何部分，亦不允許商業用途。使用前請先透過
+[issue](https://github.com/icebays/gps-hku/issues) 查詢。第三方材料保留其原有條款。詳見 [LICENSE](LICENSE)。
