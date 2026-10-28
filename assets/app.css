@@ -369,7 +369,6 @@ body.map-mode .sidebar, body.map-mode .map-ui, body.map-mode .map-info .photos {
 .map-info .order-bar { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0 6px; }
 .map-info .order-bar b { flex: 1; min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-info .order-view iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
-.map-info .order-out { font-size: 11.5px; color: var(--text-soft); text-align: center; }
 @media (max-width: 860px) { .map-info.ordering { width: auto; height: calc(100% - 70px); } }
 .map-info .order-close { font-family: inherit; }
 
