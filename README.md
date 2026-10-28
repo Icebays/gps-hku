@@ -11,7 +11,9 @@ survey data.
 
 ## Promo video
 
-<a href="https://icebays.github.io/gps-hku/promo/gps-hku-promo-84s.mp4"><img src="promo/poster-84s.jpg" width="720" alt="GPS-HKU promo video (84 s)"></a>
+<a href="https://icebays.github.io/gps-hku/promo/gps-hku-promo-84s.mp4"><img src="promo/preview.webp" width="720" alt="GPS-HKU promo video (84 s)"></a>
+
+▶ The preview above plays without sound: [watch the full video with sound](https://icebays.github.io/gps-hku/promo/gps-hku-promo-84s.mp4).
 
 Captured from the live site. The rainstorm and thunderstorm warnings in the weather shot are demo data, not a real
 day's weather. Original music; sound effects from [Mixkit](https://mixkit.co/license/#sfxFree).
@@ -79,3 +81,12 @@ version in `index.html`'s import map so phones never mix new and old files.
 - QR reading: [jsQR](https://github.com/cozmo/jsQR) (Apache-2.0)
 
 GPS-HKU is an unofficial student project and is not affiliated with The University of Hong Kong or the MTR Corporation.
+
+## Copyright
+
+© 2026 icebays. All rights reserved. GPS-HKU is not open source: no part of it may be copied, modified, shared or
+used without my prior written permission, and commercial use is not permitted. Ask first by opening an
+[issue](https://github.com/icebays/gps-hku/issues). Third-party material keeps its own terms. See [LICENSE](LICENSE).
+
+版權所有，保留一切權利。未經事先書面許可，不得複製、修改、分發或使用本項目任何部分，亦不允許商業用途；使用前請先查詢。詳見
+[LICENSE](LICENSE)。

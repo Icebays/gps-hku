@@ -1,0 +1,69 @@
+GPS-HKU
+Copyright © 2026 icebays. All rights reserved.
+版權所有 © 2026 icebays。保留一切權利。
+
+────────────────────────────────────────────────────────────────────────────
+
+ENGLISH
+
+This repository and the GPS-HKU website (https://icebays.github.io/gps-hku/) - its source code, design, text,
+the 3D models and map data prepared for it, icons, images and promo videos - are the work of the copyright
+holder. They are NOT open source and are NOT licensed for use by anyone else.
+
+Without the copyright holder's prior written permission, you may not:
+  - copy, reproduce, modify, adapt, translate or make derivative works of any part of it;
+  - distribute, publish, host, mirror or sublicense any part of it;
+  - use any part of it in another project, product, service or website.
+
+Commercial use of any part of it is not permitted.
+
+Any other use needs the copyright holder's consent first: ask before you use it, by opening an issue at
+https://github.com/icebays/gps-hku/issues. Permission, if given, is given to you only, may come with conditions,
+and covers only what it states.
+
+You may use the website, and view this repository on GitHub as GitHub's Terms of Service allow.
+
+Third-party material is not covered by the above and keeps its own terms:
+  - three.js (MIT License), marked (MIT License) and jsQR (Apache License 2.0), in vendor/
+  - 3D Spatial Data and 3D indoor maps: © Lands Department, HKSAR Government
+  - map data: © OpenStreetMap contributors (Open Database License)
+  - weather and warnings: Hong Kong Observatory
+  - building and place information from HKU's campus map; eatery details and photos from HKU Catering Services
+  - in the promo videos: sound effects from Mixkit (Mixkit License); fonts Noto Sans TC, Noto Serif TC and Inter
+    (SIL Open Font License)
+
+The website and its content are provided "as is", without warranty of any kind.
+
+GPS-HKU is an unofficial student project and is not affiliated with The University of Hong Kong or the MTR
+Corporation.
+
+────────────────────────────────────────────────────────────────────────────
+
+中文
+
+本儲存庫及 GPS-HKU 網站（https://icebays.github.io/gps-hku/）——包括其原始碼、設計、文字、為其製作的 3D 模型及地圖資料、
+圖示、圖片及宣傳影片——均為版權持有人的作品，並非開源，亦不授權予任何其他人使用。
+
+未經版權持有人事先書面許可，不得：
+  - 複製、轉載、修改、改編、翻譯或製作其任何部分的衍生作品；
+  - 發佈、發表、託管、鏡像或再授權其任何部分；
+  - 於其他項目、產品、服務或網站中使用其任何部分。
+
+不允許將其任何部分作商業用途。
+
+任何其他用途，均須事先取得版權持有人同意：使用前請於 https://github.com/icebays/gps-hku/issues 提出查詢。
+如獲許可，許可只限於閣下本人，可能附帶條件，並只涵蓋許可中列明的範圍。
+
+閣下可以使用本網站，亦可按 GitHub 服務條款於 GitHub 上瀏覽本儲存庫。
+
+第三方材料不受上述條款涵蓋，並保留其原有條款：
+  - vendor/ 內的 three.js（MIT 授權）、marked（MIT 授權）及 jsQR（Apache 2.0 授權）
+  - 三維空間數據及三維室內地圖：© 香港特別行政區政府地政總署
+  - 地圖資料：© OpenStreetMap 貢獻者（開放資料庫授權 ODbL）
+  - 天氣及警告：香港天文台
+  - 香港大學校園地圖的建築物及地點資料；港大膳食服務的餐廳資料及相片
+  - 宣傳影片中：Mixkit 音效（Mixkit 授權）；Noto Sans TC、Noto Serif TC 及 Inter 字型（SIL 開放字型授權）
+
+本網站及其內容按「現狀」提供，不作任何形式的保證。
+
+GPS-HKU 為非官方學生項目，與香港大學及香港鐵路有限公司並無關連。
