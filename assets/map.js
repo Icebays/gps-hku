@@ -1482,7 +1482,7 @@ function hkuStencil(m) {
   m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp;
   return m;
 }
-const BUILD_LIGHT = 0xf1eee8, BUILD_DARK = 0x454b48;   // the buildings' colour: light map / dark map (setSky)
+const BUILD_LIGHT = 0xf1eee8, BUILD_DARK = 0x80868a;   // the buildings' colour: light map / dark map (setSky)
 const BUILD_MAT = hkuStencil(cutify(new THREE.MeshLambertMaterial({ color: BUILD_LIGHT, flatShading: true })));
 // HKU buildings without a photo-textured copy (assets/model/satellite-buildings.json lists those with one) stay white
 // in the photo base maps
