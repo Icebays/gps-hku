@@ -11,10 +11,7 @@ survey data.
 
 ## Promo video
 
-<table><tr>
-<td><a href="https://icebays.github.io/gps-hku/promo/gps-hku-promo-84s.mp4"><img src="promo/poster-84s.jpg" width="480" alt="GPS-HKU promo, 84 s, 16:9"></a><br>84 s · 16:9</td>
-<td><a href="https://icebays.github.io/gps-hku/promo/gps-hku-promo-44s.mp4"><img src="promo/poster-44s.jpg" width="160" alt="GPS-HKU promo, 44 s, 9:16"></a><br>44 s · 9:16</td>
-</tr></table>
+<a href="https://icebays.github.io/gps-hku/promo/gps-hku-promo-84s.mp4"><img src="promo/poster-84s.jpg" width="720" alt="GPS-HKU promo video (84 s)"></a>
 
 Captured from the live site. The rainstorm and thunderstorm warnings in the weather shot are demo data, not a real
 day's weather. Original music; sound effects from [Mixkit](https://mixkit.co/license/#sfxFree).
