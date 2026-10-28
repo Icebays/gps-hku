@@ -1820,6 +1820,17 @@ function openOrder(d, p, url) {
   d.classList.add('ordering');
   d.scrollTop = 0;
 }
+/* Paying: the ordering site hands the payment to the whole window - the customer then pays on the restaurant's own page
+   (its real address in the address bar; Alipay and bank apps open from there). GPS-HKU cannot see where its frame goes,
+   so the ordering site says so: parent.postMessage({ type: 'gps-hku:pay', url }, 'https://icebays.github.io') (or it
+   navigates window.top itself). Only the open order frame is listened to, and only https addresses are followed. */
+addEventListener('message', (e) => {
+  const f = S?.info?.querySelector('.order-view iframe');
+  if (!f || e.source !== f.contentWindow || e.data?.type !== 'gps-hku:pay') return;
+  let u = null;
+  try { u = new URL(e.data.url); } catch (err) { return; }
+  if (u.protocol === 'https:') location.href = u.href;
+});
 // the card's order / scan view: gone (and the camera off)
 function dropView(d) {
   const v = d?.querySelector('.order-view');
