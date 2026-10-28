@@ -26,6 +26,10 @@
   <a href="https://github.com/icebays/gps-hku/commits/main"><img src="https://img.shields.io/github/last-commit/icebays/gps-hku" alt="Last commit" /></a>
 </p>
 
+<p align="center">
+  <a href="https://icebays.github.io/gps-hku/"><img src="docs/images/button-open-en.png" alt="Open GPS-HKU" width="376" /></a>
+</p>
+
 GPS-HKU is a 3D map, walking guide and floor plan guide to the University of Hong Kong. It shows the hillside campus
 as it really is, from the Lands Department's survey data, so you can see which floor is the ground, where a bridge
 leads and which lift takes you up the hill.

@@ -26,6 +26,10 @@
   <a href="https://github.com/icebays/gps-hku/commits/main"><img src="https://img.shields.io/github/last-commit/icebays/gps-hku" alt="最近更新" /></a>
 </p>
 
+<p align="center">
+  <a href="https://icebays.github.io/gps-hku/"><img src="docs/images/button-open-zh.png" alt="開啟 GPS-HKU" width="359" /></a>
+</p>
+
 GPS-HKU 是香港大學的 3D 地圖、步行及平面圖指南。它以地政總署的測量數據，按真實比例呈現依山而建的港大校園，讓你一眼看清哪一層才是地面、天橋通往哪裏、哪部升降機能帶你上山。
 
 無需安裝程式、無需登入，手機或電腦的瀏覽器都可使用，提供英文及繁體中文。
