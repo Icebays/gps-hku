@@ -94,6 +94,31 @@ HKU is built on a hillside. A building's "G/F" can sit far above or below the on
 Centennial Campus are joined by bridges, podiums, lift towers and the two-level University Street, and the MTR station
 lies deep under the hill. A flat campus map cannot show any of that; GPS-HKU shows it in 3D, at true scale.
 
+## What's on the map
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/treemap-dark.png" />
+  <img src="docs/images/treemap-light.png" alt="Treemap of the 160 places on GPS-HKU by kind: campus life 67 (halls 31, food 26, amenities 10), study and culture 51 (teaching 43, libraries 4, museums 4), getting around and landmarks 42 (transport 17, other 14, landmarks 11)" width="100%" />
+</picture>
+
+<details>
+<summary>The numbers as a table</summary>
+
+| Group | Kind | Places |
+|---|---|---:|
+| Campus life | Halls & Colleges | 31 |
+| Campus life | Food & Drink | 26 |
+| Campus life | Amenities | 10 |
+| Study & culture | Teaching & Faculty | 43 |
+| Study & culture | Libraries & Study | 4 |
+| Study & culture | Museum & Culture | 4 |
+| Getting around & landmarks | Transport | 17 |
+| Getting around & landmarks | Other | 14 |
+| Getting around & landmarks | Landmarks | 11 |
+| | **Total** | **160** |
+
+</details>
+
 ## What you can do
 
 | | |
